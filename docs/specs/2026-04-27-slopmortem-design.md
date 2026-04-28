@@ -535,7 +535,12 @@ qdrant.query_points(
     formula=SumExpression(sum=[
       "$score",
       MultExpression(mult=[
-        FACET_BOOST,                    # tunable, e.g. 0.3
+        FACET_BOOST,                    # 0.01 provisional. Inner RRF $score caps at
+                                        # ~2/(k+1) ≈ 0.033 (k=60, 2 channels), so 4-facet
+                                        # max boost ~0.04 competes without dominating.
+                                        # Final value gated by calibration eval (sweep
+                                        # {0.005, 0.01, 0.02, 0.05}, pick lowest that
+                                        # meaningfully reorders top-K).
         FilterCondition(condition=Filter(must=[
           FieldCondition(key=f"facets.{name}", match=MatchValue(value=val))
           for name, val in query_facets.items() if val != "other"

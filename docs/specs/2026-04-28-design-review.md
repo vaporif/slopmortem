@@ -13,11 +13,6 @@ The original review had 34 numbered findings + LOW polish items. 22 mechanical f
 
 ### CRITICAL
 
-**#1 — `FACET_BOOST = 0.3` vs RRF score scale** [Retrieval F2, spec §retrieve / FormulaQuery]
-RRF inner-fusion top score caps at `1/(k+1) = 1/61 ≈ 0.0164` per channel; fused max ≈ 0.033. The current `FACET_BOOST = 0.3` per matched non-`other` facet adds up to 1.2 across 4 facets — **~36× the top RRF score**. Effect: retrieval collapses to "anything matching all non-other facets sorts first, RRF order is noise."
-**Options to discuss:** (a) calibrate the boost to ~0.005–0.01/facet; (b) normalize `$score` (RRF outputs are already in [0,1] but heavily compressed — divide-by-max or rank-normalize); (c) switch the inner fusion from RRF to DBSF (score-fusion). Each changes the relative weight of facet-match vs. semantic similarity differently.
-**Eval to gate:** boost-calibration eval — flipping `FACET_BOOST` from 0.0 → tuned value should change top-K membership by ≤40%, not >90%.
-
 **#2 — OpenRouter v2 swap is over-promised** [Architecture #14, spec §LLMClient]
 `LLMClient.complete(prompt, *, tools=None, model=None, cache=None)` Protocol lacks `output_config`/`output_format` parameters and lacks cache-token return fields. Yet rerank and synthesis depend on Anthropic's structured-output grammar; OpenRouter pass-through doesn't reproduce Anthropic-shape grammar-constrained sampling for non-Anthropic backends, and `cache_control` semantics are also Anthropic-specific.
 **Options to discuss:** (a) widen the Protocol now: `complete(prompt, *, tools=None, model=None, cache=None, output_schema=None) -> CompletionResult` with `cache_read_tokens`/`cache_creation_tokens`/`stop_reason` as optional fields, and document Anthropic-shape lock-in; (b) drop the "v2 swap is one new class" claim from the spec and call OpenRouter a v2 rewrite, not a swap.
