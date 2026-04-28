@@ -980,7 +980,7 @@ Expected: first two grep zero matches; third one match; fourth zero matches; fif
 
 ### Step-by-step
 
-- [ ] **Step 0.1: Write `tests/test_taxonomy.py`**
+- [x] **Step 0.1: Write `tests/test_taxonomy.py`**
 
 ```python
 from __future__ import annotations
@@ -1001,7 +1001,7 @@ def test_every_closed_enum_has_other():
         assert "other" in values, f"{key} missing 'other' fallback"
 ```
 
-- [ ] **Step 0.2: Copy taxonomy.yml verbatim from spec lines 1133–1217**
+- [x] **Step 0.2: Copy taxonomy.yml verbatim from spec lines 1133–1217**
 
 Run: `uv run pytest tests/test_taxonomy.py -v`
 Expected: 2 passed.

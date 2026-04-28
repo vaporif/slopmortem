@@ -72,3 +72,31 @@ def test_prompt_template_sha_is_deterministic():
     b = prompt_template_sha("facet_extract")
     assert a == b
     assert len(a) == 16
+
+
+def test_facet_extract_fixture_matches_schema():
+    fx = json.loads((FIXTURES / "facet_extract.json").read_text())
+    Facets.model_validate(fx["expected_output"])
+    out = render_prompt("facet_extract", **fx["vars"])
+    assert fx["vars"]["description"] in out
+
+
+def test_llm_rerank_fixture_matches_schema():
+    fx = json.loads((FIXTURES / "llm_rerank.json").read_text())
+    LlmRerankResult.model_validate(fx["expected_output"])
+    out = render_prompt("llm_rerank", **fx["vars"])
+    for c in fx["vars"]["candidates"]:
+        assert c["candidate_id"] in out
+
+
+def test_synthesize_fixture_matches_schema():
+    fx = json.loads((FIXTURES / "synthesize.json").read_text())
+    Synthesis.model_validate(fx["expected_output"])
+    out = render_prompt("synthesize", **fx["vars"])
+    assert fx["vars"]["candidate_body"].splitlines()[0] in out
+
+
+def test_summarize_fixture_renders():
+    fx = json.loads((FIXTURES / "summarize.json").read_text())
+    out = render_prompt("summarize", **fx["vars"])
+    assert fx["vars"]["body"].split(".")[0] in out
