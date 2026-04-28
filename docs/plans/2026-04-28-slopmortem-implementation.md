@@ -40,27 +40,27 @@ Implementation uses `superpowers:executing-plans`: read this plan, work the next
 
 ## Agent Assignments
 
-All tasks are Python. Per the agent type selection guide, Python isn't a listed specialty — `general-purpose` is the right default.
+All code tasks use `python-development:python-pro` — the spec's earlier "general-purpose because Python isn't a listed specialty" was wrong; `python-pro` covers Python 3.14+, async, uv, ruff, Pydantic v2, exactly this stack. Task 4b stays user-owned manual work.
 
-Tasks marked **G1** must complete before any other parallel work begins. Tasks marked **G2** must complete before prompt-driven stage tasks (#6/#7/#8) begin.
+The Gate columns are kept as informational ordering markers (G1 = foundation, G2 = prompts) but no longer gate parallel runs — they describe *prerequisites*, not concurrency boundaries.
 
 | # | Task | Gate | Agent type | Domain |
 |---|------|------|------------|--------|
-| 0 | **G2 contract**: prompt skeletons (`.j2`) + per-prompt JSON output schemas + sample fixtures for facet_extract, llm_rerank, synthesize; taxonomy.yml frozen | **G2** | general-purpose | Python |
-| 1 | **Foundation**: pydantic-settings v2 with TOML sources, all shared models, `LLMClient` + `EmbeddingClient` + `Corpus` + `ToolSpec` Protocols, `CompletionResult` dataclass, synthesis tool signatures, `to_openai_input_schema(args_model)` helper, `MergeState`, `safe_path`, `Budget`, `tracing.py`. Adds `jsonref` to dependencies. | **G1** | general-purpose | Python |
-| 2 | LLMClient: `OpenRouterClient` (openai SDK pointed at openrouter, tool-use loop, cache_control passthrough, cache-token extraction, retry/budget integration, anyio CapacityLimiter for fan-out, stub-based unit tests for each `finish_reason` branch) + `FakeLLMClient` cassette + tests | — | general-purpose | Python |
-| 2b | EmbeddingClient: `OpenAIEmbeddingClient` (retry, span, budget) + `FakeEmbeddingClient` cassette + tests | — | general-purpose | Python |
-| 3 | Corpus: `QdrantCorpus`, `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (sqlite WAL via asyncio.to_thread), `slopmortem ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | general-purpose | Python |
-| 4a | Source adapters: curated YAML loader, HN Algolia, Wayback, Crunchbase CSV; ships `tests/fixtures/curated_test.yml` and `corpus/curated_v0.yml` | — | general-purpose | Python |
+| 0 | **G2 contract**: prompt skeletons (`.j2`) + per-prompt JSON output schemas + sample fixtures for facet_extract, llm_rerank, synthesize; taxonomy.yml frozen | **G2** | python-development:python-pro | Python |
+| 1 | **Foundation**: pydantic-settings v2 with TOML sources, all shared models, `LLMClient` + `EmbeddingClient` + `Corpus` + `ToolSpec` Protocols, `CompletionResult` dataclass, synthesis tool signatures, `to_openai_input_schema(args_model)` helper, `MergeState`, `safe_path`, `Budget`, `tracing.py`. Adds `jsonref` to dependencies. | **G1** | python-development:python-pro | Python |
+| 2 | LLMClient: `OpenRouterClient` (openai SDK pointed at openrouter, tool-use loop, cache_control passthrough, cache-token extraction, retry/budget integration, anyio CapacityLimiter for fan-out, stub-based unit tests for each `finish_reason` branch) + `FakeLLMClient` cassette + tests | — | python-development:python-pro | Python |
+| 2b | EmbeddingClient: `OpenAIEmbeddingClient` (retry, span, budget) + `FakeEmbeddingClient` cassette + tests | — | python-development:python-pro | Python |
+| 3 | Corpus: `QdrantCorpus`, `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (sqlite WAL via asyncio.to_thread), `slopmortem ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | python-development:python-pro | Python |
+| 4a | Source adapters: curated YAML loader, HN Algolia, Wayback, Crunchbase CSV; ships `tests/fixtures/curated_test.yml` and `corpus/curated_v0.yml` | — | python-development:python-pro | Python |
 | 4b | **Scale curated YAML beyond v0** to ≥200 URLs: owned by user; not parallelizable with adapter coding | — | user | manual |
-| 5a | Entity resolution + merge: tier-1/2/3 resolver, alias-graph table, pending_review rows, deterministic combined-text rule, tests | — | general-purpose | Python |
-| 5b | Ingest CLI command + orchestration: `slopmortem ingest`, `--source`, `--reconcile`, `--dry-run`, `--force`, per-host throttling, ingest budget enforcement | — | general-purpose | Python |
-| 6 | Stages: `facet_extract` (Haiku via LLMClient, taxonomy-validated facets) | post-G2 | general-purpose | Python |
-| 7 | Stages: `retrieve` (NULL-aware date filter, FormulaQuery facet boost over RRF-fused dense+sparse), `llm_rerank` (single Sonnet call via response_format=json_schema, multi-perspective scoring) | post-G2 | general-purpose | Python |
-| 8 | Stages: `synthesize` (inlined body, `<untrusted_document>` wrapping, in-process corpus tools, response_format=json_schema, cache-warm pattern, sources host-allowlist filter), `render` | post-G2 | general-purpose | Python |
-| 9 | Synthesis tool implementations: `get_post_mortem(id)`, `search_corpus(q, facets)`, signature contract test. **Folded into G1**. | **G1** | general-purpose | Python |
-| 10 | CLI + pipeline orchestration: typer commands, `pipeline.py` async stage composition, single `asyncio.run`, fastembed wrapped in `asyncio.to_thread`, Ctrl-C cancellation, `slopmortem replay` | — | general-purpose | Python |
-| 11 | Eval infra: `slopmortem/evals/runner.py`, `slopmortem/evals/assertions.py`, seed dataset of 10 diverse `InputContext` JSON files, baseline file format, `make eval` target | — | general-purpose | Python |
+| 5a | Entity resolution + merge: tier-1/2/3 resolver, alias-graph table, pending_review rows, deterministic combined-text rule, tests | — | python-development:python-pro | Python |
+| 5b | Ingest CLI command + orchestration: `slopmortem ingest`, `--source`, `--reconcile`, `--dry-run`, `--force`, per-host throttling, ingest budget enforcement | — | python-development:python-pro | Python |
+| 6 | Stages: `facet_extract` (Haiku via LLMClient, taxonomy-validated facets) | post-G2 | python-development:python-pro | Python |
+| 7 | Stages: `retrieve` (NULL-aware date filter, FormulaQuery facet boost over RRF-fused dense+sparse), `llm_rerank` (single Sonnet call via response_format=json_schema, multi-perspective scoring) | post-G2 | python-development:python-pro | Python |
+| 8 | Stages: `synthesize` (inlined body, `<untrusted_document>` wrapping, in-process corpus tools, response_format=json_schema, cache-warm pattern, sources host-allowlist filter), `render` | post-G2 | python-development:python-pro | Python |
+| 9 | Synthesis tool implementations: `get_post_mortem(id)`, `search_corpus(q, facets)`, signature contract test. **Folded into G1**. | **G1** | python-development:python-pro | Python |
+| 10 | CLI + pipeline orchestration: typer commands, `pipeline.py` async stage composition, single `asyncio.run`, fastembed wrapped in `asyncio.to_thread`, Ctrl-C cancellation, `slopmortem replay` | — | python-development:python-pro | Python |
+| 11 | Eval infra: `slopmortem/evals/runner.py`, `slopmortem/evals/assertions.py`, seed dataset of 10 diverse `InputContext` JSON files, baseline file format, `make eval` target | — | python-development:python-pro | Python |
 
 Writing-plans may further split or merge these. Final structure decided in the plan, but Gates 1 and 2 are fixed.
 
