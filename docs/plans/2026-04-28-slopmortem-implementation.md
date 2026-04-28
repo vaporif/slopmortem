@@ -1401,7 +1401,7 @@ Stream every roundtrip — see corrections Issue 2: a mid-stream SSE error chunk
 Run: `uv run pytest tests/llm/test_openrouter_unit.py -v`
 Expected: 6 passed.
 
-- [ ] **Step 2.5: Cassette test for one happy round-trip**
+- [x] **Step 2.5: Cassette test for one happy round-trip**
 
 `tests/llm/test_openrouter_cassette.py`:
 
@@ -1420,7 +1420,7 @@ async def test_facet_extract_round_trip():
     assert r.cost_usd > 0
 ```
 
-- [ ] **Step 2.6: Configure pytest-recording with secret scrubbing**
+- [x] **Step 2.6: Configure pytest-recording with secret scrubbing**
 
 `conftest.py`:
 
@@ -1465,7 +1465,7 @@ def vcr_config():
     }
 ```
 
-- [ ] **Step 2.7: Cassette-miss meta-test**
+- [x] **Step 2.7: Cassette-miss meta-test**
 
 `tests/llm/test_secrets_scrub.py`:
 
