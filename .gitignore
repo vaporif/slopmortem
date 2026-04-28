@@ -105,5 +105,8 @@ result-*
 data/qdrant/
 data/post_mortems/
 data/hf/
+data/journal.sqlite*
 *.cassette.tmp
 .laminar/
+slopmortem.local.toml
+tests/fixtures/cassettes/*.live.yaml
