@@ -1144,7 +1144,7 @@ platform_fee_pct: 5.5
 # `budget.py` to apply at deposit-ceiling time; not folded into per-token rates.
 ```
 
-- [ ] **Step 2.2: Stub-based unit tests for each finish_reason branch**
+- [x] **Step 2.2: Stub-based unit tests for each finish_reason branch**
 
 `tests/llm/test_openrouter_unit.py`:
 
@@ -1254,7 +1254,7 @@ def _stub_response(*, finish_reason, content="", tool_calls=None, usage=None, er
     return resp
 ```
 
-- [ ] **Step 2.3: Implement `OpenRouterClient` minimum to satisfy unit tests**
+- [x] **Step 2.3: Implement `OpenRouterClient` minimum to satisfy unit tests**
 
 `slopmortem/llm/openrouter.py`:
 
@@ -1396,7 +1396,7 @@ The retry path must distinguish:
 
 Stream every roundtrip — see corrections Issue 2: a mid-stream SSE error chunk arrives at HTTP 200 with `finish_reason: "error"` and is the only place `overloaded_error` shows up.
 
-- [ ] **Step 2.4: Run unit tests**
+- [x] **Step 2.4: Run unit tests**
 
 Run: `uv run pytest tests/llm/test_openrouter_unit.py -v`
 Expected: 6 passed.
