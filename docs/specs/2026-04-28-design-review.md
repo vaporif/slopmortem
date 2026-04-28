@@ -5,18 +5,13 @@
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
-The original review had 34 numbered findings + LOW polish items. 22 mechanical fixes have been applied to the spec; the 11 below remain because each carries a real design tradeoff or empirical question.
+The original review had 34 numbered findings + LOW polish items. Mechanical fixes plus #1 (FACET_BOOST calibration) and #2 (OpenRouter Protocol scope — resolved by switching v1 to OpenRouter) have been applied to the spec; the 9 below remain because each carries a real design tradeoff or empirical question.
 
 ---
 
 ## Open issues
 
 ### CRITICAL
-
-**#2 — OpenRouter v2 swap is over-promised** [Architecture #14, spec §LLMClient]
-`LLMClient.complete(prompt, *, tools=None, model=None, cache=None)` Protocol lacks `output_config`/`output_format` parameters and lacks cache-token return fields. Yet rerank and synthesis depend on Anthropic's structured-output grammar; OpenRouter pass-through doesn't reproduce Anthropic-shape grammar-constrained sampling for non-Anthropic backends, and `cache_control` semantics are also Anthropic-specific.
-**Options to discuss:** (a) widen the Protocol now: `complete(prompt, *, tools=None, model=None, cache=None, output_schema=None) -> CompletionResult` with `cache_read_tokens`/`cache_creation_tokens`/`stop_reason` as optional fields, and document Anthropic-shape lock-in; (b) drop the "v2 swap is one new class" claim from the spec and call OpenRouter a v2 rewrite, not a swap.
-**Recommendation:** widen the Protocol now — same code, smaller lie.
 
 **#6 — Entity-resolution flip silently duplicates the corpus** [Data integrity H2, spec §entity_resolution]
 If tier-3 threshold/Haiku model/prompt changes between runs, the same `(source, source_id)` may resolve to a NEW canonical_id. Old `raw/<source>/<text_id_OLD>.md` and old Qdrant chunks become orphaned but remain retrievable. The re-merge `delete + re-upsert` only touches the NEW canonical_id; reconcile only catches this on full `--reconcile` sweep.
@@ -73,7 +68,7 @@ Bumping `reliability_rank_version` invalidates *every* skip_key, forcing re-merg
 
 The spec is internally consistent and unusually explicit. After the obvious-fix pass, two classes of weakness remain:
 
-- **Load-bearing unverified claims** — HyDE rejection (#12) and the OpenRouter "swap" framing (#2) both lean on premises that haven't been validated. These need eval-or-edit, not more code.
+- **Load-bearing unverified claims** — HyDE rejection (#12) leans on a premise that hasn't been validated. Needs eval-or-edit, not more code.
 - **Cross-store consistency under config edits** — the entity-resolution flip (#6) and the rank-version skip-key (#34) are the same shape: a config-edit that should re-do *some* work but currently re-does too much (or too little). Same fix pattern: split the cache key into the parts that genuinely changed vs. the parts that didn't.
 
 ---
@@ -82,7 +77,7 @@ The spec is internally consistent and unusually explicit. After the obvious-fix 
 
 Applied to spec, no longer in this doc:
 
-**Critical (5):** #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #7 quarantine schema; #8 Pydantic auto-capture leak.
+**Critical (7):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #7 quarantine schema; #8 Pydantic auto-capture leak.
 **High (8):** #10 SQLite blocks event loop; #11 cache-warm race assertion; #14 tool-use loop branch tests; #15 re-merge delete+upsert atomicity; #16 platform blocklist additions; #17 alias-graph dedup at retrieval; #18 recency Branch C; #19 `getaddrinfo` over `gethostbyname`.
 **Med (10):** #20 Range claim correction; #21 cost arithmetic + budget bump to $2; #22 skip_key adds chunk_strategy_version + taxonomy_version; #23 canonical front-matter; #24 default `CapacityLimiter`; #25 batch_id orphan persistence; #27 SpanEvent registry; #28 unified structured-outputs API; #30 stage progress to stderr; #32 Task #9 folded into G1.
 **Low (8):** prompt_sha split; cache_control TTL drift note; safe_path regex validator; cassette regex additions (JWT, Stripe, batch IDs); render moved to top level; test_mcp.py removed; cassette-miss meta-test; JWT/Stripe scrubber.
