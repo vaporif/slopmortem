@@ -1771,7 +1771,7 @@ async def test_per_host_throttle_caps_one_rps():
     ...
 ```
 
-- [ ] **Step 4a.5: HN Algolia adapter** — use `safe_get` from `slopmortem/http.py`, identify UA as `slopmortem/<version> (+<repo>)`, paginate via `?page=`, map results into `RawEntry`.
+- [ ] **Step 4a.5: HN Algolia adapter** — endpoint pinned to `https://hn.algolia.com/api/v1/search_by_date` (chronological; `/search` is relevance-ranked and would re-surface the same long-tail threads on every ingest — see spec line 242). Use `safe_get` from `slopmortem/http.py`, identify UA as `slopmortem/<version> (+<repo>)`. Query params: `tags=story`, `query=<term>`, `numericFilters=created_at_i>=<since-epoch>` for incremental ingest (state stored on the source's last-run watermark), paginate via `page=` until `nbPages` exhausted. Map results into `RawEntry`. Add a unit test asserting the constructed URL begins with `https://hn.algolia.com/api/v1/search_by_date?` so an accidental swap to `/search` fails loudly.
 
 - [ ] **Step 4a.6: Curated v0 YAML**
 
