@@ -1,7 +1,7 @@
 # slopmortem design review — open issues
 
 **Date:** 2026-04-28
-**Status:** post obvious-fix pass — only items needing discussion remain (1 open)
+**Status:** all open issues resolved (0 open)
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
@@ -9,30 +9,11 @@ The original review had 34 numbered findings + LOW polish items. Mechanical fixe
 
 ---
 
-## Open issues
-
-### MED
-
-**#34 — `reliability_rank_version` forces full re-merge** [Architecture #11, spec §skip_key]
-Bumping `reliability_rank_version` invalidates *every* skip_key, forcing re-merge of the whole corpus. But rank changes only re-order sections — if the resulting `combined_text` is byte-identical, all derivations (facets, embeddings, summaries, chunks) are identical too.
-**Options to discuss:** split skip_key into two layers: `derivation_skip_key` (rank-independent: `sha256(combined_text)` plus prompt/model hashes) and `merge_skip_key` (rank-aware: includes `reliability_rank_version`). When rank bumps, recompute `combined_text`; if its sha256 unchanged, skip all derivation work and only update the rank version.
-**Recommendation:** worth doing — saves real cost on rank bumps. Modest journal-schema change.
-
----
-
-## Cross-cutting themes (reduced)
-
-The spec is internally consistent and unusually explicit. After the obvious-fix pass, one class of weakness remains:
-
-- **Cross-store consistency under config edits** — the entity-resolution flip (#6) and the rank-version skip-key (#34) are the same shape: a config-edit that should re-do *some* work but currently re-does too much (or too little). Same fix pattern: split the cache key into the parts that genuinely changed vs. the parts that didn't.
-
----
-
 ## What was already fixed (traceability)
 
 Applied to spec, no longer in this doc:
 
-**This pass:** #26 (curated drift → quarantine_journal w/ `quarantine_reason="curated_drift"`, non-zero exit, `--accept-corpus-drift` override); #29 (split `SourceAdapter` into `Source.fetch() -> AsyncIterable[RawEntry]` + `Enricher.enrich(RawEntry) -> RawEntry`; wayback/tavily are Enrichers, curated/hn/crunchbase are Sources); #31 (v0 corpus ~50 URLs added to Task #4a; Task #4b re-framed as scale-up to ≥200, no longer a v1-utility blocker); #33 (LLM10 per-doc inline cap default 50K tokens with `corpus.doc_truncated` span; LLM07 by-construction note; LLM08 partial mitigation noted, full adversarial-embedding tests added to v2 hardening).
+**This pass:** #26 (curated drift → quarantine_journal w/ `quarantine_reason="curated_drift"`, non-zero exit, `--accept-corpus-drift` override); #29 (split `SourceAdapter` into `Source.fetch() -> AsyncIterable[RawEntry]` + `Enricher.enrich(RawEntry) -> RawEntry`; wayback/tavily are Enrichers, curated/hn/crunchbase are Sources); #31 (v0 corpus ~50 URLs added to Task #4a; Task #4b re-framed as scale-up to ≥200, no longer a v1-utility blocker); #33 (LLM10 per-doc inline cap default 50K tokens with `corpus.doc_truncated` span; LLM07 by-construction note; LLM08 partial mitigation noted, full adversarial-embedding tests added to v2 hardening); #34 (skip_key two-tier split deferred to "Open questions / future work" — rank-version bumps are rare, steady-state cost ~$0.10/week makes the optimization not worth the journal-schema change for v1).
 
 
 **Critical (8):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #6 entity-resolution flip GC (reverse-index + resolver_flipped state + reconcile drift class (f)); #7 quarantine schema; #8 Pydantic auto-capture leak.
