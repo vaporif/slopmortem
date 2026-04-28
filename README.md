@@ -2,7 +2,7 @@
 
 Tell it your startup idea, it finds dead ones that tried something similar.
 
-The CLI is `slopmortem`. Runs on your machine, uses Anthropic, OpenAI, and a local Qdrant container.
+The CLI is `slopmortem`. Runs on your machine. LLM calls go through OpenRouter (routed to Anthropic Sonnet/Haiku by default), embeddings are OpenAI, and Qdrant runs as a local Docker container.
 
 ## Architecture
 
@@ -10,52 +10,52 @@ The CLI is `slopmortem`. Runs on your machine, uses Anthropic, OpenAI, and a loc
 flowchart TB
     User([you])
 
-    User -->|slopmortem "my pitch"| CLI
-    User -->|slopmortem ingest| CLI
+    User -->|"slopmortem 'my pitch'"| CLI
+    User -->|"slopmortem ingest"| CLI
 
-    CLI[["CLI (typer + asyncio.run)"]]
+    CLI[["CLI: typer + asyncio.run"]]
 
     CLI --> Q
     CLI --> I
 
-    subgraph Q[Query pipeline]
+    subgraph Q["Query pipeline"]
         direction TB
-        Q1[facet_extract · Haiku]
-        Q2[embed dense + sparse]
-        Q3[retrieve · Qdrant RRF]
-        Q4[llm_rerank · Sonnet]
-        Q5[synthesize × N · Sonnet + tools]
-        Q6[render markdown]
+        Q1["facet_extract · Haiku"]
+        Q2["embed dense + sparse"]
+        Q3["retrieve · Qdrant RRF"]
+        Q4["llm_rerank · Sonnet"]
+        Q5["synthesize × N · Sonnet + tools"]
+        Q6["render markdown"]
         Q1 --> Q2 --> Q3 --> Q4 --> Q5 --> Q6
     end
 
-    subgraph I[Ingest pipeline]
+    subgraph I["Ingest pipeline"]
         direction TB
-        I1[fetch sources]
-        I2[facet + summarize<br/>Anthropic Batches, 50% off]
-        I3[embed]
-        I4[entity resolution]
-        I5[merge: journal → md → qdrant]
+        I1["fetch sources"]
+        I2["facet + summarize<br/>live fan-out, 1h prompt cache"]
+        I3["embed"]
+        I4["entity resolution"]
+        I5["merge: journal → md → qdrant"]
         I1 --> I2 --> I3 --> I4 --> I5
     end
 
-    subgraph llm[llm/]
-        LLMC[LLMClient · Anthropic SDK]
-        Embed[EmbeddingClient · OpenAI 3-small]
-        Tools[tools.py]
-        Prices[(prices.yml)]
+    subgraph llm["llm/"]
+        LLMC["LLMClient · OpenAI SDK → OpenRouter"]
+        Embed["EmbeddingClient · OpenAI 3-small"]
+        Tools["tools.py"]
+        Prices[("prices.yml")]
     end
 
-    subgraph corpus[corpus/]
-        Qdrant[(Qdrant · dense + sparse)]
-        MD[(on-disk markdown)]
-        Journal[(MergeJournal · sqlite WAL)]
-        Sources[sources/ · curated, HN, Tavily]
+    subgraph corpus["corpus/"]
+        Qdrant[("Qdrant · dense + sparse")]
+        MD[("on-disk markdown")]
+        Journal[("MergeJournal · sqlite WAL")]
+        Sources["sources/ · curated, HN, Tavily"]
     end
 
-    subgraph cross[cross-cutting]
-        Budget[budget.py]
-        Trace[tracing.py · Laminar/OTel]
+    subgraph cross["cross-cutting"]
+        Budget["budget.py"]
+        Trace["tracing.py · Laminar/OTel"]
     end
 
     Q -.-> llm
@@ -65,7 +65,8 @@ flowchart TB
     Q -.-> cross
     I -.-> cross
 
-    LLMC --> ANT([Anthropic API])
+    LLMC --> OR([OpenRouter])
+    OR --> ANT([Anthropic Sonnet/Haiku])
     Embed --> OAI([OpenAI API])
     Sources --> Web([HN · curated URLs · Tavily])
     Trace --> LMNR([Laminar collector])
@@ -80,23 +81,23 @@ You type `slopmortem "we're building a marketplace for industrial scrap metal"`.
 1. **Facets.** Haiku reads the pitch and slaps structured fields on it: sector, business model, stage, that kind of thing. These narrow what we retrieve and feed the rerank rubric later on.
 2. **Embeddings.** Dense via OpenAI `text-embedding-3-small`. Sparse via fastembed BM25. Two vectors per query, both cheap.
 3. **Retrieve.** Qdrant runs three prefetches in parallel (dense, sparse, and one filtered by your facets), then fuses them server-side with Reciprocal Rank Fusion. Top 30 candidates come back. No HyDE, no query rewriting; we tried HyDE earlier and it kept biasing retrieval toward Haiku's favorite failure tropes ("ran out of runway", "scaled too fast"), which made every result look the same.
-4. **Rerank.** One Sonnet call scores all 30 with a multi-perspective rubric. Output is a Pydantic struct via tool-use, so we don't regex over prose. Top 5 survive.
-5. **Synthesize.** First call runs alone. That's deliberate, not a sequencing bug. It populates the prompt cache so the other four don't all race to write the same entry. Once it returns, the rest fire in parallel via `asyncio.gather`. Each writes one candidate report, and the model can call `get_post_mortem` or `search_corpus` mid-generation if it wants more context.
+4. **Rerank.** One Sonnet call scores all 30 with a multi-perspective rubric. Output comes back as schema-conformant JSON via OpenRouter's `response_format=json_schema` (which routes to Anthropic's grammar-constrained sampling), so we don't regex over prose and we don't run a tool-use dance for output shape. No tools, no corpus access — just structured scoring. Top 5 survive.
+5. **Synthesize.** First call runs alone. That's deliberate, not a sequencing bug. It populates the prompt cache so the other four don't all race to write the same entry. The warm response asserts `cache_creation_tokens > 0` (Anthropic's cache is eventually consistent across regions, so a 200 OK doesn't guarantee the prefix replicated yet); one re-warm retry on failure, then the rest fire under `anyio.CapacityLimiter(N)` with `asyncio.gather(..., return_exceptions=True)` so one transient failure drops one candidate, not the whole report. Each writes one candidate report, and the model can call `get_post_mortem` or `search_corpus` mid-generation if it wants more context. Final assistant text is JSON validated against the `Synthesis` Pydantic model.
 6. **Render.** Markdown to stdout. The footer carries cost, latency, and the trace ID, so when something looks off you can paste a Laminar link straight from your terminal.
 
-A normal query lands somewhere around $0.45–0.80 and finishes in 10–20 seconds. Cap is $1.50; the budget tracker raises if you blow past it.
+A default query lands around $0.45–0.60 and finishes in 21–43 seconds; opt into Tavily synthesis enrichment and that becomes $0.60–0.80 / 31–63 seconds. Cap is $2.00; the budget tracker raises if you blow past it.
 
 ## Ingest flow
 
 `slopmortem ingest` is the bulk path. Around 500 URLs from a curated YAML, HN's Algolia API, and Tavily if you opt in.
 
 1. **Fetch.** Plain HTTP. trafilatura strips nav and cookie banners. A length floor drops the obviously empty pages.
-2. **LLM fan-out.** Two calls per doc, one for facet extraction and one for the rerank summary. All ~1000 go up as a single Anthropic Message Batch at 50% off. The shared system block has a 1-hour cache TTL, and we fire one sync call right before submitting the batch so workers find the cache already populated instead of racing to write it. This matters because Anthropic's docs say cache hits inside a batch are "best-effort" and that range is 30% to 98% in practice, which is a wide enough range to wreck your cost estimate if you don't bias it on purpose.
+2. **LLM fan-out.** Two calls per doc, one for facet extraction and one for the rerank summary. All ~1000 run as bounded-concurrency live calls under `anyio.CapacityLimiter(20)`. There's no Batches discount because OpenRouter doesn't proxy that API. The shared system block carries `cache_control={"ttl":"1h"}` and we fire one sync call right before the fan-out so workers find the cache populated instead of racing to write it. The first five fan-out responses sample `cache_read_tokens / (cache_read + cache_creation)` — if the read ratio is under 80% we know before spending the full ingest budget. The 1-hour TTL recovers most of what Batches would have saved.
 3. **Embed.** Dense via OpenAI. Sparse on the local CPU. Cheap enough that I stopped worrying about it.
 4. **Entity resolution.** Three tiers. Domain match first, then embedding similarity, then a Haiku tiebreaker for the actually ambiguous pairs. Mostly the point of all this is to stop "Crunchbase obituary + founder's farewell blog post" from showing up as two separate dead startups.
 5. **Merge.** Journal flips the row to `pending`, markdown lands via `os.replace`, Qdrant gets upserted, then the journal flips to `complete`. If something dies in the middle (Ctrl-C, OOM, bad network, whatever), `slopmortem ingest --reconcile` walks the three stores and patches whatever drifted.
 
-The initial 500-URL seed runs about $5. The cap is $10 because retries happen and I wanted slack. Steady-state on the HN feed is roughly $0.07/week, which is small enough that I stopped tracking it.
+The initial 500-URL seed runs about $7.50. The cap is $15 because retries happen, the no-Batches path has less cushion, and I wanted slack. Steady-state on the HN feed is roughly $0.10/week, which is small enough that I stopped tracking it.
 
 ## What's where
 
@@ -107,9 +108,11 @@ slopmortem/
   ingest.py              # ingest orchestration
   stages/                # one module per stage; every function is async def
   llm/
-    client.py            # LLMClient Protocol + AnthropicSDKClient + FakeLLMClient
+    client.py            # LLMClient Protocol + OpenRouterClient (openai SDK pointed
+                         #   at openrouter.ai/api/v1) + FakeLLMClient
     embedding_client.py  # OpenAI + Fake variants
-    tools.py             # ToolSpec, Pydantic → Anthropic schema conversion
+    tools.py             # synthesis_tools(config) factory; Pydantic → OpenAI-shape
+                         #   tool schema (OpenRouter forwards to Anthropic backends)
     prices.yml           # source of truth for $$
     prompts/             # *.j2 templates with paired JSON Schemas
   corpus/
@@ -133,12 +136,12 @@ tests/
 
 ## Running it
 
-`ANTHROPIC_API_KEY` and `OPENAI_API_KEY` go in `.env`. Tavily is optional. Qdrant runs in Docker.
+`OPENROUTER_API_KEY` and `OPENAI_API_KEY` go in `.env`. Tavily is optional. Qdrant runs in Docker.
 
 ```
 uv sync
 docker-compose up -d qdrant
-slopmortem ingest --source curated   # ~$5, run this once
+slopmortem ingest --source curated   # ~$7.50, run this once
 slopmortem "your pitch here"         # ~$0.50, run whenever
 ```
 
@@ -148,8 +151,8 @@ Two corners worth knowing about. `slopmortem ingest --reconcile` patches drift b
 
 Cassettes via pytest-recording, with vcrpy underneath. I don't pair it with respx because both libraries patch the same httpx transport layer, and when they coexist you get fixture-order flakes that aren't local to the test that's broken. One library is enough.
 
-`make smoke-live` runs against the real Anthropic API on a manual trigger, roughly weekly, mostly so I notice when an SDK or model update silently changes behavior. Everything else replays from disk.
+`make smoke-live` runs against live OpenRouter on a manual trigger, roughly weekly, mostly so I notice when an SDK or model or routing change silently shifts behavior. Everything else replays from disk.
 
 ## Design notes
 
-Full spec is in [`docs/specs/2026-04-27-slopmortem-design.md`](docs/specs/2026-04-27-slopmortem-design.md). Open issues against the spec live in [`docs/specs/2026-04-28-design-review-issues.md`](docs/specs/2026-04-28-design-review-issues.md).
+Full spec is in [`docs/specs/2026-04-27-slopmortem-design.md`](docs/specs/2026-04-27-slopmortem-design.md). The pre-implementation punch list of contract bugs to close lives in [`docs/specs/2026-04-28-design-spec-blockers.md`](docs/specs/2026-04-28-design-spec-blockers.md).
