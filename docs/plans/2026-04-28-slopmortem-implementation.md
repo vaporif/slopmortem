@@ -1654,6 +1654,21 @@ async def test_quarantine_journal_no_canonical_id(tmp_path):
     assert len(rows) == 1
     # Blocker B4: no merge_state column on quarantine rows
     assert "merge_state" not in rows[0]
+
+async def test_upsert_alias_blocked_atomic(journal):
+    # Single transaction: alias edge + merge_journal row, both committed or neither.
+    await journal.upsert_alias_blocked(
+        canonical_id="acme-ai.com", source="hn", source_id="42",
+        alias_edge=AliasEdge(
+            canonical_id="acme-ai.com", alias_kind="rebranded_to",
+            target_canonical_id="acme.com",
+            evidence_source_id="hn:42", confidence=0.92,
+        ),
+    )
+    rows = await journal.fetch_by_key("acme-ai.com", "hn", "42")
+    assert len(rows) == 1 and rows[0]["merge_state"] == "alias_blocked"
+    edges = await journal.fetch_aliases("acme-ai.com")
+    assert len(edges) == 1 and edges[0].target_canonical_id == "acme.com"
 ```
 
 - [ ] **Step 3.6: Implement `MergeJournal`**
@@ -1708,6 +1723,16 @@ CREATE TABLE founding_year_cache (
 ```
 
 `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` set on every connection. One short-lived connection per call (no pool).
+
+**Terminal-state writers (atomicity contract).** `MergeJournal` exposes exactly three methods that produce a non-`complete` row, each running its inserts inside a single `BEGIN; … COMMIT;` so a crash either commits all rows or none:
+
+| Method | Effect |
+|---|---|
+| `upsert_pending(canonical_id, source, source_id)` | 1 row in `merge_journal`, `merge_state='pending'` |
+| `upsert_resolver_flipped(canonical_id, source, source_id)` | 1 row in `merge_journal`, `merge_state='resolver_flipped'` |
+| `upsert_alias_blocked(canonical_id, source, source_id, alias_edge)` | 1 row in `merge_journal` (`alias_blocked`) **+** 1 row in `aliases`, in one SQLite transaction |
+
+Callers MUST use these methods instead of composing their own write sequences — they are the only sanctioned path to a non-`complete` `merge_state` and they encode the invariant that every row enters the journal in its terminal classification (closing the B6 race window). `mark_complete` is the one promotion path (`pending` → `complete`) and runs after all qdrant + disk writes succeed.
 
 - [ ] **Step 3.7: Failing test for atomic disk writes**
 
@@ -1887,9 +1912,28 @@ async def test_parent_subsidiary_suffix_demotes():
     ...
 ```
 
-- [ ] **Step 5a.4: Alias-graph test**
+- [ ] **Step 5a.4: Alias-graph test (atomic precheck)**
 
-When tier-1 hits old domain but new entry names a NEW canonical entity (founder blog says "we became X"), write an `acquired_by` or `rebranded_to` edge to `aliases` table and BLOCK the merge (spec line 261).
+When tier-1 hits an old domain but the new entry names a NEW canonical entity (founder blog says "we became X"), write an `acquired_by` or `rebranded_to` edge to the `aliases` table and BLOCK the merge (spec line 261).
+
+**Atomicity contract:** alias detection runs as a *precheck* before the journal `upsert_pending` write — the same shape as the resolver-flip precheck (spec.md:523–545). The journal row is written **once**, in its terminal classification (`pending` | `resolver_flipped` | `alias_blocked`); there is no two-step "write pending then update to alias_blocked". This closes the crash window between resolution and the alias-blocked promotion. The `aliases` row and the `merge_journal` row are written under one SQLite transaction (`BEGIN; INSERT INTO aliases ...; INSERT INTO merge_journal ... merge_state='alias_blocked'; COMMIT`) so a crash either rolls both back or commits both.
+
+```python
+async def test_alias_blocked_atomic_no_pending_residue(journal):
+    # Trigger alias case (rebrand). Verify the journal row appears with merge_state='alias_blocked'
+    # in a SINGLE state — no transient 'pending' row written first.
+    states = []
+    journal.on_write = lambda row: states.append(row.merge_state)
+    await ingest_one(rebrand_entry, journal=journal)
+    assert states == ["alias_blocked"]  # not ["pending", "alias_blocked"]
+    assert (await journal.fetch_aliases(canonical_id=rebrand_entry.canonical_id))
+
+async def test_alias_blocked_crash_recovery(journal, monkeypatch):
+    # Simulate crash AFTER alias detection but DURING transaction commit.
+    # Verify recovery: either both writes happened (alias edge + alias_blocked row),
+    # or neither did (stale lock cleared, --reconcile redoes the row).
+    ...
+```
 
 - [ ] **Step 5a.5: Tier-3 fuzzy + Haiku tiebreaker**
 

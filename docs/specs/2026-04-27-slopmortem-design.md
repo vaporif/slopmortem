@@ -527,12 +527,24 @@ entity_resolution(raw_entry, qdrant) → canonical_id, action ∈ {create, merge
 # remain in place and retrievable). Mark this row merge_state="resolver_flipped",
 # emit a resolver_flip_detected span event, continue to the next row in the run.
 # Repair is owned by `slopmortem ingest --reconcile` drift class (f) below.
+# Alias precheck: run alias-graph detection on `canonical_id` BEFORE the journal write.
+# If the resolution path produces an alias edge (acquired_by / rebranded_to /
+# pivoted_from / parent_of / subsidiary_of pointing at an existing canonical), STOP —
+# write the alias edge to the `aliases` table and emit `alias_blocked` as the row's
+# initial and only state. Auto-merge is BLOCKED in v1; the alias edge is audit-only.
+# Running this as a precheck (not as a follow-up update) makes the journal write atomic:
+# every row hits the journal in its terminal classification (pending | resolver_flipped |
+# alias_blocked), eliminating the crash window between a "pending" write and a
+# subsequent "alias_blocked" promotion.
 text_id        = sha256(canonical_id)[:16]
 raw_path       = safe_path(post_mortems_root, kind="raw", text_id=text_id, source=source)
 canonical_path = safe_path(post_mortems_root, kind="canonical", text_id=text_id)
   ↓
-write merge_state="pending" row keyed by
+write merge_state ∈ {"pending", "resolver_flipped", "alias_blocked"} row keyed by
   (canonical_id, source, source_id)        # merge journal — see §Architecture
+  # Classification decided by the prechecks above; only "pending" proceeds to disk +
+  # qdrant work. resolver_flipped and alias_blocked rows terminate here (no raw write,
+  # no chunking, no upsert) — journal-only audit records.
   ↓
 # raw/ is the per-source receipt: written once, immutable. Always written (or
 # verified hash-equal if already present) before any canonical work.
