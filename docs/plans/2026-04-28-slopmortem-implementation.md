@@ -48,7 +48,7 @@ The Gate columns are kept as informational ordering markers (G1 = foundation, G2
 | # | Task | Gate | Agent type | Domain |
 |---|------|------|------------|--------|
 | 0 | **G2 contract**: prompt skeletons (`.j2`) + per-prompt JSON output schemas + sample fixtures for facet_extract, llm_rerank, synthesize; taxonomy.yml frozen | **G2** | python-development:python-pro | Python |
-| 1 | **Foundation**: pydantic-settings v2 with TOML sources, all shared models, `LLMClient` + `EmbeddingClient` + `Corpus` + `ToolSpec` Protocols, `CompletionResult` dataclass, synthesis tool signatures, `to_openai_input_schema(args_model)` helper, `MergeState`, `safe_path`, `Budget`, `tracing.py`. Adds `jsonref` to dependencies. | **G1** | python-development:python-pro | Python |
+| 1 | **Foundation**: pydantic-settings v2 with TOML sources, all shared models, `LLMClient` + `EmbeddingClient` + `Corpus` + `ToolSpec` Protocols, `CompletionResult` dataclass, synthesis tool signatures, `to_openai_input_schema(args_model)` helper, `to_strict_response_schema(model)` helper (force-required + nullable for OpenAI strict-mode response_format with `Optional[T] = None` defaults), `MergeState`, `safe_path`, `Budget`, `tracing.py`. Adds `jsonref` to dependencies. | **G1** | python-development:python-pro | Python |
 | 2 | LLMClient: `OpenRouterClient` (openai SDK pointed at openrouter, tool-use loop, cache_control passthrough, cache-token extraction, retry/budget integration, anyio CapacityLimiter for fan-out, stub-based unit tests for each `finish_reason` branch) + `FakeLLMClient` cassette + tests | — | python-development:python-pro | Python |
 | 2b | EmbeddingClient: `OpenAIEmbeddingClient` (retry, span, budget) + `FakeEmbeddingClient` cassette + tests | — | python-development:python-pro | Python |
 | 3 | Corpus: `QdrantCorpus`, `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (sqlite WAL via asyncio.to_thread), `slopmortem ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | python-development:python-pro | Python |
@@ -493,6 +493,22 @@ def test_round_trip_pydantic_to_schema_to_pydantic():
     # schema accepts the sample
     import jsonschema
     jsonschema.validate(sample, schema)
+
+def test_to_strict_response_schema_force_requires_optional_defaults():
+    # OpenAI strict mode: every property must be in `required`. Pydantic omits
+    # fields with a default (incl. `T | None = None`) — the helper adds them back.
+    from slopmortem.llm.tools import to_strict_response_schema
+    schema = to_strict_response_schema(Args)
+    assert set(schema["required"]) == {"q", "limit", "facets"}
+    assert schema["properties"]["limit"].get("anyOf") == [{"type": "integer"}, {"type": "null"}]
+    assert schema["additionalProperties"] is False
+
+def test_to_strict_response_schema_idempotent_when_no_optional_defaults():
+    class AllRequired(BaseModel):
+        a: str
+        b: int | None  # required (no default), nullable
+    schema = to_strict_response_schema(AllRequired)
+    assert set(schema["required"]) == {"a", "b"}
 ```
 
 - [ ] **Step 1.9: Implement `to_openai_input_schema` in `slopmortem/llm/tools.py`**
@@ -504,7 +520,7 @@ import jsonref
 from pydantic import BaseModel
 from slopmortem.models import ToolSpec  # re-export
 
-__all__ = ["ToolSpec", "to_openai_input_schema", "synthesis_tools"]
+__all__ = ["ToolSpec", "to_openai_input_schema", "to_strict_response_schema", "synthesis_tools"]
 
 def to_openai_input_schema(args_model: type[BaseModel]) -> dict[str, Any]:
     schema = args_model.model_json_schema()
@@ -512,6 +528,41 @@ def to_openai_input_schema(args_model: type[BaseModel]) -> dict[str, Any]:
     if isinstance(inlined, dict):
         for k in ("$defs", "$schema", "$id"):
             inlined.pop(k, None)
+    return dict(inlined)
+
+def to_strict_response_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """Emit a `response_format.json_schema.schema` payload that conforms to OpenAI
+    strict-mode rules for models with Optional fields.
+
+    Pydantic v2 omits any field with a default (incl. `T | None = None`) from the
+    `required` list, but OpenAI strict mode mandates every property be `required` —
+    nullability is expressed via `anyOf:[T,null]`, not by absence from `required`.
+    This helper inlines `$ref`/`$defs`, strips draft metadata, and force-adds every
+    top-level property (and every nested object's properties) to `required`. The
+    `anyOf:[T,null]` shape is preserved verbatim. Idempotent: models with no
+    Optional defaults round-trip unchanged.
+    """
+    schema = model.model_json_schema()
+    inlined = jsonref.replace_refs(schema, proxies=False, lazy_load=False)
+    if isinstance(inlined, dict):
+        for k in ("$defs", "$schema", "$id"):
+            inlined.pop(k, None)
+    def _force_required(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "object" and "properties" in node:
+            node["required"] = list(node["properties"].keys())
+            node["additionalProperties"] = False
+            for v in node["properties"].values():
+                _force_required(v)
+        for key in ("items", "anyOf", "oneOf", "allOf"):
+            v = node.get(key)
+            if isinstance(v, list):
+                for elem in v:
+                    _force_required(elem)
+            elif isinstance(v, dict):
+                _force_required(v)
+    _force_required(inlined)
     return dict(inlined)
 
 def synthesis_tools(config) -> list[ToolSpec]:
@@ -529,7 +580,7 @@ def synthesis_tools(config) -> list[ToolSpec]:
 `jsonschema` is already declared in the bootstrap `pyproject.toml` dev-deps; no extra `uv add` needed.
 
 Run: `uv run pytest tests/test_tools_schema.py -v`
-Expected: 2 passed.
+Expected: 4 passed.
 
 - [ ] **Step 1.11: Write `tests/test_budget.py`**
 
@@ -2125,15 +2176,21 @@ from slopmortem.llm.prompts import render_prompt, prompt_template_sha
 from slopmortem.models import Facets
 
 async def extract_facets(text: str, llm: LLMClient, model: str | None = None) -> Facets:
+    from slopmortem.llm.tools import to_strict_response_schema
     prompt = render_prompt("facet_extract", description=text)
+    # Facets has Optional[T] = None defaults (sub_sector, product_type, price_point,
+    # founding_year, failure_year). Pydantic v2 omits those from `required`, but
+    # OpenAI strict mode mandates every property be required (nullability is
+    # expressed via anyOf:[T,null]). to_strict_response_schema force-adds them.
     result = await llm.complete(
         prompt,
         model=model,
         cache=True,
         response_format={
             "type": "json_schema",
-            "json_schema": {"name": "Facets", "schema": Facets.model_json_schema(), "strict": True},
+            "json_schema": {"name": "Facets", "schema": to_strict_response_schema(Facets), "strict": True},
         },
+        extra_body={"provider": {"require_parameters": True}},
     )
     return Facets.model_validate_json(result.text)
 ```
@@ -2216,6 +2273,7 @@ from slopmortem.errors import RerankLengthError
 from slopmortem.models import LlmRerankResult
 
 async def llm_rerank(candidates, pitch, facets, llm, config, *, model=None) -> LlmRerankResult:
+    from slopmortem.llm.tools import to_strict_response_schema
     prompt = render_prompt(
         "llm_rerank",
         pitch=pitch,
@@ -2230,7 +2288,7 @@ async def llm_rerank(candidates, pitch, facets, llm, config, *, model=None) -> L
         response_format={
             "type": "json_schema",
             "json_schema": {"name": "LlmRerankResult",
-                            "schema": LlmRerankResult.model_json_schema(),
+                            "schema": to_strict_response_schema(LlmRerankResult),
                             "strict": True},
         },
         extra_body={"provider": {"require_parameters": True}},
@@ -2303,7 +2361,7 @@ async def test_synthesize_ignores_injected_instructions(fake_llm_replays_injecti
 
 - [ ] **Step 8.4: Implement synthesize**
 
-Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_id}">…</untrusted_document>`; pass `tools=synthesis_tools(config)`; `response_format=json_schema(Synthesis, strict=True)`; pass `extra_body={"provider": {"require_parameters": True}}` to `llm.complete(...)` (the `LLMClient.complete` Protocol exposes `extra_body` since Task 1 — Anthropic-via-OpenRouter requires this for structured output to validate; reference: `2026-04-28-openrouter-api-corrections.md` Issue 5). Tool-loop bound at 5 turns. Tavily ≤2 calls per synthesis (track per-call).
+Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_id}">…</untrusted_document>`; pass `tools=synthesis_tools(config)`; build the `response_format` schema via `to_strict_response_schema(Synthesis)` (idempotent for `Synthesis` — no Optional-default fields — but consistency keeps the call sites uniform and survives future schema changes); pass `extra_body={"provider": {"require_parameters": True}}` to `llm.complete(...)` (the `LLMClient.complete` Protocol exposes `extra_body` since Task 1 — Anthropic-via-OpenRouter requires this for structured output to validate; reference: `2026-04-28-openrouter-api-corrections.md` Issue 5). Tool-loop bound at 5 turns. Tavily ≤2 calls per synthesis (track per-call).
 
 After parse: filter `Synthesis.sources` against `candidate.payload.sources` hosts ∪ `{news.ycombinator.com}` ∪ Tavily-returned hosts (if Tavily was called this turn). Drop off-allowlist URLs and emit span events.
 
