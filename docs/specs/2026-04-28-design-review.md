@@ -1,22 +1,17 @@
 # slopmortem design review — open issues
 
 **Date:** 2026-04-28
-**Status:** post obvious-fix pass — only items needing discussion remain (7 open)
+**Status:** post obvious-fix pass — only items needing discussion remain (6 open)
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
-The original review had 34 numbered findings + LOW polish items. Mechanical fixes plus #1 (FACET_BOOST calibration), #2 (OpenRouter Protocol scope — resolved by switching v1 to OpenRouter), and #6 (entity-resolution flip GC — resolved via reverse-index + reconcile drift class (f)) have been applied to the spec; the 8 below remain because each carries a real design tradeoff or empirical question.
+The original review had 34 numbered findings + LOW polish items. Mechanical fixes plus #1 (FACET_BOOST calibration), #2 (OpenRouter Protocol scope — resolved by switching v1 to OpenRouter), and #6 (entity-resolution flip GC — resolved via reverse-index + reconcile drift class (f)) have been applied to the spec; the items below remain because each carries a real design tradeoff or empirical question.
 
 ---
 
 ## Open issues
 
 ### HIGH
-
-**#12 — HyDE rejection rests on an unverified claim** [API #11, Retrieval F1, spec line 213]
-Spec rejects HyDE because "text-embedding-3-small is asymmetric-trained for retrieval." This rationale is **not** in OpenAI's docs. Forward-looking pitches embed in a different vector space than backward-looking obituaries; BM25 only partly compensates.
-**Options to discuss:** (a) keep `--hyde` as opt-in flag (current spec); (b) make `--hyde` ON by default; (c) replace HyDE with a "failure-framing" rewrite (one Haiku call: "rewrite this pitch as a hypothetical post-mortem opening") which is cheaper and avoids HyDE's "high-prior failure tropes" failure mode; (d) gate the choice on an eval comparing forward-pitch ↔ post-mortem retrieval recall on a held-out set.
-**Recommendation:** ship the eval first (Top 3 retrieval eval #1), let it decide.
 
 **#13 — Multi-perspective rerank lacks a combination rule** [Retrieval F10, spec §llm_rerank]
 Sonnet returns three perspective scores (`business_model`, `market`, `gtm`) per candidate, but the spec never says how `LlmRerankResult.ranked` is ordered.
@@ -54,9 +49,8 @@ Bumping `reliability_rank_version` invalidates *every* skip_key, forcing re-merg
 
 ## Cross-cutting themes (reduced)
 
-The spec is internally consistent and unusually explicit. After the obvious-fix pass, two classes of weakness remain:
+The spec is internally consistent and unusually explicit. After the obvious-fix pass, one class of weakness remains:
 
-- **Load-bearing unverified claims** — HyDE rejection (#12) leans on a premise that hasn't been validated. Needs eval-or-edit, not more code.
 - **Cross-store consistency under config edits** — the entity-resolution flip (#6) and the rank-version skip-key (#34) are the same shape: a config-edit that should re-do *some* work but currently re-does too much (or too little). Same fix pattern: split the cache key into the parts that genuinely changed vs. the parts that didn't.
 
 ---
