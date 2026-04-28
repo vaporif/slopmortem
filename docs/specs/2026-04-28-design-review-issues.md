@@ -116,3 +116,9 @@ exporter through OTel internals. Path A is the pragmatic choice.
 should-fix — fix during implementation, in-task:
   #6 DNS guard (spec edited; v2 hardening — see TODOs at spec:619, 722)
 ```
+
+---
+
+## Limitations
+
+The single highest-leverage move: put a LIMITATIONS.md (or top of README) listing the conceptual blockers from the analysis — slop indistinguishability, evaluation impossibility, substitutability vs `claude -p`. Reviewers love candidates who can argue against their own work. That writeup will move you up more than another stage of pipeline will.
