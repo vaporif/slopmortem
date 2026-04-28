@@ -1554,13 +1554,21 @@ import pytest
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Modifier
 from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
+from slopmortem.llm.openai_embeddings import EMBED_DIMS
 
 @pytest.mark.requires_qdrant
 async def test_collection_has_idf_modifier(qdrant_client):
-    await ensure_collection(qdrant_client, "test_collection")
+    await ensure_collection(qdrant_client, "test_collection",
+                            dim=EMBED_DIMS["text-embedding-3-small"])
     info = await qdrant_client.get_collection("test_collection")
     sparse = info.config.params.sparse_vectors["sparse"]
     assert sparse.modifier == Modifier.IDF
+
+@pytest.mark.requires_qdrant
+async def test_collection_dim_mismatch_raises(qdrant_client):
+    await ensure_collection(qdrant_client, "dim_test", dim=1536)
+    with pytest.raises(ValueError, match="dim mismatch"):
+        await ensure_collection(qdrant_client, "dim_test", dim=3072)
 ```
 
 `conftest.py` fixture spins a real Qdrant container (or skips if `pytest -m 'not requires_qdrant'`).
@@ -1572,18 +1580,27 @@ from qdrant_client.models import (
     VectorParams, Distance, SparseVectorParams, Modifier, SparseIndexParams,
 )
 
-async def ensure_collection(client, name: str) -> None:
+async def ensure_collection(client, name: str, *, dim: int) -> None:
     if await client.collection_exists(name):
+        info = await client.get_collection(name)
+        existing = info.config.params.vectors["dense"].size
+        if existing != dim:
+            raise ValueError(
+                f"dim mismatch: collection {name!r} has dim={existing} "
+                f"but config wants dim={dim}. Drop data/qdrant/ and re-ingest."
+            )
         return
     await client.create_collection(
         collection_name=name,
-        vectors_config={"dense": VectorParams(size=1536, distance=Distance.COSINE)},
+        vectors_config={"dense": VectorParams(size=dim, distance=Distance.COSINE)},
         sparse_vectors_config={"sparse": SparseVectorParams(
             index=SparseIndexParams(on_disk=False),
             modifier=Modifier.IDF,
         )},
     )
 ```
+
+Callers pass `dim=EMBED_DIMS[settings.embed_model_id]` — the embedding model name in `config.py` is the single source of truth for the dimension.
 
 - [ ] **Step 3.4: Run setup test**
 
