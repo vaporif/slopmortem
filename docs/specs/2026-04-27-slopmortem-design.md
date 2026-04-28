@@ -306,7 +306,10 @@ slopmortem/
   llm/
     client.py              # LLMClient Protocol + OpenRouterClient impl + FakeLLMClient impl
                            #   OpenRouterClient handles: openai SDK pointed at openrouter.ai/api/v1,
-                           #   chat.completions.create, tool-use loop with <untrusted_document>
+                           #   chat.completions.create called with stream=True on every
+                           #   roundtrip (the only way to see mid-stream SSE error chunks
+                           #   that arrive at HTTP 200 with finish_reason="error" — see
+                           #   §Failure handling), tool-use loop with <untrusted_document>
                            #   wrapping of tool results, cache_control passed through to Anthropic
                            #   backends on shared system blocks, cache-read/creation tokens
                            #   normalized off OpenRouter's usage extension into CompletionResult,
@@ -401,7 +404,7 @@ slopmortem/
                            #             summarize_prompt_hash, haiku_model_id,
                            #             embed_model_id, chunk_strategy_version,
                            #             taxonomy_version, reliability_rank_version),
-                           #    merge_state ∈ {pending, complete, alias_blocked, resolver_flipped})
+                           #    merge_state ∈ {pending, complete, resolver_flipped})
                            #   Separate `quarantine_journal` table keyed on
                            #   (content_sha256, source, source_id) — slop-classified
                            #   docs have no canonical_id and cannot live in the
