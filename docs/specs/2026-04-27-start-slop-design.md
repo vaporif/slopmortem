@@ -101,7 +101,7 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
                                  ▼
             ┌───────────────────────────────────────────────────┐
             │  STAGE 5: synthesize_all(top-N, ctx, llm+tools)   │
-            │           asyncio.gather, semaphore=N             │
+            │           cache-warm + asyncio.gather              │
             │           each call: candidate body inlined in    │
             │             prompt; tools = search_corpus,        │
             │             get_post_mortem (follow-ups only),    │
@@ -517,7 +517,7 @@ synthesize_all(top_n, query_ctx, llm=sonnet, tools=synthesis_tools(config))
   → for each candidate: load body from disk, INLINE into prompt
                         wrap in <untrusted_document> tags + system instruction
   → cache-warm: first synthesize call runs alone; once it returns, the
-    remaining N-1 calls launch via asyncio.gather (semaphore=N_synthesize-1).
+    remaining N-1 calls launch via asyncio.gather.
     System block carries cache_control={"type":"ephemeral"}; warming ensures
     the parallel calls hit the populated cache rather than racing to write it.
   → tools = [get_post_mortem, search_corpus, submit_synthesis]
@@ -543,14 +543,14 @@ render(Report)                                     → markdown → stdout
 
 ### Concurrency
 
-- Synthesize: cache-warm pattern — the first `messages.create` call runs alone to populate the prompt cache for the shared system block; the remaining `N_synthesize - 1` run via `asyncio.gather` under a semaphore (default cap = N_synthesize - 1 = 4, configurable). All calls are async HTTP via the SDK; no subprocess management, no signal forwarding for child processes. Ctrl-C cancels the asyncio task group; in-flight HTTP requests are aborted via the SDK's cancel surface.
+- Synthesize: cache-warm pattern — the first `messages.create` call runs alone to populate the prompt cache for the shared system block; the remaining `N_synthesize - 1` run via `asyncio.gather`. No concurrency cap at default `N_synthesize = 5`: the SDK's built-in `Retry-After` backoff on 429/529 is the only rate-limit response. If `N_synthesize` is configured up (>10) or 429/529 storms are observed in Laminar, revisit by adding `anyio.CapacityLimiter` with mutable `total_tokens`. All calls are async HTTP via the SDK; no subprocess management, no signal forwarding for child processes. Ctrl-C cancels the asyncio task group; in-flight HTTP requests are aborted via the SDK's cancel surface.
 - LLM rerank is one call, no fan-out.
 - Ingest LLM calls (~1000 facet+summarize per re-seed) submit as a single Message Batch; the orchestrator polls the batch endpoint at 30s intervals, with `--no-batch` available to fall back to synchronous fan-out for small re-runs.
 
 ### Failure handling
 
 - `LLMClient` retries with exponential backoff on transient failures (HTTP 5xx, network timeout). Output-tool args validate against the tool's `input_schema` server-side at Anthropic, so structured-output schema drift never reaches our Pydantic boundary as a runtime exception — `args_model.model_validate(tool_use.input)` after the API call is defense-in-depth and is not expected to fail in practice; if it does (signaling a schema mismatch between Pydantic and the schema we sent), it raises immediately without retry because retrying won't change the schema we send. Corpus-tool results that the model returns malformed (e.g. invalid args to `search_corpus`) are reported back to the model as a `tool_result` with `is_error=True` and consume one tool-loop turn, NOT a retry. Max 3 retries per call across the transient-failure classes. Auth-class failures (`401`/`403` from the SDK, expired or missing API key) are detected separately and short-circuit retries with a user-facing error rather than burning the budget.
-- Rate-limit detection: SDK `RateLimitError` (HTTP 429) or `overloaded_error` (HTTP 529) throttles the entire shared semaphore (sleeps `Retry-After` from response headers, halves concurrency for the rest of the run). Per-call retry alone makes rate-limit storms worse.
+- Rate-limit detection: SDK `RateLimitError` (HTTP 429) and `overloaded_error` (HTTP 529) are handled by the Anthropic SDK's built-in `Retry-After`-aware backoff. After max retries the candidate drops per the rule below.
 - Per-invocation budget: every `LLMClient.complete` and `EmbeddingClient.embed` call accumulates `cost_usd` against a `Budget` object initialized from `config.max_cost_usd_per_query` (default $1.50) or `_per_ingest` (default $10.00). Cost is computed from `usage.input_tokens`, `usage.output_tokens`, `usage.cache_read_input_tokens`, and `usage.cache_creation_input_tokens` against the per-model price table — measured, not estimated. On overage the next call raises `BudgetExceeded` immediately, the partial report renders with what's complete, and the trace records `budget_exceeded=True`.
 - After max retries on a single candidate: that candidate drops from rerank/synthesis with a logged warning; the report notes the gap.
 - Ingest: per-source failure logged + skipped, never aborts the whole run.
