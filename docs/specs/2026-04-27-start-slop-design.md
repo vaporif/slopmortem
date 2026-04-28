@@ -1,4 +1,4 @@
-# start_slop — design spec
+# slopmortemmortem — design spec
 
 **Date:** 2026-04-27
 **Status:** draft - awaiting review
@@ -9,8 +9,8 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 
 ## Goals
 
-- One command (`slop`) takes input, returns a structured markdown report listing the top-N similar dead startups with per-candidate similarity reasoning across business model, market, and GTM.
-- One command (`slop ingest`) builds a high-quality corpus from sources that work day-one with no manual setup.
+- One command (`slopmortem`) takes input, returns a structured markdown report listing the top-N similar dead startups with per-candidate similarity reasoning across business model, market, and GTM.
+- One command (`slopmortem ingest`) builds a high-quality corpus from sources that work day-one with no manual setup.
 - Every stage is a pure function with injected dependencies — testable in isolation, traceable end-to-end, swappable without rewrite.
 - Per-query cost target ~$0.40–0.60 default path (~$0.60–0.80 with Tavily synthesis enrichment); designed so OpenRouter / cheaper models can drop in later when cost-tuning matters.
 
@@ -29,15 +29,15 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                                  USER (terminal)                                 │
 │                                                                                  │
-│   $ slop ingest                              $ slop                              │
-│   $ slop ingest --source hn                  > Name: MedScribe AI                │
+│   $ slopmortem ingest                              $ slopmortem                              │
+│   $ slopmortem ingest --source hn                  > Name: MedScribe AI                │
 │                                              > Description (paste, Ctrl-D): ...  │
 │                                              > Years filter: 5                   │
 └────────────────────┬─────────────────────────────────────┬───────────────────────┘
                      │                                     │
                      ▼                                     ▼
        ┌─────────────────────────┐         ┌─────────────────────────────────┐
-       │   slop ingest (CLI)     │         │   slop query (CLI)              │
+       │   slopmortem ingest (CLI)     │         │   slopmortem query (CLI)              │
        │   ─────────────────     │         │   ────────────────              │
        │   sources/* adapters    │         │   prompts user / reads file     │
        │   trafilatura extract   │         │   builds InputContext           │
@@ -175,7 +175,7 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
     EVERY stage + LLM / embedding / tool / corpus call wrapped by:
     ┌───────────────────────────────────────────────────────────────┐
     │  Laminar (@observe decorators + manual spans)                 │
-    │  one trace per CLI invocation (slop.query / slop.ingest)      │
+    │  one trace per CLI invocation (slopmortem.query / slopmortem.ingest)      │
     │  span tree mirrors pipeline structure                         │
     │  per LLM span: model, cost_usd, latency, retry,               │
     │                input/output/cache_read/cache_creation tokens  │
@@ -203,7 +203,7 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 - Rationale: synthesis already fans out via `asyncio.gather` (see §Concurrency), and mixing sync stages forces either `asyncio.run` per call (loses the pool) or sync calls inside an async stage (blocks the loop and serializes the gather). Fully-async is the only shape that doesn't pessimize one of the two.
 
 **Single LLMClient abstraction, Anthropic SDK in v1**
-- All LLM calls (facet extract, summarize, polish rerank, synthesis) go through `LLMClient.complete(prompt, *, tools=None, model=None, cache=None)`. v1 implements this with `AnthropicSDKClient` over the `anthropic` Python SDK calling `client.messages.create(...)` with `tools=[...]` for native tool use. Tools are registered as plain Python callables; argument schemas are derived via `to_anthropic_input_schema(args_model)` in `slop/llm/tools.py`, which calls `args_model.model_json_schema()`, inlines `$ref`/`$defs` via `jsonref.replace_refs(proxies=False, lazy_load=False)`, and strips draft-2020-12 metadata (`$schema`, `$defs`, `$id`). `Optional[T]` fields preserve Pydantic's `anyOf:[T,null]` shape verbatim — rewriting to `type:[T,null]` has been observed to *increase* invalid-JSON output rates, so the helper deliberately leaves it alone. Defensive flattening only: non-strict tool use accepts `$ref` today, but strict-tool-use rollout will require inlined schemas, and the dead metadata is noise in trace inspections regardless.
+- All LLM calls (facet extract, summarize, polish rerank, synthesis) go through `LLMClient.complete(prompt, *, tools=None, model=None, cache=None)`. v1 implements this with `AnthropicSDKClient` over the `anthropic` Python SDK calling `client.messages.create(...)` with `tools=[...]` for native tool use. Tools are registered as plain Python callables; argument schemas are derived via `to_anthropic_input_schema(args_model)` in `slopmortem/llm/tools.py`, which calls `args_model.model_json_schema()`, inlines `$ref`/`$defs` via `jsonref.replace_refs(proxies=False, lazy_load=False)`, and strips draft-2020-12 metadata (`$schema`, `$defs`, `$id`). `Optional[T]` fields preserve Pydantic's `anyOf:[T,null]` shape verbatim — rewriting to `type:[T,null]` has been observed to *increase* invalid-JSON output rates, so the helper deliberately leaves it alone. Defensive flattening only: non-strict tool use accepts `$ref` today, but strict-tool-use rollout will require inlined schemas, and the dead metadata is noise in trace inspections regardless.
 - Prompt caching is explicit: `cache_control={"type": "ephemeral"}` on the shared static system block (taxonomy, instructions, untrusted-document framing). Cache hits are **measured**, not assumed: `usage.cache_read_input_tokens` and `usage.cache_creation_input_tokens` are read off every response and recorded on the Laminar span. The synthesis fan-out warms the cache deliberately by serializing the first call (or running a tiny no-op call before the gather) so the other four hit a populated cache rather than racing to write.
 - Ingest fan-out uses the **Message Batches API**: 500 facet_extract + 500 summarize_for_rerank calls are submitted as a single batch (50% discount, async, results polled). Batch results re-enter the same `LLMClient` retry/cassette/budget surface — the `Batched` mode is a method on the same Protocol, not a parallel API.
 - Batch + prompt cache interaction is best-effort per Anthropic (observed hit rates 30–98%). To bias toward the high end: (a) the shared system block uses **1-hour TTL** `cache_control={"type":"ephemeral","ttl":"1h"}` so cache entries survive long-draining batches, (b) a single synchronous **pre-batch warm call** with the same system block fires immediately before submission so workers find a populated cache instead of racing to write it, (c) the first 5 batch responses' `usage.cache_read_input_tokens` / `usage.cache_creation_input_tokens` are read off and logged — if `cache_read / (cache_read + cache_creation) < 0.80` on the warmed batch, we know before spending the full ingest budget. Cost projections below assume the warmed-1h pattern; the `max_cost_usd_per_ingest = $10.00` cap has 100% headroom for the pessimistic case.
@@ -237,14 +237,14 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
   - `canonical/<text_id>.md` — one file per canonical_id, **rewritten** by the merge step from the raw inputs. The single document synthesis loads.
   All file paths are constructed via `safe_path(base, kind, ...)` with `kind ∈ {"raw", "canonical"}`, then `Path.resolve()`-d and asserted `is_relative_to(post_mortems_root)`.
 - Synthesis prompt INLINES the candidate body by default (cheaper, deterministic, fewer tool turns). It always reads `canonical/<text_id>.md` — never the per-source `raw/` files. The MCP `get_post_mortem(id)` tool exists for follow-up cross-candidate lookups during synthesis (used after `search_corpus` returns a hit), not for fetching the primary candidate's text.
-- Atomicity: only `canonical/<text_id>.md` is rewritten on merge — write to `<canonical_path>.tmp`, then `os.replace` (POSIX-atomic), then qdrant.upsert, then writes `merge_state="complete"` and the content_hash. `raw/<source>/<text_id>.md` is written once on first ingest of that section and never touched again, so it has no atomicity story beyond a single `os.replace`. A crash leaves either the prior canonical state intact or a `merge_state="pending"` row that the next ingest run redoes regardless of content_hash. `slop ingest --reconcile` walks both stores and reports/repairs drift.
+- Atomicity: only `canonical/<text_id>.md` is rewritten on merge — write to `<canonical_path>.tmp`, then `os.replace` (POSIX-atomic), then qdrant.upsert, then writes `merge_state="complete"` and the content_hash. `raw/<source>/<text_id>.md` is written once on first ingest of that section and never touched again, so it has no atomicity story beyond a single `os.replace`. A crash leaves either the prior canonical state intact or a `merge_state="pending"` row that the next ingest run redoes regardless of content_hash. `slopmortem ingest --reconcile` walks both stores and reports/repairs drift.
 - Pros: inspecting / grep-ing / version-controlling raw text is trivial; Qdrant payloads stay small and fast; service mode enables the synthesis fan-out the spec actually wants.
 - Cons: requires Docker for Qdrant (Laminar already required Docker, so this is not a new dep); two things to keep consistent (vector + file) — handled by the merge_state journal above.
 
 **Sources: tier 1 default, tier 2 opt-in**
-- Default sources (`slop ingest` with no flags): a bundled curated YAML list of hand-vetted post-mortem URLs (parsed via `trafilatura` for content extraction with a length floor + domain blocklist), plus the Hacker News Algolia API for ongoing obituary coverage. Both are real APIs / static inputs — no fragile per-site scraping.
-- The curated YAML ships in the repo at `slop/corpus/sources/curated/post_mortems.yml`. Adapter code (Task #4a) ships with a fixture YAML of ~20 known-good URLs sufficient for tests. **Curating the production 300–500-URL list is Task #4b, owned by the user**, with explicit acceptance criteria: sector coverage matrix (≥10 URLs per top sector), source-quality rubric (founder-authored or reputable journalism > Medium hot-take > tweet thread), per-row provenance fields (`submitted_by`, `reviewed_by`, `content_sha256_at_review`), `CODEOWNERS` review on the YAML.
-- Trafilatura-extracted text shorter than 500 chars or matching the platform-blocklist (default UA blocked by Cloudflare; Substack-paywalled fragments) is rejected at ingest, not silently embedded as a near-empty vector. Fallback chain: `fetch → trafilatura → readability-lxml → log+skip`. Identifies as `slop/<version> (+<repo>)` and respects `robots.txt` via `urllib.robotparser` plus a per-host token bucket (≤1 rps default).
+- Default sources (`slopmortem ingest` with no flags): a bundled curated YAML list of hand-vetted post-mortem URLs (parsed via `trafilatura` for content extraction with a length floor + domain blocklist), plus the Hacker News Algolia API for ongoing obituary coverage. Both are real APIs / static inputs — no fragile per-site scraping.
+- The curated YAML ships in the repo at `slopmortem/corpus/sources/curated/post_mortems.yml`. Adapter code (Task #4a) ships with a fixture YAML of ~20 known-good URLs sufficient for tests. **Curating the production 300–500-URL list is Task #4b, owned by the user**, with explicit acceptance criteria: sector coverage matrix (≥10 URLs per top sector), source-quality rubric (founder-authored or reputable journalism > Medium hot-take > tweet thread), per-row provenance fields (`submitted_by`, `reviewed_by`, `content_sha256_at_review`), `CODEOWNERS` review on the YAML.
+- Trafilatura-extracted text shorter than 500 chars or matching the platform-blocklist (default UA blocked by Cloudflare; Substack-paywalled fragments) is rejected at ingest, not silently embedded as a near-empty vector. Fallback chain: `fetch → trafilatura → readability-lxml → log+skip`. Identifies as `slopmortem/<version> (+<repo>)` and respects `robots.txt` via `urllib.robotparser` plus a per-host token bucket (≤1 rps default).
 - Opt-in sources: Crunchbase CSV (`--crunchbase-csv path`), Wayback enrichment (`--enrich-wayback`), Tavily enrichment (`--tavily-enrich`).
 - Skipped for v1: Failory, autopsy.io, CB Insights custom scrapers. The curated list already covers their high-quality narratives; per-site scrapers are pure maintenance burden.
 - Pros: day-one ingest works with zero config; no API keys required for the default tier; opt-in adapters cover breadth when wanted.
@@ -257,7 +257,7 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 - Merge: combined text is constructed deterministically by sorting source sections by reliability rank then source_id, so re-running ingest in any order produces the same merged text → same facets → same embeddings. Re-extraction and re-embedding are short-circuited by a content_hash on the combined text. Single-value fields fill missing-first, then resolve conflicts by source reliability ranking (curated > Crunchbase > HN > Wayback).
 - Idempotency journal row key: `(canonical_id, source, source_id)` — uniquely names a section contributed to a canonical entry. Skip-key for "this section's contribution is already integrated and matches current code/prompts": `(content_hash, facet_prompt_hash, summarize_prompt_hash, haiku_model_id, embed_model_id, reliability_rank_version)` written to the same row when `merge_state="complete"`. `haiku_model_id` is included alongside the prompt hashes because facet_extract and summarize_for_rerank are both Haiku calls — a silent model upgrade (e.g. Haiku 4.5 → 4.6) changes outputs without changing prompt content, so prompt hash alone would not invalidate the cache and stale facets/summaries would persist until a prompt edit forced re-extraction. A `pending` merge_state always re-runs regardless of skip_key (recovers from mid-merge crash). Bumping any prompt, the Haiku model, or the embedding model invalidates skip_key naturally and the next ingest re-extracts. The journal is a small SQLite file at `data/journal.sqlite` (separate from Qdrant payload — needs to exist before upsert succeeds, chicken-and-egg otherwise).
 - Pros: clean canonical entries with full source provenance; single document for Claude during synthesis; merge is deterministic and idempotent.
-- Cons: ingest is meaningfully more complex than naive "one row per scrape"; merge bugs can corrupt the corpus → mitigated by the merge_state journal, the deterministic combined-text rule, dry-run mode, `slop ingest --reconcile`, and Laminar spans on every merge action.
+- Cons: ingest is meaningfully more complex than naive "one row per scrape"; merge bugs can corrupt the corpus → mitigated by the merge_state journal, the deterministic combined-text rule, dry-run mode, `slopmortem ingest --reconcile`, and Laminar spans on every merge action.
 
 **Laminar for tracing, self-hosted**
 - One trace per CLI invocation. Stage spans nest under it, LLM call spans nest under stage spans, MCP tool calls and Qdrant reads also get spans.
@@ -268,9 +268,9 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 ## Components & file layout
 
 ```
-slop/
+slopmortem/
   cli.py                   # typer entry — parses args/prompts, calls pipeline, renders output. Side-effects live here.
-                           # commands: `slop` (query, default), `slop ingest`, `slop replay --dataset <name>`
+                           # commands: `slopmortem` (query, default), `slopmortem ingest`, `slopmortem replay --dataset <name>`
   pipeline.py              # query orchestration: composes the stage functions in order
   ingest.py                # ingest orchestration: source → facet extract → embed → entity resolution → merge
   stages/
@@ -350,7 +350,7 @@ slop/
                            #   kind ∈ {"raw", "canonical"}; "raw" requires source, "canonical" forbids it.
                            #   hash-based filenames + traversal assert.
   # NOTE: The synthesis stage uses in-process Python tool functions registered with
-  # the Anthropic SDK directly (see slop/llm/tools.py). There is no MCP server in
+  # the Anthropic SDK directly (see slopmortem/llm/tools.py). There is no MCP server in
   # the v1 query path. An optional MCP wrapper exposing the same get_post_mortem /
   # search_corpus functions to external Claude Code sessions is tracked under Open
   # questions but not part of v1.
@@ -386,7 +386,7 @@ tests/
 
 ## Data flow
 
-### Ingest (`slop ingest`)
+### Ingest (`slopmortem ingest`)
 
 ```
 sources/* → list[RawEntry]
@@ -457,11 +457,11 @@ write combined_text to "<canonical_path>.tmp", os.replace(<canonical_path>.tmp, 
 mark merge_state="complete" + write skip_key LAST
 ```
 
-Idempotency: row key in the SQLite journal is `(canonical_id, source, source_id)`; skip key is the `(content_hash, facet_prompt_hash, summarize_prompt_hash, haiku_model_id, embed_model_id, reliability_rank_version)` tuple written LAST when the row is marked `complete`. A `pending` row always re-runs regardless of skip_key. `--force` bypasses the skip_key short-circuit. `slop ingest --reconcile` walks Qdrant + disk + journal and repairs five drift classes: (a) `canonical/<text_id>.md` exists with no Qdrant point → re-embed and upsert; (b) Qdrant point with `merge_state=pending` in journal → redo merge; (c) `combined_hash` mismatch between `canonical/<text_id>.md` and journal → re-merge from `raw/`; (d) `raw/<source>/<text_id>.md` exists with no journal row, or canonical missing while raw is present → re-merge; (e) orphaned `.tmp` files in either tree → delete. Reconcile writes its actions to a span event per row touched.
+Idempotency: row key in the SQLite journal is `(canonical_id, source, source_id)`; skip key is the `(content_hash, facet_prompt_hash, summarize_prompt_hash, haiku_model_id, embed_model_id, reliability_rank_version)` tuple written LAST when the row is marked `complete`. A `pending` row always re-runs regardless of skip_key. `--force` bypasses the skip_key short-circuit. `slopmortem ingest --reconcile` walks Qdrant + disk + journal and repairs five drift classes: (a) `canonical/<text_id>.md` exists with no Qdrant point → re-embed and upsert; (b) Qdrant point with `merge_state=pending` in journal → redo merge; (c) `combined_hash` mismatch between `canonical/<text_id>.md` and journal → re-merge from `raw/`; (d) `raw/<source>/<text_id>.md` exists with no journal row, or canonical missing while raw is present → re-merge; (e) orphaned `.tmp` files in either tree → delete. Reconcile writes its actions to a span event per row touched.
 
 Per-source failures are logged and skipped; the run continues. Per-host rate-limit (`429`/Retry-After) backs off the source, not the whole ingest.
 
-### Query (`slop`)
+### Query (`slopmortem`)
 
 ```
 input: name, description, years
@@ -635,24 +635,24 @@ Rendered to stdout as a markdown report with one section per candidate, includin
 
 Laminar wraps the entire system. Initialization is a no-op when env vars are unset, so the pipeline runs identically without it. `tracing.py` parses `LMNR_BASE_URL` with `urllib.parse`, resolves the host, and requires the resolved IP to satisfy `ipaddress.ip_address(...).is_loopback` (covers `127.0.0.0/8`, `::1`, and IPv4-mapped variants) OR be an exact match for a configured private host. **String-prefix checks are not used** — `http://localhost.attacker.com` would defeat them via DNS rebinding. Remote URLs require `LMNR_ALLOW_REMOTE=1` and emit a startup banner. Host is resolved and validated once at init; the loopback-default deployment is not exposed to DNS rebinding. The `LMNR_ALLOW_REMOTE=1` path accepts a small rebinding window in v1. <!-- TODO(v2): close that window by pinning the resolved IP into `LMNR_BASE_URL` before calling `Laminar.init`, so the SDK's connection pool bypasses further DNS. Requires explicit SNI for HTTPS since IP-form URLs fail standard hostname verification. See docs/specs/2026-04-28-design-review-issues.md#6. -->
 
-- One trace per CLI invocation (`slop.query` or `slop.ingest`).
+- One trace per CLI invocation (`slopmortem.query` or `slopmortem.ingest`).
 - Stage functions decorated with `@observe(name="stage.<name>")`. Pydantic input/output is captured automatically.
-- `LLMClient.complete()` opens a manual span per SDK call; attributes include model, latency, retry count, prompt content hash, and the full `usage` breakdown — `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` — plus a derived `cost_usd` computed from `slop/llm/prices.yml` (the single source of truth for per-model pricing; bumping a vendor price is a one-line edit there). Cache hit rate is graphable directly from `cache_read / (cache_read + cache_creation)` without extra instrumentation.
+- `LLMClient.complete()` opens a manual span per SDK call; attributes include model, latency, retry count, prompt content hash, and the full `usage` breakdown — `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` — plus a derived `cost_usd` computed from `slopmortem/llm/prices.yml` (the single source of truth for per-model pricing; bumping a vendor price is a one-line edit there). Cache hit rate is graphable directly from `cache_read / (cache_read + cache_creation)` without extra instrumentation.
 - `EmbeddingClient.embed()` opens a span: model, n_tokens, cost_usd, latency, retry count.
 - `Corpus.query()` opens a span attaching the filter and the (id, score) pairs of returned candidates.
 - Tool calls during synthesis are emitted as proper child spans under the synthesize span — since tools are in-process Python, OTel context propagates cleanly. Each span carries tool name, parsed args, latency, and result-byte size.
 - Merge events during ingest also span: `(canonical_id, action ∈ {created, merged, conflict_resolved, tiebreaker_called, reconciled, skipped_no_change})`.
-- `Laminar.flush()` is called in the CLI's finally-block; without it, traces from a fast-exiting `slop` invocation can be lost.
+- `Laminar.flush()` is called in the CLI's finally-block; without it, traces from a fast-exiting `slopmortem` invocation can be lost.
 
 Iteration loop the tracing supports:
 1. Spot a bad run in the Laminar UI → save its input to an eval dataset (JSON file under `tests/evals/datasets/`).
-2. Run `slop replay --dataset <name>` (the implementation reads the saved `InputContext` JSONs and re-runs the pipeline; it does NOT re-execute recorded tool results — every replay is a fresh execution with current code/prompts). The earlier `slop --replay-trace <trace_id>` form is dropped from v1 — it required pulling input from the Laminar API, which adds dependency surface for marginal benefit over the dataset-file approach.
-3. Eval functions in `slop/evals/assertions.py` (`where_diverged_nonempty`, `all_sources_in_candidate_domains`, `lifespan_months_positive`, …) — `slop/evals/runner.py` runs a dataset, prints per-item pass/fail, exits non-zero on regression vs. a baseline file.
-4. Prompts live as `.j2` files under `slop/llm/prompts/`. Their content hash attaches to every LLM span — filter "show all runs with prompt v3 of facet_extract."
+2. Run `slopmortem replay --dataset <name>` (the implementation reads the saved `InputContext` JSONs and re-runs the pipeline; it does NOT re-execute recorded tool results — every replay is a fresh execution with current code/prompts). The earlier `slopmortem --replay-trace <trace_id>` form is dropped from v1 — it required pulling input from the Laminar API, which adds dependency surface for marginal benefit over the dataset-file approach.
+3. Eval functions in `slopmortem/evals/assertions.py` (`where_diverged_nonempty`, `all_sources_in_candidate_domains`, `lifespan_months_positive`, …) — `slopmortem/evals/runner.py` runs a dataset, prints per-item pass/fail, exits non-zero on regression vs. a baseline file.
+4. Prompts live as `.j2` files under `slopmortem/llm/prompts/`. Their content hash attaches to every LLM span — filter "show all runs with prompt v3 of facet_extract."
 
 ## Cost ballpark
 
-All dollar figures below are derived from `slop/llm/prices.yml` (the per-model price table). When vendor prices change, edit that file — the spec figures are illustrative at the time of writing, not the source of truth.
+All dollar figures below are derived from `slopmortem/llm/prices.yml` (the per-model price table). When vendor prices change, edit that file — the spec figures are illustrative at the time of writing, not the source of truth.
 
 ### Per query
 
@@ -726,10 +726,10 @@ The system ingests third-party scraped content and feeds it into LLMs that have 
 - Tavily-enrichment at ingest (separate `--tavily-enrich` flag) runs as a non-tool-using fetch step; the LLM never has Tavily available unless `--tavily-synthesis` is set.
 
 **Path safety**
-- All filesystem paths inside `data/post_mortems/` are constructed via `slop/corpus/paths.py:safe_path(base, kind, text_id, source=None)` which (a) requires `kind ∈ {"raw", "canonical"}` (raw requires `source`, canonical forbids it; mismatch raises), (b) hashes any LLM- or scrape-derived id with sha256 truncated to 16 hex chars, (c) calls `Path.resolve()`, (d) asserts `is_relative_to(post_mortems_root)`. Raw `canonical_id` strings never touch the filesystem.
+- All filesystem paths inside `data/post_mortems/` are constructed via `slopmortem/corpus/paths.py:safe_path(base, kind, text_id, source=None)` which (a) requires `kind ∈ {"raw", "canonical"}` (raw requires `source`, canonical forbids it; mismatch raises), (b) hashes any LLM- or scrape-derived id with sha256 truncated to 16 hex chars, (c) calls `Path.resolve()`, (d) asserts `is_relative_to(post_mortems_root)`. Raw `canonical_id` strings never touch the filesystem.
 
 **Atomicity (data integrity hazard)**
-- See §Data flow Ingest: temp-write + `os.replace`, merge_state journal, content_hash recorded LAST. `slop ingest --reconcile` repairs drift.
+- See §Data flow Ingest: temp-write + `os.replace`, merge_state journal, content_hash recorded LAST. `slopmortem ingest --reconcile` repairs drift.
 
 **Secrets**
 - All API keys (OpenAI, Tavily, Anthropic, Laminar) are `pydantic.SecretStr` fields in `config.py`, sourced from env vars or `.env` (gitignored) only — never the YAML config. `Config.__repr__` redacts. The Laminar `@observe` instrumentation is configured to never capture `Config` objects in spans.
@@ -741,10 +741,10 @@ The system ingests third-party scraped content and feeds it into LLMs that have 
 - `tracing.py` refuses to initialize unless `LMNR_BASE_URL`'s host resolves (via `socket.gethostbyname`) to a loopback IP (`ipaddress.is_loopback` covers `127.0.0.0/8`, `::1`, IPv4-mapped) or matches a configured private-host allowlist exactly. **Not** a `startswith` string check — `http://localhost.attacker.com` defeats prefix matching. Resolution happens once at init; on the loopback default there is no DNS surface to rebind. Override with `LMNR_ALLOW_REMOTE=1`, which logs `tracing → <host>` to stderr at startup and accepts a small rebinding window. <!-- TODO(v2): pin the resolved IP into `LMNR_BASE_URL` at init to eliminate that window for remote use; requires SNI override for HTTPS. See docs/specs/2026-04-28-design-review-issues.md#6. -->
 
 **Scraping etiquette**
-- All HTTP requests identify as `slop/<version> (+<repo url>)` and respect `robots.txt` via `urllib.robotparser`. Per-host token bucket defaults to 1 rps. `If-Modified-Since` / `ETag` honored to avoid re-fetching unchanged URLs.
+- All HTTP requests identify as `slopmortem/<version> (+<repo url>)` and respect `robots.txt` via `urllib.robotparser`. Per-host token bucket defaults to 1 rps. `If-Modified-Since` / `ETag` honored to avoid re-fetching unchanged URLs.
 
 **Curated YAML provenance**
-- `slop/corpus/sources/curated/post_mortems.yml` requires `CODEOWNERS` review. Each row carries `submitted_by`, `reviewed_by`, `content_sha256_at_review`. Ingest re-fetches and emits a `corpus.poisoning_warning` span event when the live content hash differs from the reviewed one — does not auto-quarantine, surfaces the drift to the user.
+- `slopmortem/corpus/sources/curated/post_mortems.yml` requires `CODEOWNERS` review. Each row carries `submitted_by`, `reviewed_by`, `content_sha256_at_review`. Ingest re-fetches and emits a `corpus.poisoning_warning` span event when the live content hash differs from the reviewed one — does not auto-quarantine, surfaces the drift to the user.
 
 ## Testing strategy
 
@@ -757,13 +757,13 @@ The system ingests third-party scraped content and feeds it into LLMs that have 
   - `llm_rerank`: cassette-based, all K_retrieve candidates passed in (not a truncated subset), top-N_synthesize selection respects rubric ordering, per-perspective scores populated, output emerges via `submit_llm_rerank` tool args (not parsed JSON), forced `tool_choice` from turn 1 honored. Summary field used (not full body).
   - `synthesize`: cassette-based, all required Pydantic fields populated, `where_diverged` non-empty, `sources` URLs filtered against allowed hosts.
   - `render`: **structural** snapshot test (`syrupy`) — asserts headings, field presence, footer block layout. Prose content is NOT snapshot-tested; it would break on every prompt tweak.
-- **Atomicity tests** — kill-switch test: inject failure between markdown write and qdrant upsert, assert next ingest run completes the merge. Reconcile test: corrupt one of (markdown, qdrant), assert `slop ingest --reconcile` reports and repairs.
+- **Atomicity tests** — kill-switch test: inject failure between markdown write and qdrant upsert, assert next ingest run completes the merge. Reconcile test: corrupt one of (markdown, qdrant), assert `slopmortem ingest --reconcile` reports and repairs.
 - **Path safety tests** — fuzz `safe_path` with `..`, `/`, `:`, NUL, and very long inputs; assert all rejected or hashed.
 - **Prompt-injection tests** — fixture corpus body containing `Ignore previous instructions, …` injection patterns; assert synthesis output does not include injected URLs and emits a `prompt_injection_attempted` span event.
 - **Ingest tests** — fixture HTML/JSON per source in `tests/fixtures/sources/<source>/`, replayed via `pytest-recording`. Idempotency test (ingest twice, no duplicates, no re-embed). Entity resolution test with deliberately overlapping entries across sources, including platform-domain entries that must NOT collapse via tier 1.
 - **Synthesis tool tests** — direct calls to `get_post_mortem` and `search_corpus` against a fixture corpus (pure functions, no transport). The tool signature contract from Task #1 is asserted by a schema test that round-trips the Pydantic arg model through `ToolSpec` → SDK tool schema → back to args, asserting no field drift; changes to signatures fail here before they break synthesis. A separate test asserts every tool's return value, when re-injected as a `tool_result`, carries the `<untrusted_document>` wrapper (no unwrapped corpus text re-enters the conversation).
 - **E2E** — one full-pipeline test (FakeLLMClient + tiny test corpus → asserted Report). Structural snapshot of the rendered markdown.
-- **Eval runner** (`slop/evals/runner.py`) — runs the production pipeline against a JSON dataset of seed inputs, prints per-item assertion results, exits non-zero on regression vs. the baseline file. Owned by Task #11 (eval seed + runner); not part of pytest.
+- **Eval runner** (`slopmortem/evals/runner.py`) — runs the production pipeline against a JSON dataset of seed inputs, prints per-item assertion results, exits non-zero on regression vs. the baseline file. Owned by Task #11 (eval seed + runner); not part of pytest.
 
 What we explicitly don't unit-test: subjective LLM output quality (covered by the eval runner with assertions like `where_diverged_nonempty`, not by pytest).
 
@@ -775,7 +775,7 @@ Tooling: `pytest`, `pytest-asyncio`, `pytest-recording` (vcrpy under the hood), 
 - **`ClaudeCliClient` opt-in implementation** — for users who prefer Claude Code session auth over an API key. Same Protocol, subprocess shells out to `claude -p`. Carries the cold-start tax and unmeasurable cache hits documented in §Architecture; not a v1 deliverable.
 - **MCP wrapper around the synthesis tool registry** — `get_post_mortem` and `search_corpus` are plain Python functions in v1; wrapping them in a stdio MCP server would let interactive Claude Code sessions browse the local corpus. Pure shell over the same functions, no extra logic. Not a v1 deliverable but a small follow-on if wanted.
 - **Batched-call optimization for synthesis** — synthesis currently runs N SDK calls (one warm + N-1 parallel). A single call covering all N candidates with structured output could save wall-clock at the cost of losing per-candidate retry/parallelism. Decision deferred until first real latency measurements.
-- **Corpus refresh schedule** — the curated YAML is hand-maintained. A periodic refresh job (cron / GH Action) running `slop ingest --source hn` to pick up new obituaries is a natural follow-on but not v1 scope.
+- **Corpus refresh schedule** — the curated YAML is hand-maintained. A periodic refresh job (cron / GH Action) running `slopmortem ingest --source hn` to pick up new obituaries is a natural follow-on but not v1 scope.
 - **Eval dataset growth** — Task #11 ships a 10-item seed dataset and the runner. Real evaluation requires growing the dataset during iteration; this happens organically as the user spots bad runs in Laminar and saves them as JSON inputs under `tests/evals/datasets/`.
 - **HyDE re-add** — dropped from v1 because text-embedding-3-small is asymmetric-trained and BM25 covers surface-vocabulary mismatch. If retrieval recall on the eval set turns out poor for terse / jargon-light pitches, add back as `--hyde` opt-in flag and measure the delta vs baseline.
 - **Confirm batch cache hit rate** — first ingest run logs the warmed batch's per-response `cache_read_input_tokens` / `cache_creation_input_tokens`. Target ≥80% read ratio on the shared system block. If it underperforms, revisit: longer warm sequence, smaller batches, or accept the higher cost and raise `max_cost_usd_per_ingest`.
@@ -804,26 +804,26 @@ Tasks marked **G1** must complete before any other parallel work begins. Tasks m
 | # | Task | Gate | Agent type | Domain |
 |---|------|------|------------|--------|
 | 0 | **G2 contract**: prompt skeletons (`.j2`) + per-prompt JSON output schemas + sample fixtures for facet_extract, llm_rerank, synthesize; taxonomy.yml frozen | **G2** | general-purpose | Python |
-| 1 | **Foundation**: pydantic-settings, all shared models, `LLMClient` + `EmbeddingClient` + `Corpus` + `ToolSpec` Protocols, **synthesis tool signatures** (`get_post_mortem`, `search_corpus` Pydantic arg models + return shapes), **`to_anthropic_input_schema(args_model)` helper in `slop/llm/tools.py`** (jsonref-based `$ref` inlining + `$schema`/`$defs`/`$id` strip; round-trip test: Pydantic → schema → fake `tool_use` → parse → Pydantic, identical shape; regression test that `Optional[T]` keeps `anyOf:[T,null]`), `MergeState`, `safe_path`, `Budget`, `tracing.py` (with LMNR_BASE_URL guard). Adds `jsonref` to dependencies. | **G1** | general-purpose | Python |
+| 1 | **Foundation**: pydantic-settings, all shared models, `LLMClient` + `EmbeddingClient` + `Corpus` + `ToolSpec` Protocols, **synthesis tool signatures** (`get_post_mortem`, `search_corpus` Pydantic arg models + return shapes), **`to_anthropic_input_schema(args_model)` helper in `slopmortem/llm/tools.py`** (jsonref-based `$ref` inlining + `$schema`/`$defs`/`$id` strip; round-trip test: Pydantic → schema → fake `tool_use` → parse → Pydantic, identical shape; regression test that `Optional[T]` keeps `anyOf:[T,null]`), `MergeState`, `safe_path`, `Budget`, `tracing.py` (with LMNR_BASE_URL guard). Adds `jsonref` to dependencies. | **G1** | general-purpose | Python |
 | 2 | LLMClient: `AnthropicSDKClient` (`messages.create`, tool-use loop with `<untrusted_document>` wrapping of tool results, `cache_control={ttl:"1h"}` on shared system blocks for batch use, pre-batch warm call to populate the cache before submission, `usage.cache_read/creation_input_tokens` captured to span, Message Batches API path with `--no-batch` sequential-async fallback, retry/budget integration) + `FakeLLMClient` cassette (pytest-recording / vcrpy only — no respx; secret-scrubbing filter) + tests | — | general-purpose | Python |
 | 2b | EmbeddingClient: `OpenAIEmbeddingClient` (retry, span, budget) + `FakeEmbeddingClient` cassette + tests | — | general-purpose | Python |
-| 3 | Corpus: `QdrantCorpus` (service mode), `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (stdlib `sqlite3`, WAL mode, `busy_timeout=5000ms`, one connection per merge action, no pool; merge_state persistence), `slop ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | general-purpose | Python |
+| 3 | Corpus: `QdrantCorpus` (service mode), `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (stdlib `sqlite3`, WAL mode, `busy_timeout=5000ms`, one connection per merge action, no pool; merge_state persistence), `slopmortem ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | general-purpose | Python |
 | 4a | Source adapters: curated YAML loader (length floor + platform blocklist + UA + robots), HN Algolia (rate-limited), Wayback, Crunchbase CSV; ships with fixture YAML of ~20 known-good URLs for tests | — | general-purpose | Python |
 | 4b | **Curate production YAML** (300–500 URLs): owned by user; acceptance = sector coverage matrix (≥10 per top sector), per-row provenance fields, CODEOWNERS on the file. Not parallelizable with adapter coding. | — | user | manual |
 | 5a | Entity resolution + merge: tier-1 `registrable_domain` (founding_year cached deterministically per `(domain, content_sha256)`, used as stored attribute + recycled-domain check, not key), platform blocklist, tier-2 normalized name+sector, tier-3 fuzzy + Haiku tiebreaker (cache-keyed on `(canon_a, canon_b, model_id, prompt_hash)`); deterministic combined-text rule; tests including platform-domain non-collapse + injection-fuzz on canonical_id + same-content-twice idempotency | — | general-purpose | Python |
-| 5b | Ingest CLI command + orchestration: `slop ingest`, `--source`, `--reconcile`, `--dry-run`, `--force`, per-host throttling, ingest budget enforcement | — | general-purpose | Python |
+| 5b | Ingest CLI command + orchestration: `slopmortem ingest`, `--source`, `--reconcile`, `--dry-run`, `--force`, per-host throttling, ingest budget enforcement | — | general-purpose | Python |
 | 6 | Stages: `facet_extract` (Haiku via LLMClient, taxonomy-validated facets) | post-G2 | general-purpose | Python |
 | 7 | Stages: `retrieve` (NULL-aware date filter, non-`other` facet boost, RRF), `llm_rerank` (single Sonnet call K_retrieve→N_synthesize via `submit_llm_rerank` output tool, multi-perspective scoring) | post-G2 | general-purpose | Python |
 | 8 | Stages: `synthesize` (inlined body, `<untrusted_document>` wrapping, in-process tool functions registered with SDK, cache-warm pattern, sources allowlist filter), `render` (structural-only snapshots) | post-G2 | general-purpose | Python |
 | 9 | Synthesis tool implementations: `get_post_mortem(id) → markdown`, `search_corpus(q, facets) → list[Hit]`, both pure (read-only against Qdrant + disk), each tool's return value wrapped in `<untrusted_document>` by `LLMClient`. Signature contract test asserts the registered tools match the Gate-1 schemas exactly. | — | general-purpose | Python |
-| 10 | CLI + pipeline orchestration: typer commands, interactive flow, **`pipeline.py`** (every stage `async def`; composes stages, cache-warm-then-`asyncio.gather` over synthesize fan-out), single `asyncio.run(...)` at the CLI entry point, fastembed wrapped in `asyncio.to_thread`, Ctrl-C cancels the asyncio task group cleanly (no subprocess group management needed in v1), stage progress output, `slop replay --dataset <name>`, integration glue | — | general-purpose | Python |
-| 11 | Eval infra: `slop/evals/runner.py`, `slop/evals/assertions.py`, seed dataset of 10 diverse `InputContext` JSON files, baseline file format, `make eval` target | — | general-purpose | Python |
+| 10 | CLI + pipeline orchestration: typer commands, interactive flow, **`pipeline.py`** (every stage `async def`; composes stages, cache-warm-then-`asyncio.gather` over synthesize fan-out), single `asyncio.run(...)` at the CLI entry point, fastembed wrapped in `asyncio.to_thread`, Ctrl-C cancels the asyncio task group cleanly (no subprocess group management needed in v1), stage progress output, `slopmortem replay --dataset <name>`, integration glue | — | general-purpose | Python |
+| 11 | Eval infra: `slopmortem/evals/runner.py`, `slopmortem/evals/assertions.py`, seed dataset of 10 diverse `InputContext` JSON files, baseline file format, `make eval` target | — | general-purpose | Python |
 
 Writing-plans may further split or merge these. Final structure decided in the plan, but Gates 1 and 2 are fixed.
 
 ## Appendix A — starter taxonomy (v0)
 
-`slop/corpus/taxonomy.yml`. Closed enums for filterable facets; each ends with an explicit `other` value so the LLM never has to lie. Free-form fields (`sub_sector`, `product_type`, `price_point`) are not in this file — they're free strings on the Pydantic model.
+`slopmortem/corpus/taxonomy.yml`. Closed enums for filterable facets; each ends with an explicit `other` value so the LLM never has to lie. Free-form fields (`sub_sector`, `product_type`, `price_point`) are not in this file — they're free strings on the Pydantic model.
 
 ```yaml
 sectors:
