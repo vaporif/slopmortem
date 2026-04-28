@@ -1006,7 +1006,7 @@ def test_every_closed_enum_has_other():
 Run: `uv run pytest tests/test_taxonomy.py -v`
 Expected: 2 passed.
 
-- [ ] **Step 0.3: Write `tests/test_prompts.py`**
+- [x] **Step 0.3: Write `tests/test_prompts.py`**
 
 ```python
 from __future__ import annotations
@@ -1047,7 +1047,7 @@ def test_synthesize_renders_inlined_body():
     assert "where_diverged" in schema["properties"]
 ```
 
-- [ ] **Step 0.4: Implement the four `.j2` templates and `render_prompt`**
+- [x] **Step 0.4: Implement the four `.j2` templates and `render_prompt`**
 
 Each prompt's structure:
 
@@ -1085,11 +1085,11 @@ def prompt_template_sha(name: str) -> str:
     return hashlib.sha256(Path(__file__).parent.joinpath(f"{name}.j2").read_bytes()).hexdigest()[:16]
 ```
 
-- [ ] **Step 0.5: Add sample fixtures**
+- [x] **Step 0.5: Add sample fixtures**
 
 Create `tests/fixtures/prompts/sample_input.json` per prompt with a representative input + the expected output schema validation. These feed Task #6/#7/#8 cassette recording.
 
-- [ ] **Step 0.6: Verify**
+- [x] **Step 0.6: Verify**
 
 Run: `uv run pytest tests/test_prompts.py tests/test_taxonomy.py -v`
 Expected: all green.
