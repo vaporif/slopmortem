@@ -6,14 +6,11 @@
 
 Findings from a five-pass technical review of the design spec, re-verified by
 parallel cross-checks against the current spec, current SDK code, and current
-vendor docs. Issues #1, #2, #3, and #4 are resolved and no longer tracked
-here (see spec edits dated 2026-04-28; #4 cut the cap-halving mechanism from
-v1 and now relies on the SDK's built-in `Retry-After` backoff). Original
-numbering retained so external references stay stable.
+vendor docs. Resolved issues are no longer tracked here. Original numbering
+retained so external references stay stable.
 
 | # | Issue | Severity | Status |
 |---|---|---|---|
-| 5 | Pydantic v2 → Anthropic tool schema rough edges | should-fix | open |
 | 6 | DNS-rebinding guard cannot bind to SDK pool | should-fix | open |
 | 7 | Async/sync boundary contradicts itself | should-fix | open |
 | 9 | Anthropic Batches + prompt caching needs verification | should-fix | open |
@@ -24,218 +21,6 @@ numbering retained so external references stay stable.
 **Spec line citations in this document are off by ~30–80 lines** (review was
 written against an earlier snapshot). Real locations called out in each
 section.
-
----
-
-## #4 — asyncio.Semaphore cannot be "halved at runtime"
-
-**Severity:** blocker → **resolved 2026-04-28** by cutting the cap-halving
-mechanism entirely from v1. At default `N_synthesize = 5` the cap was a
-no-op (semaphore never blocks), and its only purpose was to provide a
-mutable knob for the 429 handler. With the handler removed in favor of
-the Anthropic SDK's built-in `Retry-After` backoff, the primitive is no
-longer needed. Revisit (with `anyio.CapacityLimiter`) if `N_synthesize`
-is configured > 10 or if Laminar shows clustered 429/529 in real use.
-
-The original analysis is preserved below for context.
-
-### Problem
-
-spec:511:
-
-> SDK `RateLimitError` (HTTP 429) or `overloaded_error` (HTTP 529) throttles
-> the entire shared semaphore (sleeps `Retry-After` from response headers,
-> halves concurrency for the rest of the run).
-
-```
-Initial state (N_synthesize-1 = 4):
-  Semaphore[█ █ █ █]   ← 4 tokens, 4 slots
-
-Run starts, 4 tasks acquire:
-  Semaphore[· · · ·]   task1 task2 task3 task4 in flight
-                         │
-                         └─► HTTP 429 RateLimitError
-                                          │
-                                          ▼
-            Spec says: "halve concurrency for the rest of the run"
-                                          │
-                                          ▼
-                                ╔══════════════════════╗
-                                ║ asyncio.Semaphore    ║
-                                ║ has no shrink()      ║
-                                ║ no acquire_n()       ║
-                                ║ no resize()          ║
-                                ╚══════════════════════╝
-```
-
-`asyncio.Semaphore` is monotonic — capacity is set at construction and
-cannot be reduced. There is no API to "consume" extra tokens to drain
-capacity, and even if you `acquire()` extra slots from the rate-limit
-handler, the in-flight tasks are still holding their tokens; you'd
-deadlock or block forever.
-
-### Recommendation
-
-**Preferred:** use `anyio.CapacityLimiter`, whose `total_tokens` property is
-documented as runtime-mutable — assigning a smaller value causes new acquires
-to block until in-flight tasks drop below the new cap; assigning a larger
-value wakes the appropriate number of waiters. This is exactly the behavior
-spec:511 promises and avoids hand-rolling a primitive. anyio is already a
-transitive dependency of httpx-via-`AsyncAnthropic`, so no new direct dep.
-
-```python
-limiter = anyio.CapacityLimiter(N_synthesize - 1)
-
-# ... on RateLimitError(retry_after=5.0):
-limiter.total_tokens = max(1, limiter.total_tokens // 2)
-await asyncio.sleep(retry_after)
-```
-
-**Fallback** if a stdlib-only solution is required, replace `asyncio.Semaphore`
-with a custom counting gate:
-
-```python
-class ShrinkableGate:
-    """A semaphore-like primitive whose capacity can be reduced."""
-
-    def __init__(self, capacity: int):
-        self._capacity = capacity
-        self._in_flight = 0
-        self._cond = asyncio.Condition()
-
-    async def acquire(self) -> None:
-        async with self._cond:
-            while self._in_flight >= self._capacity:
-                await self._cond.wait()
-            self._in_flight += 1
-
-    async def release(self) -> None:
-        async with self._cond:
-            self._in_flight -= 1
-            self._cond.notify()
-
-    async def shrink_to(self, new_capacity: int) -> None:
-        """Reduce capacity. New acquires block until in_flight drops below."""
-        async with self._cond:
-            self._capacity = max(1, new_capacity)
-            # waiters that were about to win re-check the loop
-            self._cond.notify_all()
-```
-
-Behavior on rate limit:
-
-```
-on RateLimitError(retry_after=5.0):
-    await gate.shrink_to(gate._capacity // 2)
-    await asyncio.sleep(retry_after)
-    # in-flight tasks complete naturally; new acquires gated at new cap
-```
-
-### Spec edits required
-
-- spec:511 — replace `asyncio.Semaphore` with `anyio.CapacityLimiter`
-- spec:503 (concurrency section) — note `total_tokens` is mutated on 429/529
-- Task #2 (LLMClient) — `anyio` listed as a direct dep
-- Task #10 (CLI + pipeline orchestration) — add cap-shrink integration test
-
----
-
-## #5 — Pydantic v2 → Anthropic tool schema rough edges
-
-**Severity:** should-fix — defensive flattening before sending schemas to
-the Anthropic API. Original review framed this as a blocker; verification
-against current Anthropic docs did not confirm the failure modes claimed
-(`$ref` silently failing, `anyOf:[T,null]` being rejected). The flattening
-helper is still worth having to strip Pydantic-specific metadata and to be
-robust to future stricter validation, but the severity is should-fix.
-
-### Problem
-
-spec:196:
-
-> argument schemas are auto-derived from a Pydantic arg model attached to
-> each tool
-
-Pydantic v2 `model_json_schema()` emits draft-2020-12 with `$defs` / `$ref`
-and `anyOf` for `Optional`:
-
-```python
-class Facets(BaseModel):
-    sector: str
-    year: int | None = None
-    nested: SomeOtherModel  # ← gets $ref'd
-```
-
-```json
-{
-  "$defs": {
-    "Facets": {"type": "object", ...},
-    "SomeOtherModel": {"type": "object", ...}
-  },
-  "properties": {
-    "sector": {"type": "string"},
-    "year": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
-    "nested": {"$ref": "#/$defs/SomeOtherModel"}
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema"
-}
-```
-
-Anthropic's `input_schema` field accepts JSON Schema. Strict-tool-use mode
-(opt-in, `"strict": true`) requires `additionalProperties: false` and a
-stricter subset; non-strict mode accepts `$ref`/`$defs` and `anyOf:[T,null]`
-in practice today. Two pragmatic concerns remain:
-
-- Top-level Pydantic metadata (`$schema`, `$defs`, `$id`) is dead weight in
-  the request body and noisy in trace inspections.
-- Strict-mode rollout (or future tightening) will reject `$ref` and require
-  inlined schemas.
-
-Flattening once at schema-conversion time addresses both without depending
-on undocumented validator behavior. The original review's claim that
-`anyOf:[T,null]` is non-canonical and must be rewritten is **not supported
-by current Anthropic docs**; one engineering writeup found that rewriting to
-`"type":["T","null"]` actually *increased* invalid-JSON output rates. Keep
-Pydantic's default `anyOf` shape.
-
-### Recommendation
-
-Add an explicit conversion step in `slop/llm/tools.py`:
-
-```python
-import jsonref
-
-def to_anthropic_input_schema(args_model: type[BaseModel]) -> dict:
-    raw = args_model.model_json_schema()
-    # proxies=False returns plain dicts (json.dumps-able);
-    # merge_props would over-merge sibling keys not present in Pydantic output.
-    flat = jsonref.replace_refs(raw, proxies=False, lazy_load=False)
-
-    # strip Pydantic / draft-2020-12 metadata
-    flat.pop("$schema", None)
-    flat.pop("$defs", None)
-    flat.pop("$id", None)
-
-    return flat
-```
-
-Test surface:
-
-- Round-trip: `Pydantic args_model → input_schema → fake LLM tool_use → parse → Pydantic` produces identical shape.
-- No `$ref` in the output; no `$defs` in the output.
-- `Optional[T]` fields preserve Pydantic's `anyOf:[T,null]` shape verbatim.
-- Existing Anthropic tool-use examples (corpus tools) parse cleanly.
-
-### Spec edits required
-
-- spec:196 — replace "auto-derived from a Pydantic arg model" with "derived
-  via `to_anthropic_input_schema(args_model)` in `slop/llm/tools.py`
-  (flattens `$ref`, strips draft-2020-12 metadata)"
-- spec:280–282 — add `to_anthropic_input_schema` to `slop/llm/tools.py`
-  contents
-- Task #1 (Gate 1) — explicit deliverable: schema-conversion helper +
-  round-trip test
-- `jsonref` added to dependencies
 
 ---
 
@@ -562,10 +347,7 @@ Add to Task #3 (Corpus / MergeJournal) deliverable.
 ## Recommended fix order
 
 ```
-blockers — none open. #4 resolved by cutting cap-halving from v1.
-
 should-fix — fix during implementation, in-task:
-  #5 schema-conversion helper (Task #1 — defensive flatten only)
   #6 DNS guard (Task #1 — IP-pinning, drop "repeated DNS" sentence)
   #7 async/sync contradiction (resolve spec:202 vs spec:529, Task #10)
   #9 batch cache hit rate (Task #2 — 1h TTL + pre-batch warm call)
