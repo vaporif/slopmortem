@@ -1,0 +1,48 @@
+{
+  "vars": {
+    "pitch": "MedScribe is an AI medical scribing app for US dermatology clinics, billed monthly per provider.",
+    "facets": {
+      "sector": "healthtech",
+      "business_model": "b2b_saas",
+      "customer_type": "smb",
+      "geography": "us",
+      "monetization": "subscription_recurring"
+    },
+    "candidates": [
+      {
+        "candidate_id": "scribetech.com",
+        "name": "ScribeTech",
+        "summary": "ScribeTech sold AI medical scribing to US primary-care clinics 2019-2023. Lost to bundled EHR features."
+      },
+      {
+        "candidate_id": "patientloop.com",
+        "name": "PatientLoop",
+        "summary": "PatientLoop offered patient-engagement SMS for US dental practices 2017-2022. Churned out as Solutionreach copied features."
+      }
+    ]
+  },
+  "expected_output": {
+    "ranked": [
+      {
+        "candidate_id": "scribetech.com",
+        "perspective_scores": {
+          "business_model": {"score": 9.0, "rationale": "Identical b2b_saas per-provider scribing model."},
+          "market": {"score": 7.5, "rationale": "US healthtech SMB clinics; specialty differs (dermatology vs primary care)."},
+          "gtm": {"score": 8.0, "rationale": "Both sell direct to small clinics; similar sales motion."},
+          "stage_scale": {"score": 7.0, "rationale": "Comparable early-stage SaaS profile."}
+        },
+        "rationale": "Direct competitor product category at the same buyer profile."
+      },
+      {
+        "candidate_id": "patientloop.com",
+        "perspective_scores": {
+          "business_model": {"score": 4.0, "rationale": "Engagement/messaging vs scribing; recurring SaaS shape only."},
+          "market": {"score": 5.0, "rationale": "Adjacent SMB clinic buyer but different product workflow."},
+          "gtm": {"score": 5.0, "rationale": "Direct sales to small clinics overlaps."},
+          "stage_scale": {"score": 5.0, "rationale": "Similar size/stage profile."}
+        },
+        "rationale": "Similar buyer but different product category."
+      }
+    ]
+  }
+}
