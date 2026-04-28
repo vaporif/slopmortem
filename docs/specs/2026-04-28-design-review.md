@@ -1,7 +1,7 @@
 # slopmortem design review — open issues
 
 **Date:** 2026-04-28
-**Status:** post obvious-fix pass — only items needing discussion remain
+**Status:** post obvious-fix pass — only items needing discussion remain (7 open)
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
@@ -12,11 +12,6 @@ The original review had 34 numbered findings + LOW polish items. Mechanical fixe
 ## Open issues
 
 ### HIGH
-
-**#9 — Budget race under `asyncio.gather`** [Concurrency F5, spec §Budget]
-With 5 concurrent `LLMClient.complete` calls, all 5 read `budget.remaining` *before* any decrement. If start budget=$0.50 and each call costs $0.20, all 5 pass precheck and spend $1.00 total.
-**Options to discuss:** (a) pre-reserve a pessimistic upper-bound cost under a `threading.Lock` at call start; settle to actual on response — what's the upper-bound formula? Worst-case prompt tokens × max output × cache-miss multiplier? (b) async semaphore that bounds total in-flight reservations; (c) accept the race for v1 since the budget bump to $2.00 absorbs ~5× overshoot at default `N_synthesize=5`.
-**Recommendation needed on:** what "pessimistic upper bound" means — too tight blocks legitimate calls, too loose still races.
 
 **#12 — HyDE rejection rests on an unverified claim** [API #11, Retrieval F1, spec line 213]
 Spec rejects HyDE because "text-embedding-3-small is asymmetric-trained for retrieval." This rationale is **not** in OpenAI's docs. Forward-looking pitches embed in a different vector space than backward-looking obituaries; BM25 only partly compensates.
@@ -71,6 +66,6 @@ The spec is internally consistent and unusually explicit. After the obvious-fix 
 Applied to spec, no longer in this doc:
 
 **Critical (8):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #6 entity-resolution flip GC (reverse-index + resolver_flipped state + reconcile drift class (f)); #7 quarantine schema; #8 Pydantic auto-capture leak.
-**High (8):** #10 SQLite blocks event loop; #11 cache-warm race assertion; #14 tool-use loop branch tests; #15 re-merge delete+upsert atomicity; #16 platform blocklist additions; #17 alias-graph dedup at retrieval; #18 recency Branch C; #19 `getaddrinfo` over `gethostbyname`.
+**High (9):** #9 Budget race (reserve/settle per API roundtrip under `Budget.lock`, pessimistic upper bound = prompt_tokens × input_price + max_completion_tokens × output_price, settle to actual on response); #10 SQLite blocks event loop; #11 cache-warm race assertion; #14 tool-use loop branch tests; #15 re-merge delete+upsert atomicity; #16 platform blocklist additions; #17 alias-graph dedup at retrieval; #18 recency Branch C; #19 `getaddrinfo` over `gethostbyname`.
 **Med (10):** #20 Range claim correction; #21 cost arithmetic + budget bump to $2; #22 skip_key adds chunk_strategy_version + taxonomy_version; #23 canonical front-matter; #24 default `CapacityLimiter`; #25 batch_id orphan persistence; #27 SpanEvent registry; #28 unified structured-outputs API; #30 stage progress to stderr; #32 Task #9 folded into G1.
 **Low (8):** prompt_sha split; cache_control TTL drift note; safe_path regex validator; cassette regex additions (JWT, Stripe, batch IDs); render moved to top level; test_mcp.py removed; cassette-miss meta-test; JWT/Stripe scrubber.
