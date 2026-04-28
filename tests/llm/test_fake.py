@@ -11,8 +11,9 @@ async def test_returns_canned_response_for_matching_template_and_model():
         ("abc123", "anthropic/claude-haiku-4.5"): FakeResponse(text="hello world"),
     }
     fake = FakeLLMClient(canned=canned, default_model="anthropic/claude-haiku-4.5")
-    r = await fake.complete("anything", model="anthropic/claude-haiku-4.5",
-                            extra_body={"prompt_template_sha": "abc123"})
+    r = await fake.complete(
+        "anything", model="anthropic/claude-haiku-4.5", extra_body={"prompt_template_sha": "abc123"}
+    )
     assert r.text == "hello world"
     assert r.stop_reason == "stop"
 

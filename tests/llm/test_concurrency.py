@@ -30,10 +30,12 @@ async def test_returns_exceptions_does_not_short_circuit():
         return i
 
     async def bad() -> int:
-        raise RuntimeError("nope")
+        msg = "nope"
+        raise RuntimeError(msg)
 
     results = await gather_with_limit(
-        [good(1), bad(), good(2)], limit=2,
+        [good(1), bad(), good(2)],
+        limit=2,
     )
     # Three results, in submission order; the middle one is the exception.
     assert results[0] == 1

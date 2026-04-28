@@ -9,7 +9,8 @@ from slopmortem.llm.client import CompletionResult
 class NoCannedResponseError(KeyError):
     """Raised when a stage test calls FakeLLMClient with a (template_sha, model)
     pair that has no recorded fixture. Carries enough context for the failure
-    message to point at the missing key without needing repro steps."""
+    message to point at the missing key without needing repro steps.
+    """
 
 
 @dataclass
@@ -71,22 +72,31 @@ class FakeLLMClient:
         template_sha: str | None = None
         if extra_body and "prompt_template_sha" in extra_body:
             template_sha = str(extra_body["prompt_template_sha"])
-        self.calls.append(_Call(
-            prompt=prompt, model=eff_model, template_sha=template_sha,
-            system=system, tools=tools, cache=cache,
-            response_format=response_format, extra_body=extra_body,
-        ))
+        self.calls.append(
+            _Call(
+                prompt=prompt,
+                model=eff_model,
+                template_sha=template_sha,
+                system=system,
+                tools=tools,
+                cache=cache,
+                response_format=response_format,
+                extra_body=extra_body,
+            )
+        )
         if template_sha is None:
-            raise NoCannedResponseError(
+            msg = (
                 "FakeLLMClient requires extra_body['prompt_template_sha']; "
                 f"none supplied for model {eff_model!r}"
             )
+            raise NoCannedResponseError(msg)
         key = (template_sha, eff_model)
         if key not in self.canned:
-            raise NoCannedResponseError(
+            msg = (
                 f"no canned response for prompt_template_sha={template_sha!r}, "
                 f"model={eff_model!r}; recorded keys: {sorted(self.canned)}"
             )
+            raise NoCannedResponseError(msg)
         item = self.canned[key]
         if isinstance(item, CompletionResult):
             return item

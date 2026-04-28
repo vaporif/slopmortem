@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from slopmortem.llm.embedding_client import EmbeddingResult
 from slopmortem.llm.openai_embeddings import EMBED_DIMS
@@ -26,11 +26,10 @@ class FakeEmbeddingClient:
         model: str,
         cost_per_call: float = 0.0,
         calls: list[_EmbedCall] | None = None,
-    ):
+    ) -> None:
         if model not in EMBED_DIMS:
-            raise ValueError(
-                f"unknown embed model {model!r}; add it to EMBED_DIMS"
-            )
+            msg = f"unknown embed model {model!r}; add it to EMBED_DIMS"
+            raise ValueError(msg)
         self.model = model
         self.cost_per_call = cost_per_call
         self.calls: list[_EmbedCall] = calls if calls is not None else []
@@ -39,9 +38,7 @@ class FakeEmbeddingClient:
     def dim(self) -> int:
         return EMBED_DIMS[self.model]
 
-    async def embed(
-        self, texts: list[str], *, model: str | None = None
-    ) -> EmbeddingResult:
+    async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
         eff_model = model or self.model
         self.calls.append(_EmbedCall(texts=list(texts), model=eff_model))
         dim = EMBED_DIMS[eff_model] if model is not None else self.dim

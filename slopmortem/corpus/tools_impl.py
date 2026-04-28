@@ -23,13 +23,15 @@ class SearchHit(BaseModel):
 
 
 async def _get_post_mortem(canonical_id: str) -> str:
-    raise NotImplementedError("Task #9")
+    msg = "Task #9"
+    raise NotImplementedError(msg)
 
 
 async def _search_corpus(
     q: str, facets: dict[str, str] | None = None, limit: int = 5
 ) -> list[SearchHit]:
-    raise NotImplementedError("Task #9")
+    msg = "Task #9"
+    raise NotImplementedError(msg)
 
 
 get_post_mortem = ToolSpec(

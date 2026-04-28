@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jsonref
-from pydantic import BaseModel
 
 from slopmortem.models import ToolSpec
 
-__all__ = ["ToolSpec", "to_openai_input_schema", "to_strict_response_schema", "synthesis_tools"]
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+
+__all__ = ["ToolSpec", "synthesis_tools", "to_openai_input_schema", "to_strict_response_schema"]
 
 
 def to_openai_input_schema(args_model: type[BaseModel]) -> dict[str, Any]:
@@ -60,8 +62,10 @@ def to_strict_response_schema(model: type[BaseModel]) -> dict[str, Any]:
 def synthesis_tools(config) -> list[ToolSpec]:
     """Factory — Tavily inclusion is config-driven and cannot be a constant."""
     from slopmortem.corpus.tools_impl import get_post_mortem, search_corpus
+
     tools = [get_post_mortem, search_corpus]
     if getattr(config, "enable_tavily_synthesis", False):
         from slopmortem.corpus.tools_impl import tavily_extract, tavily_search
+
         tools.extend([tavily_search, tavily_extract])
     return tools

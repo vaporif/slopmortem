@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from slopmortem.models import Candidate, Facets
+if TYPE_CHECKING:
+    from slopmortem.models import Candidate, Facets
 
 
 @runtime_checkable

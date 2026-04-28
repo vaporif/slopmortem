@@ -74,6 +74,12 @@ ignore = [
 ]
 "conftest.py" = ["ANN", "D", "INP001"]
 
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic needs annotation classes available at runtime for model_rebuild() /
+# json schema generation, so do not move their imports into TYPE_CHECKING.
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+runtime-evaluated-decorators = ["pydantic.validate_call"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 

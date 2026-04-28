@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class SpanEvent(str, Enum):
+class SpanEvent(StrEnum):
     PROMPT_INJECTION_ATTEMPTED = "prompt_injection_attempted"
     TOOL_ALLOWLIST_VIOLATION = "tool_allowlist_violation"
     PARENT_SUBSIDIARY_SUSPECTED = "entity.parent_subsidiary_suspected"

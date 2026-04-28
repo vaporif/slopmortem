@@ -22,7 +22,8 @@ class Budget:
     async def reserve(self, amount_usd: float) -> str:
         async with self.lock:
             if self.remaining < amount_usd:
-                raise BudgetExceeded(f"need {amount_usd:.4f}, have {self.remaining:.4f}")
+                msg = f"need {amount_usd:.4f}, have {self.remaining:.4f}"
+                raise BudgetExceeded(msg)
             rid = uuid4().hex
             self.reserved[rid] = amount_usd
             return rid

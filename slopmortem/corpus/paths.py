@@ -21,26 +21,34 @@ def safe_path(
     base = Path(base).resolve()
     if kind == "raw":
         if not source:
-            raise ValueError("raw kind requires source")
+            msg = "raw kind requires source"
+            raise ValueError(msg)
         if text_id is None or not _TEXT_ID_RE.match(text_id):
-            raise ValueError(f"invalid text_id: {text_id!r}")
+            msg = f"invalid text_id: {text_id!r}"
+            raise ValueError(msg)
         if not re.match(r"^[a-z0-9_]{1,32}$", source):
-            raise ValueError(f"invalid source: {source!r}")
+            msg = f"invalid source: {source!r}"
+            raise ValueError(msg)
         candidate = base / "raw" / source / f"{text_id}.md"
     elif kind == "canonical":
         if source is not None:
-            raise ValueError("canonical kind forbids source")
+            msg = "canonical kind forbids source"
+            raise ValueError(msg)
         if text_id is None or not _TEXT_ID_RE.match(text_id):
-            raise ValueError(f"invalid text_id: {text_id!r}")
+            msg = f"invalid text_id: {text_id!r}"
+            raise ValueError(msg)
         candidate = base / "canonical" / f"{text_id}.md"
     elif kind == "quarantine":
         if content_sha256 is None or not _CONTENT_SHA_RE.match(content_sha256):
-            raise ValueError(f"invalid content_sha256: {content_sha256!r}")
+            msg = f"invalid content_sha256: {content_sha256!r}"
+            raise ValueError(msg)
         candidate = base / "quarantine" / f"{content_sha256}.md"
     else:
-        raise ValueError(f"unknown kind: {kind!r}")
+        msg = f"unknown kind: {kind!r}"
+        raise ValueError(msg)
 
     resolved = candidate.resolve()
     if not resolved.is_relative_to(base):
-        raise ValueError(f"path escapes base: {resolved} not under {base}")
+        msg = f"path escapes base: {resolved} not under {base}"
+        raise ValueError(msg)
     return resolved

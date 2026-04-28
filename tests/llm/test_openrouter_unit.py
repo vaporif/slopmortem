@@ -53,7 +53,9 @@ def fake_sdk():
 
 async def test_finish_reason_stop_returns_text(fake_sdk):
     fake_sdk.chat.completions.create.return_value = _stub_response(
-        finish_reason="stop", content='{"x":1}', usage=_stub_usage(),
+        finish_reason="stop",
+        content='{"x":1}',
+        usage=_stub_usage(),
     )
     c = OpenRouterClient(sdk=fake_sdk, budget=Budget(2.0))
     r = await c.complete("hi")
@@ -72,9 +74,7 @@ async def test_finish_reason_tool_calls_invokes_tool_then_continues(fake_sdk):
     fake_sdk.chat.completions.create.side_effect = [
         _stub_response(
             finish_reason="tool_calls",
-            tool_calls=[
-                {"id": "t1", "function": {"name": "t", "arguments": '{"x":1}'}}
-            ],
+            tool_calls=[{"id": "t1", "function": {"name": "t", "arguments": '{"x":1}'}}],
             usage=_stub_usage(),
         ),
         _stub_response(finish_reason="stop", content="done", usage=_stub_usage()),
@@ -86,7 +86,9 @@ async def test_finish_reason_tool_calls_invokes_tool_then_continues(fake_sdk):
 
 async def test_finish_reason_length_raises(fake_sdk):
     fake_sdk.chat.completions.create.return_value = _stub_response(
-        finish_reason="length", content="", usage=_stub_usage(),
+        finish_reason="length",
+        content="",
+        usage=_stub_usage(),
     )
     c = OpenRouterClient(sdk=fake_sdk, budget=Budget(2.0))
     with pytest.raises(RuntimeError, match="length"):
@@ -95,7 +97,9 @@ async def test_finish_reason_length_raises(fake_sdk):
 
 async def test_finish_reason_content_filter_raises(fake_sdk):
     fake_sdk.chat.completions.create.return_value = _stub_response(
-        finish_reason="content_filter", content="", usage=_stub_usage(),
+        finish_reason="content_filter",
+        content="",
+        usage=_stub_usage(),
     )
     c = OpenRouterClient(sdk=fake_sdk, budget=Budget(2.0))
     with pytest.raises(RuntimeError, match="content_filter"):
@@ -105,7 +109,9 @@ async def test_finish_reason_content_filter_raises(fake_sdk):
 async def test_mid_stream_error_finish_reason_retries(fake_sdk):
     fake_sdk.chat.completions.create.side_effect = [
         _stub_response(
-            finish_reason="error", content="", usage=_stub_usage(),
+            finish_reason="error",
+            content="",
+            usage=_stub_usage(),
             error={"code": "overloaded_error"},
         ),
         _stub_response(finish_reason="stop", content="recovered", usage=_stub_usage()),
@@ -118,7 +124,9 @@ async def test_mid_stream_error_finish_reason_retries(fake_sdk):
 async def test_cache_tokens_extracted(fake_sdk):
     usage = _stub_usage(prompt_cached=80, prompt_cache_write=20, cost=0.01)
     fake_sdk.chat.completions.create.return_value = _stub_response(
-        finish_reason="stop", content="ok", usage=usage,
+        finish_reason="stop",
+        content="ok",
+        usage=usage,
     )
     c = OpenRouterClient(sdk=fake_sdk, budget=Budget(2.0))
     r = await c.complete("hi")

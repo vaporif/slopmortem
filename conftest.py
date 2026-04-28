@@ -36,10 +36,7 @@ def _scrub_body(body: bytes | str) -> bytes:
     Public so tests can assert the regex set actually catches a representative
     secret (see ``tests/llm/test_secrets_scrub.py``).
     """
-    if isinstance(body, bytes):
-        s = body.decode("utf-8", errors="replace")
-    else:
-        s = body
+    s = body.decode("utf-8", errors="replace") if isinstance(body, bytes) else body
     for pat, repl in SECRET_PATTERNS:
         s = pat.sub(repl, s)
     return s.encode()

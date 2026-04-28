@@ -30,10 +30,7 @@ def test_scrubs_tavily_key():
 
 
 def test_scrubs_jwt():
-    jwt = (
-        b"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."
-        b"abcdefghijklmnop"
-    )
+    jwt = b"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop"
     out = _scrub_body(jwt)
     assert b"SCRUBBED" in out
 
@@ -44,9 +41,7 @@ async def test_cassette_miss_loud(monkeypatch):
         pytest.skip("live mode")
     from openai import AsyncOpenAI
 
-    sdk = AsyncOpenAI(
-        api_key="sk-or-v1-test", base_url="https://openrouter.ai/api/v1"
-    )
+    sdk = AsyncOpenAI(api_key="sk-or-v1-test", base_url="https://openrouter.ai/api/v1")
     with pytest.raises(Exception) as ei:
         await sdk.chat.completions.create(
             model="anthropic/claude-haiku-4.5",

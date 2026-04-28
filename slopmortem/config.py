@@ -54,9 +54,8 @@ class Config(BaseSettings):
     @model_validator(mode="after")
     def _check_k_ge_n(self) -> Config:
         if self.K_retrieve < self.N_synthesize:
-            raise ValueError(
-                f"K_retrieve ({self.K_retrieve}) must be >= N_synthesize ({self.N_synthesize})"
-            )
+            msg = f"K_retrieve ({self.K_retrieve}) must be >= N_synthesize ({self.N_synthesize})"
+            raise ValueError(msg)
         return self
 
     @classmethod

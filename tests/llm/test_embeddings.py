@@ -30,9 +30,7 @@ def fake_sdk():
 
 def test_unknown_model_raises_with_embed_dims_in_message(fake_sdk):
     with pytest.raises(ValueError, match="EMBED_DIMS"):
-        OpenAIEmbeddingClient(
-            sdk=fake_sdk, budget=Budget(0.01), model="text-embedding-3-xxl"
-        )
+        OpenAIEmbeddingClient(sdk=fake_sdk, budget=Budget(0.01), model="text-embedding-3-xxl")
 
 
 def test_dim_property_matches_embed_dims_for_known_models(fake_sdk):
@@ -71,9 +69,7 @@ async def test_cost_derived_from_prices_yml(fake_sdk, tmp_path):
 async def test_budget_reserve_and_settle_called(fake_sdk):
     model = "text-embedding-3-small"
     dim = EMBED_DIMS[model]
-    fake_sdk.embeddings.create.return_value = _stub_embed_response(
-        dim=dim, n=1, total_tokens=1000
-    )
+    fake_sdk.embeddings.create.return_value = _stub_embed_response(dim=dim, n=1, total_tokens=1000)
     budget = Budget(1.0)
     reserved: list[float] = []
     settled: list[tuple[str, float]] = []

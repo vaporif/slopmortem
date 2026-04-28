@@ -43,7 +43,8 @@ def test_synthesize_renders_inlined_body():
         candidate_name="A",
         candidate_body="<full markdown>",
     )
-    assert "<untrusted_document" in out and "</untrusted_document>" in out
+    assert "<untrusted_document" in out
+    assert "</untrusted_document>" in out
     assert "<full markdown>" in out
     schema = Synthesis.model_json_schema()
     assert "where_diverged" in schema["properties"]

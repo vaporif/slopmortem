@@ -31,13 +31,13 @@ def init_tracing(base_url: str | None = None, allow_remote: bool = False) -> Non
         return
     host = urlparse(base_url).hostname
     if not host:
-        raise TracingGuardError(f"missing host in {base_url!r}")
+        msg = f"missing host in {base_url!r}"
+        raise TracingGuardError(msg)
     addrs = _resolve_all(host)
     is_safe = _all_loopback(addrs) or host in PRIVATE_HOST_ALLOWLIST
-    if not is_safe:
-        if not allow_remote:
-            raise TracingGuardError(
-                f"refusing tracing to non-loopback {host} (resolved: {addrs}); "
-                "set LMNR_ALLOW_REMOTE=1 to override"
-            )
-        print(f"slopmortem: tracing → {host}", file=sys.stderr)
+    if not is_safe and not allow_remote:
+        msg = (
+            f"refusing tracing to non-loopback {host} (resolved: {addrs}); "
+            "set LMNR_ALLOW_REMOTE=1 to override"
+        )
+        raise TracingGuardError(msg)

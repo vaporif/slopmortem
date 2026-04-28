@@ -3,15 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-from collections.abc import Awaitable, Coroutine, Iterable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import anyio
 
-from slopmortem.budget import Budget
 from slopmortem.llm.client import CompletionResult
-from slopmortem.models import ToolSpec
 from slopmortem.tracing.events import SpanEvent
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Coroutine, Iterable
+
+    from slopmortem.budget import Budget
+    from slopmortem.models import ToolSpec
 
 
 class MidStreamError(Exception):
@@ -21,7 +24,7 @@ class MidStreamError(Exception):
     error.code is transient (e.g. ``overloaded_error``) or fatal.
     """
 
-    def __init__(self, error: Any):
+    def __init__(self, error: Any) -> None:
         super().__init__(str(error))
         self.error = error or {}
 
@@ -69,7 +72,7 @@ class OpenRouterClient:
         max_tool_turns: int = 5,
         initial_backoff: float = 1.0,
         sleep: Awaitable[None] | Any = None,
-    ):
+    ) -> None:
         self._sdk = sdk
         self._budget = budget
         self._default_model = model
@@ -128,9 +131,7 @@ class OpenRouterClient:
                     if retry_usage is not None:
                         ptd = getattr(retry_usage, "prompt_tokens_details", None)
                         cache_read += getattr(ptd, "cached_tokens", 0) or 0 if ptd else 0
-                        cache_write += (
-                            getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
-                        )
+                        cache_write += getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
                         cost += getattr(retry_usage, "cost", 0.0) or 0.0
                     retry_choice = retry_resp.choices[0]
                     if retry_choice.finish_reason == "stop":
@@ -156,26 +157,28 @@ class OpenRouterClient:
                     spec.args_model.model_validate(args)
                     result = await spec.fn(**args)
                     wrapped = (
-                        f'<untrusted_document source="{name}">\n'
-                        f"{result}\n"
-                        f"</untrusted_document>"
+                        f'<untrusted_document source="{name}">\n{result}\n</untrusted_document>'
                     )
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": _tc_id(tc),
-                        "content": wrapped,
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": _tc_id(tc),
+                            "content": wrapped,
+                        }
+                    )
                 continue
 
             if fr in ("length", "content_filter"):
-                raise RuntimeError(f"hard stop: {fr}")
+                msg = f"hard stop: {fr}"
+                raise RuntimeError(msg)
 
             if fr == "error":
                 # Belt-and-braces: _call_with_retry is supposed to consume the
                 # stream and raise MidStreamError before we ever see this.
                 raise MidStreamError(getattr(choice, "error", {"code": "unknown"}))
 
-        raise RuntimeError("tool-loop bound exceeded")
+        msg = "tool-loop bound exceeded"
+        raise RuntimeError(msg)
 
     async def _call_with_retry(self, **kw: Any) -> Any:
         """Call SDK with retry/backoff on transient errors.
@@ -219,7 +222,8 @@ class OpenRouterClient:
         # Unreachable: every loop branch returns or raises. Re-raise as a guard.
         if last_exc is not None:
             raise last_exc
-        raise RuntimeError("retry loop exited without resolution")
+        msg = "retry loop exited without resolution"
+        raise RuntimeError(msg)
 
     async def _backoff(self, attempt: int) -> None:
         delay = self._initial_backoff * (2**attempt)
@@ -258,15 +262,12 @@ class OpenRouterClient:
             for t in tools
         ]
 
-    def _assert_tool_allowlist(
-        self, tcs: Iterable[Any], registered: dict[str, ToolSpec]
-    ) -> None:
+    def _assert_tool_allowlist(self, tcs: Iterable[Any], registered: dict[str, ToolSpec]) -> None:
         for tc in tcs:
             name = _tc_name(tc)
             if name not in registered:
-                raise RuntimeError(
-                    f"{SpanEvent.TOOL_ALLOWLIST_VIOLATION.value}: {name}"
-                )
+                msg = f"{SpanEvent.TOOL_ALLOWLIST_VIOLATION.value}: {name}"
+                raise RuntimeError(msg)
 
     def _emit(self, event: SpanEvent) -> None:
         # Tracing wiring lands in Task 4. Until then this is a no-op hook the
@@ -294,17 +295,20 @@ def _tc_id(tc: Any) -> str:
 
 def _assistant_with_tools(message: Any) -> dict[str, Any]:
     """Render the assistant turn that requested tool calls back into a message
-    payload the next API call can replay."""
+    payload the next API call can replay.
+    """
     tcs = []
     for tc in getattr(message, "tool_calls", []) or []:
-        tcs.append({
-            "id": _tc_id(tc),
-            "type": "function",
-            "function": {
-                "name": _tc_name(tc),
-                "arguments": _tc_arguments(tc),
-            },
-        })
+        tcs.append(
+            {
+                "id": _tc_id(tc),
+                "type": "function",
+                "function": {
+                    "name": _tc_name(tc),
+                    "arguments": _tc_arguments(tc),
+                },
+            }
+        )
     return {
         "role": "assistant",
         "content": getattr(message, "content", None) or "",

@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 import pytest
-from slopmortem.config import Config, load_config
+
+from slopmortem.config import load_config
+
 
 def test_defaults_load_from_toml(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -24,9 +27,11 @@ model_synthesize = "anthropic/claude-sonnet-4.6"
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     c = load_config()
-    assert c.K_retrieve == 30 and c.N_synthesize == 5
+    assert c.K_retrieve == 30
+    assert c.N_synthesize == 5
     assert c.K_retrieve >= c.N_synthesize
     assert c.openrouter_api_key.get_secret_value() == "sk-or-v1-test"
+
 
 def test_typo_in_toml_rejected(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -35,6 +40,7 @@ def test_typo_in_toml_rejected(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "x")
     with pytest.raises(Exception):  # extra="forbid"
         load_config()
+
 
 def test_K_retrieve_must_gte_N_synthesize(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

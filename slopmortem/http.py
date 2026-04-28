@@ -6,12 +6,14 @@ from urllib.parse import urlparse
 
 import httpx
 
-_BLOCKED_IMDS_HOSTS = frozenset({
-    "metadata.google.internal",
-    "metadata",
-    "instance-data",
-    "metadata.azure.com",
-})
+_BLOCKED_IMDS_HOSTS = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata",
+        "instance-data",
+        "metadata.azure.com",
+    }
+)
 
 
 class SSRFBlockedError(RuntimeError): ...
@@ -43,32 +45,45 @@ def _resolve_all(host: str) -> list[str]:
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror as e:
-        raise SSRFBlockedError(f"cannot resolve host {host!r}: {e}") from e
+        msg = f"cannot resolve host {host!r}: {e}"
+        raise SSRFBlockedError(msg) from e
     return list({info[4][0] for info in infos})
 
 
 async def safe_get(url: str, *, timeout: float = 30.0) -> httpx.Response:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise SSRFBlockedError(f"refusing non-http(s) scheme: {parsed.scheme!r}")
+        msg = f"refusing non-http(s) scheme: {parsed.scheme!r}"
+        raise SSRFBlockedError(msg)
     host = parsed.hostname
     if not host:
-        raise SSRFBlockedError(f"missing host in {url!r}")
+        msg = f"missing host in {url!r}"
+        raise SSRFBlockedError(msg)
     if host in _BLOCKED_IMDS_HOSTS:
-        raise SSRFBlockedError(f"refusing IMDS host {host!r}")
+        msg = f"refusing IMDS host {host!r}"
+        raise SSRFBlockedError(msg)
     addrs = _resolve_all(host)
     if not addrs:
-        raise SSRFBlockedError(f"no addresses resolved for {host!r}")
+        msg = f"no addresses resolved for {host!r}"
+        raise SSRFBlockedError(msg)
     for a in addrs:
         if _is_blocked_address(a):
-            raise SSRFBlockedError(f"refusing blocked address {a} for host {host!r}")
+            msg = f"refusing blocked address {a} for host {host!r}"
+            raise SSRFBlockedError(msg)
 
     pinned_ip = addrs[0]
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
     async def _resolver(*args, **kwargs):
-        return [(socket.AF_INET if ":" not in pinned_ip else socket.AF_INET6,
-                 socket.SOCK_STREAM, 0, "", (pinned_ip, port))]
+        return [
+            (
+                socket.AF_INET if ":" not in pinned_ip else socket.AF_INET6,
+                socket.SOCK_STREAM,
+                0,
+                "",
+                (pinned_ip, port),
+            )
+        ]
 
     transport = httpx.AsyncHTTPTransport()
     async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -85,7 +85,7 @@ class LlmRerankResult(BaseModel):
     ranked: list[ScoredCandidate]
 
 
-class MergeState(str, Enum):
+class MergeState(StrEnum):
     PENDING = "pending"
     COMPLETE = "complete"
     ALIAS_BLOCKED = "alias_blocked"
