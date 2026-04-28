@@ -1,5 +1,5 @@
 {
-  description = "start_slop — find similar dead startups, write per-candidate post-mortems";
+  description = "slopmortem — find similar dead startups, write per-candidate post-mortems";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -32,7 +32,7 @@
         ];
     in {
       devShells.default = pkgs.mkShell {
-        name = "start_slop";
+        name = "slopmortem";
 
         packages = with pkgs; [
           python
@@ -76,7 +76,7 @@
             uv sync --frozen 2>/dev/null || uv sync
           fi
 
-          echo "start_slop dev shell ready — python $(${python}/bin/python3.14 --version)"
+          echo "slopmortem dev shell ready — python $(${python}/bin/python3.14 --version)"
         '';
       };
     });

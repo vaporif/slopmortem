@@ -1,4 +1,4 @@
-# slopmortemmortem — design spec
+# slopmortem — design spec
 
 **Date:** 2026-04-27
 **Status:** draft - awaiting review

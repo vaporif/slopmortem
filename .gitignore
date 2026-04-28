@@ -101,7 +101,7 @@ dmypy.json
 result
 result-*
 
-# Project-specific (start_slop)
+# Project-specific (slopmortem)
 data/qdrant/
 data/post_mortems/
 data/hf/

@@ -1,8 +1,8 @@
-# start_slop — design review: open issues
+# slopmortem — design review: open issues
 
 **Date:** 2026-04-28
 **Status:** open — to triage and fold into spec
-**Companion to:** [2026-04-27-start-slop-design.md](2026-04-27-start-slop-design.md)
+**Companion to:** [2026-04-27-slopmortem-design.md](2026-04-27-slopmortem-design.md)
 
 Findings from a five-pass technical review of the design spec, re-verified by
 parallel cross-checks against the current spec, current SDK code, and current
