@@ -1,0 +1,7 @@
+{
+  "vars": {
+    "source_id": "curated:acme",
+    "body": "Acme Health raised a $12M Series A in 2018 to build an EHR-integrated patient-engagement layer for mid-sized US clinics. By 2021 they had 40 customers but churn hit 35% annually as Epic shipped a free comparable feature. The company laid off staff in 2022 and shut down in 2023 after failing to raise a Series B."
+  },
+  "expected_output_text": "Acme Health was a US healthtech b2b_saas selling EHR-integrated patient engagement to mid-sized clinics. Founded in 2018 with a $12M Series A, it reached ~40 customers but lost differentiation when Epic bundled a comparable feature, drove 35% annual churn, and shut down in 2023 after failing to raise a Series B."
+}

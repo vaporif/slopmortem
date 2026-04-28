@@ -1,0 +1,15 @@
+{
+  "vars": {
+    "description": "MedScribe is an AI medical scribing app for US dermatology clinics, billed monthly per provider."
+  },
+  "expected_output": {
+    "sector": "healthtech",
+    "business_model": "b2b_saas",
+    "customer_type": "smb",
+    "geography": "us",
+    "monetization": "subscription_recurring",
+    "sub_sector": "ambient medical scribing",
+    "product_type": "web app",
+    "price_point": "$200/provider/mo"
+  }
+}

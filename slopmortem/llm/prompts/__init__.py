@@ -8,7 +8,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 _PROMPT_DIR = Path(__file__).parent
-_TAXONOMY_PATH = Path(__file__).resolve().parents[1] / "corpus" / "taxonomy.yml"
+_TAXONOMY_PATH = Path(__file__).resolve().parents[2] / "corpus" / "taxonomy.yml"
 
 _env = Environment(
     loader=FileSystemLoader(_PROMPT_DIR),
