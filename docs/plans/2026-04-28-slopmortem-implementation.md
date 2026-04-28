@@ -2572,7 +2572,7 @@ slopmortem ingest --source curated   # ~$5, ~5 min
 slopmortem "we're building a marketplace for industrial scrap metal"
 ```
 
-Expected: a markdown report on stdout with 5 candidate post-mortems, cost <= $0.80, latency 21–63s. Footer shows `trace_id`, `cost_usd_total`, `budget_remaining_usd`.
+Expected: a markdown report on stdout with 5 candidate post-mortems, cost <= $0.80, latency 40–90s (40–60s no Tavily, 60–90s with Tavily). Footer shows `trace_id`, `cost_usd_total`, `budget_remaining_usd`.
 
 - [ ] **Two-stage review per `superpowers:requesting-code-review`**
 

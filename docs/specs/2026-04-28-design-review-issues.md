@@ -34,7 +34,7 @@
 | Issue #9 — Soft-boost via 3rd Prefetch is idiosyncratic; Qdrant 1.14 ships FormulaQuery as the documented primitive | spec-fixed (2026-04-28); qdrant-client pin bumped to ≥1.14 |
 | Issue #10 — Entity resolution misses M&A/rebrands, parent/subsidiary collisions, custom-domain SaaS, no human-review queue | v1: alias-graph (auto-merge blocked, written for audit) + suffix-delta parent/subsidiary detection + `pending_review` journal rows + `--list-review` printout + founding-year delta heuristic for recycled domains. **v2-deferred**: Wayback ownership-discontinuity check, CNAME lookup for custom-domain SaaS, interactive `--review` accept/reject/split workflow. |
 | Issue #11 — Forced `tool_choice` output tools is now legacy; Claude's `output_config.format` (json_schema) is the GA primitive | spec-fixed (2026-04-28); both rerank and synthesize migrated to `output_config.format` |
-| Issue #12 — Latency band 21–43s is too optimistic at Sonnet 4.6's measured ~47 t/s output speed; realistic is 40–90s | open — needs decision: bump latency band, drop synthesize output cap, or switch synthesize to Haiku |
+| Issue #12 — Latency band 21–43s is too optimistic at Sonnet 4.6's measured ~47 t/s output speed; realistic is 40–90s | resolved (2026-04-28) — bumped latency band to 40–60s (no Tavily) / 60–90s (with Tavily); kept Sonnet 4.6 + output cap to preserve synthesis quality |
 | Limitations writeup (`LIMITATIONS.md`) | open — addressed by Task 1 |
 
 The design review note this plan answers:

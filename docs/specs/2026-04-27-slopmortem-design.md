@@ -965,10 +965,12 @@ Per-invocation budget: `config.max_cost_usd_per_ingest` defaults to **$15.00** (
 | embed_dense + embed_sparse (parallel) | 0.3–0.8s |
 | qdrant.query_points (hybrid + RRF) | 50–200ms |
 | llm_rerank (Sonnet via SDK, 30 candidates, ~12K input) | 4–7s |
-| synthesize warm-call (1×, populates cache) | 8–15s |
-| synthesize × 4 in parallel (Sonnet, cache-hot, with tool turns) | 8–18s |
+| synthesize warm-call (1×, populates cache) | 12–22s |
+| synthesize × 4 in parallel (Sonnet, cache-hot, with tool turns) | 15–28s |
 | render | <50ms |
-| **Total** | **~21–43s** (no Tavily) / **~31–63s** (with Tavily) |
+| **Total** | **~40–60s** (no Tavily) / **~60–90s** (with Tavily) |
+
+Stage rows reflect Sonnet 4.6's measured ~47 output-tokens-per-second; an earlier draft assumed ~120 t/s and undershot by ~2×.
 
 The cache-warm pattern adds the cost of one extra serial synthesis call but keeps the other four cache-hot, which is typically faster end-to-end than five parallel cache-misses (also cheaper). The CLI prints stage progress (`facet_extract … rerank … synthesize 1/5 …`) **to stderr, gated on `isatty`** so `slopmortem ... | jq` doesn't pollute the markdown report on stdout — report goes to stdout, progress goes to stderr.
 
