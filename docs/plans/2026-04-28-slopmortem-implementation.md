@@ -1468,13 +1468,24 @@ Expected: zero matches (Anthropic-native names must not leak into the OpenRouter
 
 **Spec refs:** §Architecture EmbeddingClient (lines 200, 213–214), §Cost ballpark embedding row (line 950).
 
+`slopmortem/llm/openai_embeddings.py` exports a single source of truth for vector dimensions so `ensure_collection` (Task 3) and the model config (`config.py`) cannot drift:
+
+```python
+EMBED_DIMS: dict[str, int] = {
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+}
+```
+
+`OpenAIEmbeddingClient.dim` returns `EMBED_DIMS[self.model]`; an unknown model id raises at construction time with a clear message ("add the model to EMBED_DIMS"). All consumers — collection setup, fake embeddings, dim assertions in tests — read this map; **no hardcoded `1536` anywhere else**.
+
 ### Step-by-step
 
 - [ ] **Step 2b.1: Failing test**
 
 ```python
 import pytest
-from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
+from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient, EMBED_DIMS
 from slopmortem.budget import Budget
 
 @pytest.mark.vcr
@@ -1483,8 +1494,14 @@ async def test_embed_single():
     sdk = AsyncOpenAI(api_key="sk-test")
     c = OpenAIEmbeddingClient(sdk=sdk, budget=Budget(0.01), model="text-embedding-3-small")
     r = await c.embed(["a marketplace for scrap metal"])
-    assert len(r.vectors) == 1 and len(r.vectors[0]) == 1536
+    assert len(r.vectors) == 1 and len(r.vectors[0]) == EMBED_DIMS[c.model]
     assert r.cost_usd > 0
+
+def test_unknown_model_raises():
+    from openai import AsyncOpenAI
+    sdk = AsyncOpenAI(api_key="sk-test")
+    with pytest.raises(ValueError, match="EMBED_DIMS"):
+        OpenAIEmbeddingClient(sdk=sdk, budget=Budget(0.01), model="text-embedding-3-xxl")
 ```
 
 - [ ] **Step 2b.2: Implement** — call `sdk.embeddings.create(input=texts, model=model)`, retry on transient failures, accumulate cost from `usage.total_tokens / 1_000_000 × price_per_million` (prices in `prices.yml` are per 1M tokens — see header comment at the top of `prices.yml`), debit budget via `reserve/settle`.
