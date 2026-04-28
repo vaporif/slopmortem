@@ -27,117 +27,6 @@ section.
 
 ---
 
-## #3 — Per-source vs canonical markdown path is contradictory
-
-**Severity:** blocker — load-bearing for ingest atomicity and synthesis input.
-
-### Problem
-
-Layout (spec:222, spec:335):
-
-```
-data/post_mortems/<source>/<text_id>.md
-```
-
-`text_id = sha256(canonical_id)[:16]`. So when the same canonical entity is
-contributed to by N sources (say `curated`, `hn`, `crunchbase`), there are
-N files with the *same* filename in different per-source directories:
-
-```
-data/post_mortems/
-├── curated/
-│   └── ab12cd34.md       ← same canonical_id
-├── hn/
-│   └── ab12cd34.md       ← same canonical_id
-└── crunchbase/
-    └── ab12cd34.md       ← same canonical_id
-```
-
-On merge, the spec says (spec:402–403):
-
-> write combined_text to `<path>.tmp`, `os.replace`
-
-But `<path>` is parameterized by source. Two readings, both broken:
-
-```
-Reading A:                       Reading B:
-┌────────────────────────┐     ┌────────────────────────┐
-│ curated/ab12cd34.md ───┼─►   │ curated/ab12cd34.md ───┼─► section A only
-│   = combined(A,B,C)    │     │ hn/ab12cd34.md ────────┼─► section B only
-│ hn/ab12cd34.md ────────┼─►   │ crunchbase/ab12cd34.md ┼─► section C only
-│   = combined(A,B,C)    │     │                        │
-│ crunchbase/ab12cd34 ───┼─►   │ synthesis must read    │
-│   = combined(A,B,C)    │     │ ALL THREE and combine  │
-│                        │     │ at query time          │
-│ 3× redundant write     │     │                        │
-│ journal can drift      │     │ but spec says body is  │
-│ which is canonical?    │     │ "INLINED" → from where?│
-└────────────────────────┘     └────────────────────────┘
-```
-
-Synthesis "INLINES the candidate body by default" (spec:223) — which file
-does it load? The spec does not say.
-
-### Why it matters
-
-- Reading A wastes disk and creates N places where the merge_state journal
-  can disagree with on-disk content.
-- Reading B requires synthesis to enumerate per-source files and re-merge
-  at query time, which contradicts the spec's "inline the candidate body"
-  language and pushes merge logic into the hot query path.
-
-### Recommendations (pick one)
-
-**Option 1: split per-source raw and merged-canonical paths.**
-
-```
-data/post_mortems/
-├── raw/
-│   ├── curated/ab12cd34.md       ← original section, immutable
-│   ├── hn/ab12cd34.md            ← original section, immutable
-│   └── crunchbase/ab12cd34.md    ← original section, immutable
-└── canonical/
-    └── ab12cd34.md               ← merged combined_text, what synthesis loads
-```
-
-- Atomic merge writes `canonical/ab12cd34.md` only.
-- Per-source files stay frozen; useful for re-merging when reliability_rank
-  changes or for forensics.
-- Synthesis always reads `canonical/<text_id>.md` — single resolution.
-
-**Option 2: drop per-source files, write only canonical.**
-
-```
-data/post_mortems/
-└── ab12cd34.md           ← combined_text from all contributing sources
-                            front-matter records contributing source list
-```
-
-- Simplest; least disk.
-- Per-source provenance lives in markdown front-matter / Qdrant payload.
-- Re-merge requires re-fetching sources (no cached raw text).
-
-**Recommend Option 1** — costs ~2× disk for the canonical seeding (cheap;
-500 docs × ~10 KB × 2 ≈ 10 MB) and gives clear semantics:
-
-| | raw/<source>/<text_id>.md | canonical/<text_id>.md |
-|---|---|---|
-| Written by | source adapter | merge step |
-| Mutable | no (immutable per ingestion) | yes (rewritten on merge) |
-| Read by | merge step, reconcile | synthesis, eval |
-
-### Spec edits required
-
-- spec:222 path layout
-- spec:335 file-tree comment
-- spec:385–406 ingest data-flow steps
-- spec:223 synthesis-inlines-body sentence
-- spec:222 atomicity sentence
-- spec:687–688 atomicity test description
-- `safe_path` accepts a `kind ∈ {"raw", "canonical"}` discriminator
-
----
-
 ## #4 — asyncio.Semaphore cannot be "halved at runtime"
 
 **Severity:** blocker — spec promises behavior the stdlib primitive does not
@@ -642,14 +531,6 @@ prove valuable.
 
 ## Nits
 
-### n1 — M-series CPU latency in spec table
-
-spec:215:
-
-> budget ~1–2s wall-clock for 30 candidates on CPU
-
-Resolved as part of issue #2 (cross-encoder dropped). No further action.
-
 ### n2 — OpenAI embedding price pin
 
 spec:609 quotes `text-embedding-3-small` at $0.02/M tokens. Correct as of
@@ -675,7 +556,6 @@ Add to Task #3 (Corpus / MergeJournal) deliverable.
 
 ```
 blockers — fix before any implementation:
-  #3 markdown path (architectural ambiguity)
   #4 semaphore shrinking (use anyio.CapacityLimiter)
 
 should-fix — fix during implementation, in-task:
