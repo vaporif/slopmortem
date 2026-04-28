@@ -1,7 +1,7 @@
 # slopmortem design review — open issues
 
 **Date:** 2026-04-28
-**Status:** post obvious-fix pass — only items needing discussion remain (4 open)
+**Status:** post obvious-fix pass — only items needing discussion remain (2 open)
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
@@ -12,16 +12,6 @@ The original review had 34 numbered findings + LOW polish items. Mechanical fixe
 ## Open issues
 
 ### MED
-
-**#29 — `SourceAdapter` Protocol is too vacuous** [Architecture #10, spec §sources]
-Curated YAML, HN Algolia, CSV, Wayback, Tavily have wildly different shapes. One Protocol covering all of them either becomes vacuous (returns `Iterable[Any]`) or accumulates kwargs nobody uses.
-**Options to discuss:** split into two Protocols — `Source` (primary, yields `RawEntry`) vs. `Enricher` (takes `RawEntry`, returns enriched `RawEntry` with extra fields). Wayback and Tavily-enrich are clearly enrichers; HN Algolia and curated YAML are clearly sources; Crunchbase CSV could go either way. Modest refactor; touches `corpus/sources/base.py` and the ingest orchestration.
-**Recommendation:** do the split before Task #4a starts so adapters are written against the right shape.
-
-**#31 — Task #4b (300–500 hand-curated URLs) blocks production utility** [Architecture #9, spec §Tasks]
-Curating 300–500 hand-vetted URLs with sector matrix, provenance, CODEOWNERS is owned by the user and has no fallback. Until it ships, the corpus is the ~20-URL test fixture.
-**Options to discuss:** (a) ship a "v0 minimum" of ~50 URLs (5/sector across 10 sectors) as part of Task #4a's fixture; gate the full pipeline behind `--allow-thin-corpus` until the production list lands; (b) treat #4b as a scale-up not a blocker; (c) accept the gap.
-**Recommendation:** (a) — unblocks end-to-end smoke testing of the full pipeline before #4b finishes.
 
 **#33 — OWASP LLM Top-10 (2025) coverage gaps** [Security F9]
 LLM07 System Prompt Leakage NOT addressed. LLM08 Vector & Embedding Weaknesses NOT addressed. LLM10 Unbounded Consumption PARTIAL (no token-bomb DoS protection — a hostile corpus doc could be 50K+ tokens and explode synthesis input cost).
@@ -47,7 +37,7 @@ The spec is internally consistent and unusually explicit. After the obvious-fix 
 
 Applied to spec, no longer in this doc:
 
-**This pass:** #26 (curated drift → quarantine_journal w/ `quarantine_reason="curated_drift"`, non-zero exit, `--accept-corpus-drift` override).
+**This pass:** #26 (curated drift → quarantine_journal w/ `quarantine_reason="curated_drift"`, non-zero exit, `--accept-corpus-drift` override); #29 (split `SourceAdapter` into `Source.fetch() -> AsyncIterable[RawEntry]` + `Enricher.enrich(RawEntry) -> RawEntry`; wayback/tavily are Enrichers, curated/hn/crunchbase are Sources); #31 (v0 corpus ~50 URLs added to Task #4a; Task #4b re-framed as scale-up to ≥200, no longer a v1-utility blocker).
 
 
 **Critical (8):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #6 entity-resolution flip GC (reverse-index + resolver_flipped state + reconcile drift class (f)); #7 quarantine schema; #8 Pydantic auto-capture leak.

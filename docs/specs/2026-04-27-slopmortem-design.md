@@ -250,7 +250,7 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 **Slop filter at ingest, real-only seed retained for retrieval guarantees**
 - The corpus is the threat surface for output quality, not just security. Much "post-mortem" content online in 2026 is itself LLM-generated — a startup post-mortem that reads "ran out of runway, scaled too fast, hired the wrong VP" because the model wrote it from the headline. "Retrieval Collapse" (arXiv:2602.16136) shows that 67% pool contamination yields >80% exposure contamination in RAG output, and surface-level fluency masks provenance erosion: fluent slop in, fluent slop out. The LIMITATIONS callout alone is insufficient mitigation.
 - **Ingest slop classifier**: every scraped doc is scored by **Binoculars** (Hans et al. 2024, arXiv:2401.12070, zero-shot, open-source, paper-backed). Threshold tuned at the model's published low-FPR operating point (~1–2% FPR per the paper); per-doc score logged as a `slop_score` payload field and on the Laminar span. Slop classification runs **before** entity resolution — quarantined docs never receive a `canonical_id`, so they cannot be written to the main merge journal (which keys rows on `(canonical_id, source, source_id)`). Quarantined docs route to `data/post_mortems/quarantine/<content_sha256>.md` and a row in a **separate `quarantine_journal` table** keyed on `(content_sha256, source, source_id)`; they are NOT embedded into Qdrant. Quarantine is reversible — `slopmortem ingest --reclassify` re-runs the classifier when the threshold or model is updated; declassified docs flow into entity resolution and a row appears in the main merge journal at that point. Binoculars' dependency on raw token logprobs from a small open model adds ~150 MB to the dependency footprint and ~50ms/doc at ingest; both are acceptable.
-- **Provenance tagging**: the curated YAML's hand-vetted entries (Task #4b, owned by user) are tagged `provenance="curated_real"` in Qdrant payload. v1 stores the tag for audit and future use; the retrieval-side hard floor (`M_real` of `K_retrieve` from this class via an additional Prefetch in the FormulaQuery) is deferred to v2 — the v1 corpus is curated-heavy already (300–500 hand-vetted URLs vs HN's 200 obits), and retrofitting the floor is a one-formula edit if eval shows trope-leak.
+- **Provenance tagging**: the curated YAML's hand-vetted entries are tagged `provenance="curated_real"` in Qdrant payload. v1 ships with a v0 corpus of ~50 hand-vetted URLs from Task #4a (5/sector × 10) — enough for end-to-end smoke testing and eval seed — and Task #4b scales it past ≥200 (target 300–500) under the same schema. v1 stores the provenance tag for audit and future use; the retrieval-side hard floor (`M_real` of `K_retrieve` from this class via an additional Prefetch in the FormulaQuery) is deferred to v2 — the corpus is curated-heavy by construction (curated YAML vs HN's 200 obits), and retrofitting the floor is a one-formula edit if eval shows trope-leak.
 - Pros: cheap, paper-backed, converts the "we acknowledge slop" LIMITATIONS callout into "we acknowledge it AND have a defensible first line of defense"; classifier swap is a config edit (Binoculars → DivEye → IRM) without pipeline changes.
 - Cons: no AI detector is reliable enough to be a security boundary (Pangram claims 1-in-10K FPR domain-wide but independent reviewers find 1–5% FPR on polished human writing); the filter raises the bar on bulk slop, not adversarial slop.
 
@@ -336,12 +336,15 @@ slopmortem/
                            #   Schemas are imported by the stage modules and used in tests.
   corpus/
     sources/
-      base.py              # SourceAdapter Protocol
-      curated.py           # YAML loader + trafilatura fetch + length floor + platform blocklist
-      hn_algolia.py        # HN Algolia REST API client (rate-limited, identifies UA)
-      crunchbase_csv.py    # CSV reader (path passed via flag)
-      wayback.py           # Internet Archive client (opt-in)
-      tavily.py            # Tavily-based enrichment (opt-in)
+      base.py              # Source + Enricher Protocols.
+                           #   Source.fetch() -> AsyncIterable[RawEntry]      (primary, produces entries)
+                           #   Enricher.enrich(RawEntry) -> RawEntry           (secondary, fills fields)
+      curated.py           # [Source] YAML loader + trafilatura fetch + length floor + platform blocklist
+      hn_algolia.py        # [Source] HN Algolia REST API client (rate-limited, identifies UA)
+      crunchbase_csv.py    # [Source] CSV reader (path passed via flag)
+      wayback.py           # [Enricher] Internet Archive client; v1 role: recover content for curated rows
+                           #   whose live URL is dead (operates on a RawEntry, not a discovery source). (opt-in)
+      tavily.py            # [Enricher] Tavily-based enrichment (opt-in)
     taxonomy.yml           # closed enums for facet fields with "other" fallback
     schema.py              # pydantic: RawEntry, Facets, CorpusEntry, SourceRef, MergeState
     chunk.py               # chunk_markdown(text) -> list[Chunk]; ~768-token windows
@@ -449,7 +452,10 @@ tests/
 ### Ingest (`slopmortem ingest`)
 
 ```
-sources/* → list[RawEntry]
+sources/* (Source.fetch) → list[RawEntry]
+  ↓ enrichers/* (Enricher.enrich) applied in declared order — e.g. wayback fills
+    raw_html for curated rows whose live URL is dead; tavily adds extra fields.
+    Each enricher is a no-op if its precondition isn't met (no kwargs bag).
   ↓ for each (sequential, rate-limited per source, processed in reliability order):
 trafilatura.extract(raw_html) → markdown_text   (for URL-based sources)
   if len < 500 chars OR domain in platform_blocklist: skip + log + metric
@@ -977,8 +983,8 @@ Tasks marked **G1** must complete before any other parallel work begins. Tasks m
 | 2 | LLMClient: `OpenRouterClient` (openai SDK pointed at `openrouter_base_url`, `chat.completions.create`, tool-use loop with `<untrusted_document>` wrapping of tool results, `cache_control={ttl:"1h"}` on shared system blocks (passed through to Anthropic backend), pre-fan-out warm call, **assert `CompletionResult.cache_creation_tokens > 0` on warm-call response with one re-warm retry on failure**, cache-token extraction from OpenRouter's usage extension into `CompletionResult` and onto the Laminar span with both `prompt_template_sha` and `prompt_rendered_sha`, retry/budget integration, **`anyio.CapacityLimiter(config.ingest_concurrency)` (default 20) for ingest fan-out** + `anyio.CapacityLimiter(N_synthesize)` wrapping the synthesis gather by default, **stub-based unit tests covering each `finish_reason` branch (`tool_calls` / `stop` / `length` / `content_filter`)** since cassettes only exercise the recorded branch) + `FakeLLMClient` cassette (pytest-recording / vcrpy only — no respx; secret-scrubbing filter incl. `sk-or-v1-…`) + tests | — | general-purpose | Python |
 | 2b | EmbeddingClient: `OpenAIEmbeddingClient` (retry, span, budget) + `FakeEmbeddingClient` cassette + tests | — | general-purpose | Python |
 | 3 | Corpus: `QdrantCorpus` (service mode), `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (stdlib `sqlite3`, WAL mode, `busy_timeout=5000ms`, one connection per merge action, no pool, **every sqlite call dispatched via `asyncio.to_thread`** so the sync stdlib API doesn't block the event loop; merge_state persistence; separate `quarantine_journal` table keyed on `(content_sha256, source, source_id)` for slop-classified docs without a canonical_id), `slopmortem ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | general-purpose | Python |
-| 4a | Source adapters: curated YAML loader (length floor + platform blocklist + UA + robots), HN Algolia (rate-limited), Wayback, Crunchbase CSV; ships with fixture YAML of ~20 known-good URLs for tests | — | general-purpose | Python |
-| 4b | **Curate production YAML** (300–500 URLs): owned by user; acceptance = sector coverage matrix (≥10 per top sector), per-row provenance fields, CODEOWNERS on the file. Not parallelizable with adapter coding. | — | user | manual |
+| 4a | Source adapters: curated YAML loader (length floor + platform blocklist + UA + robots), HN Algolia (rate-limited), Wayback, Crunchbase CSV; ships **two** YAMLs — (i) `tests/fixtures/curated_test.yml` ~20 known-good URLs for cassette-pinned pytest, (ii) `corpus/curated_v0.yml` ~50 URLs (5/sector × 10 sectors), same schema as the production list, used for real-data smoke + eval seed | — | general-purpose | Python |
+| 4b | **Scale curated YAML beyond v0** to ≥200 URLs (target 300–500): owned by user; acceptance = sector coverage matrix (≥10 per top sector), per-row provenance fields, CODEOWNERS on the file. Not parallelizable with adapter coding. Scale-up, no longer a v1-utility blocker — v0 corpus from #4a is enough for end-to-end smoke and eval seed. | — | user | manual |
 | 5a | Entity resolution + merge: tier-1 `registrable_domain` (founding_year cached deterministically per `(domain, content_sha256)`, used as stored attribute + recycled-domain check via founding-year delta, not key), platform blocklist, tier-2 normalized name+sector with parent/subsidiary suffix-delta detection, tier-3 fuzzy + Haiku tiebreaker (cache-keyed on `(canon_a, canon_b, model_id, prompt_hash)`); alias-graph table for M&A/rebrand chains (auto-merge BLOCKED, written for audit); `pending_review` journal rows + `--list-review` printout (no interactive accept/reject in v1); deterministic combined-text rule; tests including platform-domain non-collapse + injection-fuzz on canonical_id + same-content-twice idempotency + parent/subsidiary non-collapse | — | general-purpose | Python |
 | 5b | Ingest CLI command + orchestration: `slopmortem ingest`, `--source`, `--reconcile`, `--dry-run`, `--force`, per-host throttling, ingest budget enforcement | — | general-purpose | Python |
 | 6 | Stages: `facet_extract` (Haiku via LLMClient, taxonomy-validated facets) | post-G2 | general-purpose | Python |
