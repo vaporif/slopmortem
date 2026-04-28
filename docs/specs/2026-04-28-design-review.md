@@ -1,7 +1,7 @@
 # slopmortem design review — open issues
 
 **Date:** 2026-04-28
-**Status:** post obvious-fix pass — only items needing discussion remain (5 open)
+**Status:** post obvious-fix pass — only items needing discussion remain (4 open)
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
@@ -12,11 +12,6 @@ The original review had 34 numbered findings + LOW polish items. Mechanical fixe
 ## Open issues
 
 ### MED
-
-**#26 — Curated YAML drift only warns, doesn't quarantine** [Security F10, spec §curated YAML]
-`content_sha256_at_review` mismatch on a curated entry currently emits a `corpus.poisoning_warning` span event but doesn't block the row. An attacker who compromises a URL post-review can poison the corpus until a human notices.
-**Options to discuss:** (a) hard-fail on hash drift for `provenance="curated_real"` entries; require explicit `--accept-corpus-drift` to proceed (defaults to safe); (b) keep warn-only but auto-quarantine into `quarantine_journal` until reviewed; (c) status quo (warn only). The UX cost of (a) is one extra flag when the upstream blog post genuinely updates; the security cost of (c) is real.
-**Recommendation:** (a) — small UX cost, large security gain.
 
 **#29 — `SourceAdapter` Protocol is too vacuous** [Architecture #10, spec §sources]
 Curated YAML, HN Algolia, CSV, Wayback, Tavily have wildly different shapes. One Protocol covering all of them either becomes vacuous (returns `Iterable[Any]`) or accumulates kwargs nobody uses.
@@ -51,6 +46,9 @@ The spec is internally consistent and unusually explicit. After the obvious-fix 
 ## What was already fixed (traceability)
 
 Applied to spec, no longer in this doc:
+
+**This pass:** #26 (curated drift → quarantine_journal w/ `quarantine_reason="curated_drift"`, non-zero exit, `--accept-corpus-drift` override).
+
 
 **Critical (8):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #6 entity-resolution flip GC (reverse-index + resolver_flipped state + reconcile drift class (f)); #7 quarantine schema; #8 Pydantic auto-capture leak.
 **High (9):** #9 Budget race (reserve/settle per API roundtrip under `Budget.lock`, pessimistic upper bound = prompt_tokens × input_price + max_completion_tokens × output_price, settle to actual on response); #10 SQLite blocks event loop; #11 cache-warm race assertion; #14 tool-use loop branch tests; #15 re-merge delete+upsert atomicity; #16 platform blocklist additions; #17 alias-graph dedup at retrieval; #18 recency Branch C; #19 `getaddrinfo` over `gethostbyname`.
