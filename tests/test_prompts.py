@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from slopmortem.llm.prompts import prompt_template_sha, render_blocks, render_prompt
 from slopmortem.models import Facets, LlmRerankResult, Synthesis
+
+FIXTURES = Path(__file__).parent / "fixtures" / "prompts"
 
 
 def test_facet_extract_renders():

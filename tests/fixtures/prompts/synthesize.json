@@ -1,0 +1,30 @@
+{
+  "vars": {
+    "pitch": "MedScribe is an AI medical scribing app for US dermatology clinics, billed monthly per provider.",
+    "candidate_id": "scribetech.com",
+    "candidate_name": "ScribeTech",
+    "candidate_body": "ScribeTech (2019-2023) sold AI ambient medical scribing to US primary-care clinics at $200/provider/month. Hit ~120 clinics and $4M ARR. Failed when Epic and athenahealth bundled comparable scribing features in 2022, driving churn from 8% to 32%. Shut down March 2023.\n\nSources: https://example.com/scribetech-postmortem"
+  },
+  "expected_output": {
+    "candidate_id": "scribetech.com",
+    "name": "ScribeTech",
+    "one_liner": "AI scribing for US primary-care clinics killed by EHR bundling.",
+    "failure_date": "2023-03-01",
+    "lifespan_months": 48,
+    "similarity": {
+      "business_model": {"score": 9.0, "rationale": "Identical per-provider monthly scribing SaaS."},
+      "market": {"score": 7.5, "rationale": "US healthtech SMB clinics; specialty differs."},
+      "gtm": {"score": 8.0, "rationale": "Direct sales to small clinics."},
+      "stage_scale": {"score": 7.0, "rationale": "Comparable early-stage SaaS profile."}
+    },
+    "why_similar": "Both target US clinic providers with monthly per-seat AI scribing.",
+    "where_diverged": "MedScribe targets dermatology specifically, where EHR bundling has been slower; ScribeTech sold to primary care where Epic/athena dominate.",
+    "failure_causes": ["EHR feature bundling", "loss of differentiation", "rising churn", "no Series B raise"],
+    "lessons_for_input": [
+      "Pick a specialty Epic and athena are slow to bundle into.",
+      "Build an integration moat that survives a bundled-scribing release.",
+      "Sign multi-year contracts before incumbents copy."
+    ],
+    "sources": ["https://example.com/scribetech-postmortem"]
+  }
+}
