@@ -1491,11 +1491,11 @@ def test_secret_pattern_scrubs():
     assert b"SCRUBBED" in out
 ```
 
-- [ ] **Step 2.8: Write `FakeLLMClient`**
+- [x] **Step 2.8: Write `FakeLLMClient`**
 
 `slopmortem/llm/fake.py` — reads canned responses from a dict keyed by `(prompt_template_sha, model)`. Used by every stage test. Same interface as `LLMClient`.
 
-- [ ] **Step 2.9: Concurrency limiter test**
+- [x] **Step 2.9: Concurrency limiter test**
 
 ```python
 from anyio import CapacityLimiter
@@ -1508,11 +1508,11 @@ async def test_capacity_limiter_caps_inflight():
 
 Implementation: `OpenRouterClient` exposes a `gather_with_limit(coros, limit: int)` helper that wraps `asyncio.gather(..., return_exceptions=True)` with `anyio.CapacityLimiter`.
 
-- [ ] **Step 2.10: Cache-warm assertion**
+- [x] **Step 2.10: Cache-warm assertion**
 
 Add: when called with `cache=True`, the first roundtrip's `cache_creation_tokens` is asserted `> 0` on response. If zero, one re-warm retry runs; if still zero after retry, emit `SpanEvent.CACHE_WARM_FAILED` and proceed.
 
-- [ ] **Step 2.11: Verify Task #2**
+- [x] **Step 2.11: Verify Task #2**
 
 Run: `uv run pytest tests/llm/ -v`
 Expected: every test green.
