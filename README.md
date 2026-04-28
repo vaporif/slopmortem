@@ -1,8 +1,8 @@
 # slopmortem
 
-Tell it your startup idea, it finds dead ones that tried something similar.
+You give it a pitch, it finds dead startups that tried something similar.
 
-The CLI is `slopmortem`. Runs on your machine. LLM calls go through OpenRouter (routed to Anthropic Sonnet/Haiku by default), embeddings are OpenAI, and Qdrant runs as a local Docker container.
+`slopmortem` runs locally. LLM calls go through OpenRouter, which sends them to Anthropic's Sonnet and Haiku by default. Embeddings come from OpenAI. Qdrant runs in Docker.
 
 ## Architecture
 
@@ -72,38 +72,38 @@ flowchart TB
     Trace --> LMNR([Laminar collector])
 ```
 
-The CLI does one `asyncio.run` and that's it. Below it, every stage is `async def`. fastembed is CPU-bound so it hops onto a thread. The synthesis fan-out uses `asyncio.gather`. Each SDK gets one connection pool that lives for the whole invocation, which is the kind of thing you don't think matters until you watch six sequential LLM calls each pay the TLS handshake tax.
+The CLI does one `asyncio.run` and that's it. Below that, every stage is `async def`. fastembed is CPU-bound so it hops onto a thread. The synthesis fan-out goes through `asyncio.gather`. Each SDK keeps one connection pool alive for the whole invocation. You don't think that matters until you watch six sequential LLM calls each pay the TLS handshake tax.
 
 ## Query flow
 
 You type `slopmortem "we're building a marketplace for industrial scrap metal"`. Here's what runs.
 
-1. **Facets.** Haiku reads the pitch and slaps structured fields on it: sector, business model, stage, that kind of thing. These narrow what we retrieve and feed the rerank rubric later on.
+1. **Facets.** Haiku reads the pitch and slaps structured fields on it: sector, business model, stage, that kind of thing. These narrow what we retrieve and feed the rerank rubric later.
 2. **Embeddings.** Dense via OpenAI `text-embedding-3-small`. Sparse via fastembed BM25. Two vectors per query, both cheap.
-3. **Retrieve.** Qdrant runs three prefetches in parallel (dense, sparse, and one filtered by your facets), then fuses them server-side with Reciprocal Rank Fusion. Top 30 candidates come back. No HyDE, no query rewriting; we tried HyDE earlier and it kept biasing retrieval toward Haiku's favorite failure tropes ("ran out of runway", "scaled too fast"), which made every result look the same.
-4. **Rerank.** One Sonnet call scores all 30 with a multi-perspective rubric. Output comes back as schema-conformant JSON via OpenRouter's `response_format=json_schema` (which routes to Anthropic's grammar-constrained sampling), so we don't regex over prose and we don't run a tool-use dance for output shape. No tools, no corpus access — just structured scoring. Top 5 survive.
-5. **Synthesize.** First call runs alone. That's deliberate, not a sequencing bug. It populates the prompt cache so the other four don't all race to write the same entry. The warm response asserts `cache_creation_tokens > 0` (Anthropic's cache is eventually consistent across regions, so a 200 OK doesn't guarantee the prefix replicated yet); one re-warm retry on failure, then the rest fire under `anyio.CapacityLimiter(N)` with `asyncio.gather(..., return_exceptions=True)` so one transient failure drops one candidate, not the whole report. Each writes one candidate report, and the model can call `get_post_mortem` or `search_corpus` mid-generation if it wants more context. Final assistant text is JSON validated against the `Synthesis` Pydantic model.
-6. **Render.** Markdown to stdout. The footer carries cost, latency, and the trace ID, so when something looks off you can paste a Laminar link straight from your terminal.
+3. **Retrieve.** Qdrant runs three prefetches in parallel (dense, sparse, and one filtered by your facets), then fuses them server-side with Reciprocal Rank Fusion. Top 30 come back. No HyDE, no query rewriting. We tried HyDE earlier and it kept biasing retrieval toward Haiku's favorite failure tropes ("ran out of runway", "scaled too fast"), so every result ended up looking the same.
+4. **Rerank.** One Sonnet call scores all 30 against a multi-perspective rubric. Output is JSON via OpenRouter's `response_format=json_schema`, which routes to Anthropic's grammar-constrained sampling on the backend. No tools, no corpus reads, nothing to parse out of prose. Top 5 survive.
+5. **Synthesize.** The first call runs alone, on purpose. It writes the prompt cache so the other four don't race to write the same prefix. We assert `cache_creation_tokens > 0` on that warm response, because Anthropic's cache is eventually consistent across regions and a 200 OK doesn't actually mean the prefix replicated yet. One re-warm retry if it didn't. Then the rest fan out under `anyio.CapacityLimiter(N)` with `asyncio.gather(..., return_exceptions=True)`, so a single flaky candidate drops one report instead of killing all five. The model can hit `get_post_mortem` or `search_corpus` mid-generation if it wants more context. Final text parses straight into the `Synthesis` Pydantic model.
+6. **Render.** Markdown to stdout. The footer carries cost, latency, and the trace ID, so when something looks weird you paste a Laminar link straight from the terminal.
 
-A default query lands around $0.45–0.60 and finishes in 21–43 seconds; opt into Tavily synthesis enrichment and that becomes $0.60–0.80 / 31–63 seconds. Cap is $2.00; the budget tracker raises if you blow past it.
+A default query runs around $0.45–0.60 and 21–43 seconds. Turn on Tavily synthesis enrichment and that becomes $0.60–0.80 and 31–63 seconds. Cap is $2.00; the budget tracker raises if you blow past it.
 
 ## Ingest flow
 
 `slopmortem ingest` is the bulk path. Around 500 URLs from a curated YAML, HN's Algolia API, and Tavily if you opt in.
 
 1. **Fetch.** Plain HTTP. trafilatura strips nav and cookie banners. A length floor drops the obviously empty pages.
-2. **LLM fan-out.** Two calls per doc, one for facet extraction and one for the rerank summary. All ~1000 run as bounded-concurrency live calls under `anyio.CapacityLimiter(20)`. There's no Batches discount because OpenRouter doesn't proxy that API. The shared system block carries `cache_control={"ttl":"1h"}` and we fire one sync call right before the fan-out so workers find the cache populated instead of racing to write it. The first five fan-out responses sample `cache_read_tokens / (cache_read + cache_creation)` — if the read ratio is under 80% we know before spending the full ingest budget. The 1-hour TTL recovers most of what Batches would have saved.
-3. **Embed.** Dense via OpenAI. Sparse on the local CPU. Cheap enough that I stopped worrying about it.
-4. **Entity resolution.** Three tiers. Domain match first, then embedding similarity, then a Haiku tiebreaker for the actually ambiguous pairs. Mostly the point of all this is to stop "Crunchbase obituary + founder's farewell blog post" from showing up as two separate dead startups.
+2. **LLM fan-out.** Two calls per doc, one for facets and one for the rerank summary. All ~1000 run live under `anyio.CapacityLimiter(20)`. There's no Batches discount here because OpenRouter doesn't proxy that API. The shared system block sets `cache_control={"ttl":"1h"}`, and we fire one sync call right before the fan-out so workers hit a populated cache instead of racing to write it. The first five responses sample `cache_read_tokens / (cache_read + cache_creation)`. If the read ratio is under 80% we know before spending the rest of the budget. The 1-hour TTL recovers most of what Batches would have saved.
+3. **Embed.** Dense via OpenAI. Sparse on the local CPU. The line item never showed up large enough to fight over.
+4. **Entity resolution.** Three tiers. Domain match first, then embedding similarity, then a Haiku tiebreaker for the actually ambiguous pairs. The point of all this is to stop "Crunchbase obituary + founder's farewell blog post" from showing up as two separate dead startups.
 5. **Merge.** Journal flips the row to `pending`, markdown lands via `os.replace`, Qdrant gets upserted, then the journal flips to `complete`. If something dies in the middle (Ctrl-C, OOM, bad network, whatever), `slopmortem ingest --reconcile` walks the three stores and patches whatever drifted.
 
-The initial 500-URL seed runs about $7.50. The cap is $15 because retries happen, the no-Batches path has less cushion, and I wanted slack. Steady-state on the HN feed is roughly $0.10/week, which is small enough that I stopped tracking it.
+The initial 500-URL seed costs about $7.50. The cap is $15 because retries happen, the no-Batches path has less cushion, and I wanted slack. Steady-state on the HN feed is roughly $0.10/week, which is small enough that I stopped tracking it.
 
 ## What's where
 
 ```
 slopmortem/
-  cli.py                 # entry point — every command goes through asyncio.run
+  cli.py                 # entry point; every command goes through asyncio.run
   pipeline.py            # query orchestration, async stage composition
   ingest.py              # ingest orchestration
   stages/                # one module per stage; every function is async def
@@ -145,14 +145,14 @@ slopmortem ingest --source curated   # ~$7.50, run this once
 slopmortem "your pitch here"         # ~$0.50, run whenever
 ```
 
-Two corners worth knowing about. `slopmortem ingest --reconcile` patches drift between the journal, the markdown tree, and Qdrant. `slopmortem replay --dataset <name>` re-runs a saved input through current code, which is what you actually want when you're iterating on prompts and trying not to reburn the LLM bill on the same examples.
+Two corners worth knowing about. `slopmortem ingest --reconcile` patches drift between the journal, the markdown tree, and Qdrant. `slopmortem replay --dataset <name>` re-runs a saved input through current code, which is what you want when you're iterating on prompts and don't feel like reburning the LLM bill on the same examples.
 
 ## Testing
 
-Cassettes via pytest-recording, with vcrpy underneath. I don't pair it with respx because both libraries patch the same httpx transport layer, and when they coexist you get fixture-order flakes that aren't local to the test that's broken. One library is enough.
+Cassettes via pytest-recording, vcrpy underneath. I don't pair it with respx because both libraries patch the same httpx transport layer, and when they coexist you get fixture-order flakes that aren't local to whatever test is actually broken. One library is enough.
 
-`make smoke-live` runs against live OpenRouter on a manual trigger, roughly weekly, mostly so I notice when an SDK or model or routing change silently shifts behavior. Everything else replays from disk.
+`make smoke-live` hits live OpenRouter on a manual trigger, roughly weekly. The point is to notice when an SDK, a model, or OpenRouter's routing layer silently shifts behavior. Everything else replays from disk.
 
 ## Design notes
 
-Full spec is in [`docs/specs/2026-04-27-slopmortem-design.md`](docs/specs/2026-04-27-slopmortem-design.md). The pre-implementation punch list of contract bugs to close lives in [`docs/specs/2026-04-28-design-spec-blockers.md`](docs/specs/2026-04-28-design-spec-blockers.md).
+Full spec is in [`docs/specs/2026-04-27-slopmortem-design.md`](docs/specs/2026-04-27-slopmortem-design.md). The pre-implementation punch list of contract bugs to close before code lives in [`docs/specs/2026-04-28-design-spec-blockers.md`](docs/specs/2026-04-28-design-spec-blockers.md).

@@ -30,11 +30,12 @@ Order of execution:
 10. **Task 5b** — Ingest CLI + orchestration
 11. **Task 6** — `facet_extract` stage
 12. **Task 7** — `retrieve` + `llm_rerank` stages
-13. **Task 8** — `synthesize` + `render` (replaces the Task 9 stubs with real impls)
-14. **Task 10** — CLI + `pipeline.py`
-15. **Task 11** — Eval infra
-16. **Task 4b** — Curated YAML scale-up (user-owned, manual; can run any time after Task 4a)
-17. **Final integration review**
+13. **Task 9 (real impls)** — replace `tools_impl.py` stubs with real `Corpus`-backed `_get_post_mortem` / `_search_corpus` (must land before Task 8 so synthesize's tool-use loop has working callees, not `NotImplementedError`)
+14. **Task 8** — `synthesize` + `render`
+15. **Task 10** — CLI + `pipeline.py`
+16. **Task 11** — Eval infra
+17. **Task 4b** — Curated YAML scale-up (user-owned, manual; can run any time after Task 4a)
+18. **Final integration review**
 
 Implementation uses `superpowers:executing-plans`: read this plan, work the next unchecked task, run its TDD steps in order, mark each step done as it's verified, request review after the task closes, then move on. No fan-out, no agent teams.
 
@@ -51,7 +52,7 @@ The Gate columns are kept as informational ordering markers (G1 = foundation, G2
 | 2 | LLMClient: `OpenRouterClient` (openai SDK pointed at openrouter, tool-use loop, cache_control passthrough, cache-token extraction, retry/budget integration, anyio CapacityLimiter for fan-out, stub-based unit tests for each `finish_reason` branch) + `FakeLLMClient` cassette + tests | — | python-development:python-pro | Python |
 | 2b | EmbeddingClient: `OpenAIEmbeddingClient` (retry, span, budget) + `FakeEmbeddingClient` cassette + tests | — | python-development:python-pro | Python |
 | 3 | Corpus: `QdrantCorpus`, `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (sqlite WAL via asyncio.to_thread), `slopmortem ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | python-development:python-pro | Python |
-| 4a | Source adapters: curated YAML loader, HN Algolia, Wayback, Crunchbase CSV; ships `tests/fixtures/curated_test.yml` and `corpus/curated_v0.yml` | — | python-development:python-pro | Python |
+| 4a | Source adapters: curated YAML loader, HN Algolia, Wayback, Crunchbase CSV; ships `tests/fixtures/curated_test.yml` and `slopmortem/corpus/sources/curated/post_mortems_v0.yml` | — | python-development:python-pro | Python |
 | 4b | **Scale curated YAML beyond v0** to ≥200 URLs: owned by user; not parallelizable with adapter coding | — | user | manual |
 | 5a | Entity resolution + merge: tier-1/2/3 resolver, alias-graph table, pending_review rows, deterministic combined-text rule, tests | — | python-development:python-pro | Python |
 | 5b | Ingest CLI command + orchestration: `slopmortem ingest`, `--source`, `--reconcile`, `--dry-run`, `--force`, per-host throttling, ingest budget enforcement | — | python-development:python-pro | Python |
@@ -100,15 +101,18 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "openai>=1.50",
-  "anthropic>=0.40",
   "qdrant-client>=1.14",
   "fastembed>=0.4",
   "pydantic>=2.7",
   "pydantic-settings>=2.4",
   "typer>=0.12",
   "trafilatura>=1.10",
+  "readability-lxml>=0.8.1",
   "tldextract>=5.1",
   "jsonref>=1.1",
+  "jinja2>=3.1",
+  "tiktoken>=0.7",
+  "binoculars>=0.0.4",
   "lmnr>=0.4",
   "anyio>=4.4",
   "httpx>=0.27",
@@ -125,6 +129,7 @@ dev = [
   "pytest-asyncio>=0.24",
   "pytest-recording>=0.13",
   "syrupy>=4.6",
+  "jsonschema>=4.23",
   "ruff>=0.6",
   "mypy>=1.11",
 ]
@@ -144,7 +149,7 @@ select = ["E", "F", "I", "B", "UP", "ASYNC"]
 - [ ] **Step 2: Create `Makefile`**
 
 ```makefile
-.PHONY: install test smoke-live eval lint typecheck
+.PHONY: install test smoke-live eval eval-record lint typecheck
 
 install:
 	uv sync
@@ -155,8 +160,13 @@ test:
 smoke-live:
 	RUN_LIVE=1 uv run pytest tests/smoke -v
 
+# Default eval runs against cassettes via FakeLLMClient + FakeEmbeddingClient (no live API calls, deterministic).
 eval:
 	uv run python -m slopmortem.evals.runner --dataset tests/evals/datasets/seed.jsonl --baseline tests/evals/baseline.json
+
+# Re-record cassettes against the live API. Costs real money; do not run in CI.
+eval-record:
+	RUN_LIVE=1 uv run python -m slopmortem.evals.runner --dataset tests/evals/datasets/seed.jsonl --baseline tests/evals/baseline.json --live --record
 
 lint:
 	uv run ruff check .
@@ -514,9 +524,11 @@ def synthesis_tools(config) -> list[ToolSpec]:
     return tools
 ```
 
-- [ ] **Step 1.10: Add `jsonschema` to dev deps and verify**
+- [ ] **Step 1.10: Verify**
 
-Run: `uv add --dev jsonschema && uv run pytest tests/test_tools_schema.py -v`
+`jsonschema` is already declared in the bootstrap `pyproject.toml` dev-deps; no extra `uv add` needed.
+
+Run: `uv run pytest tests/test_tools_schema.py -v`
 Expected: 2 passed.
 
 - [ ] **Step 1.11: Write `tests/test_budget.py`**
@@ -765,6 +777,7 @@ class LLMClient(Protocol):
         model: str | None = None,
         cache: bool = False,
         response_format: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> CompletionResult: ...
 ```
 
@@ -912,7 +925,7 @@ Expected: first two grep zero matches; third one match; fourth zero matches; fif
 
 **Spec refs:** §Appendix A taxonomy (lines 1133–1217), §Output format Pydantic for the schemas the prompts must produce (lines 766–896), §Architecture rerank/synthesize stages (lines 220–227, 251–262).
 
-**Pre-flight:** Add `jinja2` to deps (`uv add jinja2`).
+**Pre-flight:** `jinja2` is already in bootstrap `pyproject.toml` deps; no extra `uv add` needed.
 
 ### Step-by-step
 
@@ -1061,6 +1074,7 @@ Expected: all green.
 ```yaml
 # Source-of-truth for cost_usd derivations. Pricing per 1M tokens, USD.
 # Verified against OpenRouter pass-through rates as of 2026-04-28.
+platform_fee_pct: 5.5
 "openai/text-embedding-3-small":
   input: 0.02
 "anthropic/claude-haiku-4.5":
@@ -1075,8 +1089,8 @@ Expected: all green.
   cache_write_5m: 1.25
   cache_write_1h: 2.0
   cache_read: 0.10
-# PAYG 5.5% credit-deposit fee is NOT folded here; modelled separately as a
-# budget-ceiling deposit-time multiplier.
+# PAYG 5.5% credit-deposit fee surfaced as `platform_fee_pct` (top-level) for
+# `budget.py` to apply at deposit-ceiling time; not folded into per-token rates.
 ```
 
 - [ ] **Step 2.2: Stub-based unit tests for each finish_reason branch**
@@ -1161,10 +1175,18 @@ async def test_cache_tokens_extracted(fake_sdk):
 
 # helpers ...
 def _stub_usage(prompt_cached=0, prompt_cache_write=0, cost=0.001):
-    return {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110,
-            "prompt_tokens_details": {"cached_tokens": prompt_cached,
-                                      "cache_write_tokens": prompt_cache_write},
-            "cost": cost}
+    # Mirror openai SDK's typed CompletionUsage shape — attribute access, not dict.
+    from types import SimpleNamespace
+    return SimpleNamespace(
+        prompt_tokens=100,
+        completion_tokens=10,
+        total_tokens=110,
+        prompt_tokens_details=SimpleNamespace(
+            cached_tokens=prompt_cached,
+            cache_write_tokens=prompt_cache_write,
+        ),
+        cost=cost,
+    )
 
 def _stub_response(*, finish_reason, content="", tool_calls=None, usage=None, error=None):
     msg = MagicMock()
@@ -1211,6 +1233,7 @@ class OpenRouterClient:
         self, prompt: str, *, system: str | None = None,
         tools: list[ToolSpec] | None = None, model: str | None = None,
         cache: bool = False, response_format: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> CompletionResult:
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
@@ -1221,13 +1244,14 @@ class OpenRouterClient:
         for turn in range(self._max_tool_turns):
             resp = await self._call_with_retry(
                 messages=messages, tools=tools_payload, model=model or self._default_model,
-                response_format=response_format,
+                response_format=response_format, extra_body=extra_body,
             )
-            usage = resp.usage or {}
-            ptd = usage.get("prompt_tokens_details", {}) if isinstance(usage, dict) else {}
-            cache_read += ptd.get("cached_tokens", 0)
-            cache_write += ptd.get("cache_write_tokens", 0)
-            cost += (usage.get("cost", 0.0) if isinstance(usage, dict) else 0.0)
+            usage = resp.usage
+            if usage is not None:
+                ptd = getattr(usage, "prompt_tokens_details", None)
+                cache_read += getattr(ptd, "cached_tokens", 0) if ptd else 0
+                cache_write += getattr(ptd, "cache_write_tokens", 0) if ptd else 0
+                cost += getattr(usage, "cost", 0.0) or 0.0
             choice = resp.choices[0]
             fr = choice.finish_reason
             if fr == "stop":
@@ -1264,12 +1288,16 @@ class OpenRouterClient:
     def _build_messages(self, system, prompt, *, cache):
         msgs = []
         if system:
-            block = {"role": "system", "content": system}
+            sys_text_block = {"type": "text", "text": system}
             if cache:
-                # OpenRouter passes cache_control through to Anthropic
-                block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
-            msgs.append(block)
-        msgs.append({"role": "user", "content": prompt})
+                # OpenRouter passes cache_control through to Anthropic; the
+                # marker MUST be on the content-block, not the message dict.
+                sys_text_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+            msgs.append({"role": "system", "content": [sys_text_block]})
+        user_text_block = {"type": "text", "text": prompt}
+        if cache:
+            user_text_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+        msgs.append({"role": "user", "content": [user_text_block]})
         return msgs
 
     def _build_tools(self, tools: list[ToolSpec] | None):
@@ -1459,7 +1487,7 @@ async def test_embed_single():
     assert r.cost_usd > 0
 ```
 
-- [ ] **Step 2b.2: Implement** — call `sdk.embeddings.create(input=texts, model=model)`, retry on transient failures, accumulate cost from `usage.total_tokens × prices.yml input price`, debit budget via `reserve/settle`.
+- [ ] **Step 2b.2: Implement** — call `sdk.embeddings.create(input=texts, model=model)`, retry on transient failures, accumulate cost from `usage.total_tokens / 1_000_000 × price_per_million` (prices in `prices.yml` are per 1M tokens — see header comment at the top of `prices.yml`), debit budget via `reserve/settle`.
 
 - [ ] **Step 2b.3: `FakeEmbeddingClient`** — deterministic vectors derived from `hashlib.sha256(text)` so tests are stable.
 
@@ -1747,7 +1775,7 @@ async def test_per_host_throttle_caps_one_rps():
 
 - [ ] **Step 4a.6: Curated v0 YAML**
 
-`corpus/curated_v0.yml` ships ~50 hand-vetted URLs. Per spec lines 1029–1031, each row carries `submitted_by`, `reviewed_by`, `content_sha256_at_review`. Schema:
+`slopmortem/corpus/sources/curated/post_mortems_v0.yml` ships ~50 hand-vetted URLs. Per spec lines 1029–1031, each row carries `submitted_by`, `reviewed_by`, `content_sha256_at_review`. Schema:
 
 ```yaml
 - url: https://example.com/post-mortem
@@ -1858,14 +1886,63 @@ Expected: all green.
 
 **Files:**
 - Create: `slopmortem/ingest.py`
+- Create: `slopmortem/corpus/summarize.py` (`summarize_for_rerank(text, llm) -> str`, ≤400 tokens; populates `payload.summary` for `llm_rerank`)
 - Modify: `slopmortem/cli.py` (add `ingest` command; full CLI lives in Task #10)
 - Test: `tests/test_ingest_orchestration.py`
 - Test: `tests/test_ingest_idempotency.py`
 - Test: `tests/test_ingest_dry_run.py`
+- Test: `tests/corpus/test_summarize.py`
 
-**Spec refs:** §Data flow Ingest full diagram (lines 478–590), §Concurrency ingest (line 753), §Failure handling (lines 757–762).
+**Spec refs:** §Data flow Ingest full diagram (lines 478–590), §Components & file layout `summarize.py` (spec lines 369–374, 498, 948–950), §Concurrency ingest (line 753), §Failure handling (lines 757–762).
 
 ### Step-by-step
+
+- [ ] **Step 5b.0a: Failing test for `summarize_for_rerank`**
+
+```python
+import pytest
+from slopmortem.corpus.summarize import summarize_for_rerank
+
+async def test_summarize_under_400_tokens(fake_llm_returns_short):
+    long_text = "Acme failed because... " * 500
+    summary = await summarize_for_rerank(long_text, fake_llm_returns_short)
+    assert isinstance(summary, str) and summary.strip()
+    # Token-count guard — use the same tokenizer the rerank prompt assumes.
+    import tiktoken
+    enc = tiktoken.get_encoding("cl100k_base")
+    assert len(enc.encode(summary)) <= 400
+
+async def test_summarize_uses_llm_via_protocol(fake_llm):
+    summary = await summarize_for_rerank("startup body text", fake_llm)
+    assert summary  # non-empty
+```
+
+- [ ] **Step 5b.0b: Implement `slopmortem/corpus/summarize.py`**
+
+```python
+from __future__ import annotations
+from slopmortem.llm.client import LLMClient
+from slopmortem.llm.prompts import render_prompt
+
+async def summarize_for_rerank(text: str, llm: LLMClient, *, model: str | None = None) -> str:
+    """Produce a ≤400-token summary used as `payload.summary` by `llm_rerank`.
+
+    Used at ingest time, between `facet_extract` and `embed_dense`, so the
+    rerank prompt receives a small fixed-cost summary instead of the full
+    canonical body. The 400-token cap matches what `llm_rerank` budgets per
+    candidate in its system prompt.
+    """
+    prompt = render_prompt("summarize", body=text)
+    result = await llm.complete(prompt, model=model, cache=True)
+    return result.text.strip()
+```
+
+Run: `uv run pytest tests/corpus/test_summarize.py -v`
+Expected: green.
+
+- [ ] **Step 5b.0c: Wire `summarize_for_rerank` into the ingest data flow**
+
+In `slopmortem/ingest.py`, between `facet_extract` and `embed_dense` (per spec lines 369–374, 498), call `summary = await summarize_for_rerank(canonical_body, llm, model=config.model_summarize)` and assign it to `payload.summary` before the chunk-and-embed step. Both the facet call and the summarize call are part of the same fan-out batch (Step 5b.5 limiter). Add an integration test in `tests/test_ingest_orchestration.py` asserting `payload.summary` is non-empty for a fixture URL after ingest.
 
 - [ ] **Step 5b.1: Idempotency test**
 
@@ -2037,10 +2114,13 @@ async def test_llm_rerank_uses_summary_not_body(fake_llm, candidates_with_huge_b
 
 - [ ] **Step 7.4: Implement `llm_rerank`**
 
+Add `class RerankLengthError(RuntimeError): ...` to `slopmortem/errors.py`. Then:
+
 ```python
+from slopmortem.errors import RerankLengthError
 from slopmortem.models import LlmRerankResult
 
-async def llm_rerank(candidates, pitch, facets, llm, *, model=None) -> LlmRerankResult:
+async def llm_rerank(candidates, pitch, facets, llm, config, *, model=None) -> LlmRerankResult:
     prompt = render_prompt(
         "llm_rerank",
         pitch=pitch,
@@ -2058,9 +2138,17 @@ async def llm_rerank(candidates, pitch, facets, llm, *, model=None) -> LlmRerank
                             "schema": LlmRerankResult.model_json_schema(),
                             "strict": True},
         },
+        extra_body={"provider": {"require_parameters": True}},
     )
-    return LlmRerankResult.model_validate_json(result.text)
+    parsed = LlmRerankResult.model_validate_json(result.text)
+    if len(parsed.ranked) != config.N_synthesize:
+        raise RerankLengthError(
+            f"expected {config.N_synthesize}, got {len(parsed.ranked)}"
+        )
+    return parsed
 ```
+
+Add a fake-LLM test that returns `len(ranked) != N_synthesize` and asserts `RerankLengthError` is raised.
 
 - [ ] **Step 7.5: Verify**
 
@@ -2120,7 +2208,7 @@ async def test_synthesize_ignores_injected_instructions(fake_llm_replays_injecti
 
 - [ ] **Step 8.4: Implement synthesize**
 
-Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_id}">…</untrusted_document>`; pass `tools=synthesis_tools(config)`; `response_format=json_schema(Synthesis, strict=True)`; `extra_body={"provider": {"require_parameters": True}}`. Tool-loop bound at 5 turns. Tavily ≤2 calls per synthesis (track per-call).
+Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_id}">…</untrusted_document>`; pass `tools=synthesis_tools(config)`; `response_format=json_schema(Synthesis, strict=True)`; pass `extra_body={"provider": {"require_parameters": True}}` to `llm.complete(...)` (the `LLMClient.complete` Protocol exposes `extra_body` since Task 1 — Anthropic-via-OpenRouter requires this for structured output to validate; reference: `2026-04-28-openrouter-api-corrections.md` Issue 5). Tool-loop bound at 5 turns. Tavily ≤2 calls per synthesis (track per-call).
 
 After parse: filter `Synthesis.sources` against `candidate.payload.sources` hosts ∪ `{news.ycombinator.com}` ∪ Tavily-returned hosts (if Tavily was called this turn). Drop off-allowlist URLs and emit span events.
 
@@ -2132,10 +2220,12 @@ After parse: filter `Synthesis.sources` against `candidate.payload.sources` host
 
 ```python
 def test_render_strips_autolinks_and_images(syrupy_snapshot):
+    import re
     report = make_fixture_report()
     md = render(report)
-    assert "[" not in md or "](" not in md  # no clickable autolinks
-    assert "![" not in md                    # no image markdown
+    assert not re.search(r'\[[^\]]+\]\([^)]+\)', md)  # no inline links
+    assert not re.search(r'\[[^\]]+\]\[[^\]]+\]', md)  # no reference-style links
+    assert "![" not in md                              # no image markdown
     syrupy_snapshot.assert_match(structural_keys(md))
 ```
 
@@ -2150,7 +2240,7 @@ Expected: all green.
 
 ---
 
-## Task 9 (G1, folded in): Synthesis tool implementations
+## Task 9 (post-G2, before Task 8): Synthesis tool implementations
 
 **Files:**
 - Modify: `slopmortem/corpus/tools_impl.py` (replace stubs with real impls)
@@ -2231,10 +2321,12 @@ Expected: all green.
 async def test_full_pipeline_with_fake_clients(fake_llm, fake_embed, fixture_corpus, syrupy_snapshot):
     from slopmortem.pipeline import run_query
     from slopmortem.models import InputContext
+    from slopmortem.budget import Budget
 
     report = await run_query(
         InputContext(name="MedScribe AI", description="...", years_filter=5),
         llm=fake_llm, embedder=fake_embed, corpus=fixture_corpus, config=test_config,
+        budget=Budget(cap_usd=1.0),
     )
     assert len(report.candidates) == 5
     assert report.pipeline_meta.cost_usd_total > 0
@@ -2247,6 +2339,7 @@ async def test_full_pipeline_with_fake_clients(fake_llm, fake_embed, fixture_cor
 from __future__ import annotations
 import asyncio
 import time
+from slopmortem.budget import BudgetExceeded
 from slopmortem.models import InputContext, Report, PipelineMeta
 from slopmortem.stages.facet_extract import extract_facets
 from slopmortem.stages.retrieve import retrieve
@@ -2255,27 +2348,34 @@ from slopmortem.stages.synthesize import synthesize_all
 
 async def run_query(input_ctx: InputContext, *, llm, embedder, corpus, config, budget) -> Report:
     t0 = time.monotonic()
-    # 1: facets
-    facets = await extract_facets(input_ctx.description, llm, model=config.model_facet)
-    # 2: embed (parallel)
-    dense_task = embedder.embed([input_ctx.description])
-    sparse_task = asyncio.to_thread(_sparse_embed_sync, input_ctx.description)
-    dense, sparse = await asyncio.gather(dense_task, sparse_task)
-    # 3: retrieve
-    candidates = await corpus.query(
-        dense=dense.vectors[0], sparse=sparse, facets=facets,
-        years_filter=input_ctx.years_filter, strict_deaths=config.strict_deaths,
-        k_retrieve=config.K_retrieve,
-    )
-    # 4: rerank
-    reranked = await llm_rerank(candidates, input_ctx.description, facets, llm,
-                                model=config.model_rerank)
-    # 5: synthesize fan-out (cache-warm + return_exceptions=True per Blocker B2)
-    top_n = _join_to_candidates(candidates, reranked.ranked)
-    synth_results = await synthesize_all(top_n, input_ctx, llm,
-                                          model=config.model_synthesize,
-                                          n=config.N_synthesize)
-    successes = [s for s in synth_results if not isinstance(s, Exception)]
+    successes: list = []
+    budget_exceeded = False
+    try:
+        # 1: facets
+        facets = await extract_facets(input_ctx.description, llm, model=config.model_facet)
+        # 2: embed (parallel)
+        dense_task = embedder.embed([input_ctx.description])
+        sparse_task = asyncio.to_thread(_sparse_embed_sync, input_ctx.description)
+        dense, sparse = await asyncio.gather(dense_task, sparse_task)
+        # 3: retrieve
+        candidates = await corpus.query(
+            dense=dense.vectors[0], sparse=sparse, facets=facets,
+            years_filter=input_ctx.years_filter, strict_deaths=config.strict_deaths,
+            k_retrieve=config.K_retrieve,
+        )
+        # 4: rerank
+        reranked = await llm_rerank(candidates, input_ctx.description, facets, llm,
+                                    model=config.model_rerank)
+        # 5: synthesize fan-out (cache-warm + return_exceptions=True per Blocker B2)
+        top_n = _join_to_candidates(candidates, reranked.ranked)
+        synth_results = await synthesize_all(top_n, input_ctx, llm,
+                                              model=config.model_synthesize,
+                                              n=config.N_synthesize)
+        successes = [s for s in synth_results if not isinstance(s, Exception)]
+    except BudgetExceeded:
+        # Render whatever stages completed; the renderer surfaces
+        # `budget_exceeded` in the footer (spec line 895).
+        budget_exceeded = True
     return Report(
         input=input_ctx,
         generated_at=datetime.now(UTC),
@@ -2287,7 +2387,7 @@ async def run_query(input_ctx: InputContext, *, llm, embedder, corpus, config, b
             latency_ms_total=int((time.monotonic() - t0) * 1000),
             trace_id=current_trace_id(),
             budget_remaining_usd=budget.remaining,
-            budget_exceeded=False,
+            budget_exceeded=budget_exceeded,
         ),
     )
 ```
@@ -2398,6 +2498,8 @@ def lifespan_months_positive(synthesis) -> bool:
 
 Loads dataset, runs `pipeline.run_query` per row, applies assertions, prints per-item results, exits non-zero if regression vs baseline (or any assertion fails on a row that previously passed).
 
+**LLM isolation:** the runner defaults to `FakeLLMClient` + `FakeEmbeddingClient` populated from cassettes under `tests/fixtures/cassettes/evals/`. Live API calls are gated behind a `--live` flag (or `RUN_LIVE=1` env var); both must be set explicitly to spend real budget. The `--record` flag (paired with `--live`) re-records cassettes; `make eval-record` is the recording entry point. Default `make eval` is deterministic and free.
+
 - [ ] **Step 11.3: Seed dataset**
 
 Ten diverse `InputContext` lines covering different sectors / business models / years filters.
@@ -2417,7 +2519,7 @@ def test_runner_exits_nonzero_on_regression(tmp_path, monkeypatch):
 - [ ] **Step 11.5: Verify**
 
 Run: `make eval`
-Expected: prints per-item pass/fail, exits 0 against baseline.
+Expected: prints per-item pass/fail (cassette-driven, no live API spend), exits 0 against baseline. To re-record cassettes against live OpenRouter, run `make eval-record`.
 
 ---
 
