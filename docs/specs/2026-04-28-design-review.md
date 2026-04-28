@@ -33,26 +33,25 @@ Dimensions: API correctness, Security, Concurrency, Data integrity, Cost model, 
 16. Platform blocklist missing LinkedIn / X / Hashnode / Mirror / Beehiiv (Entity F3)
 17. Alias graph causes duplicate retrieval output (Entity F6)
 18. Recency filter zero-recalls undated startups (Retrieval F6)
-19. Quote at line 206 ("Grammars apply only to Claude's direct output…") not found in Anthropic docs (API #3)
-20. `socket.gethostbyname` IPv4-only + TOCTOU (Security F4)
+19. `socket.gethostbyname` IPv4-only + TOCTOU (Security F4)
 
 ### MED — design adjustments
 
-21. `Range` IS exported in qdrant-client (API #9)
-22. Cost arithmetic errors (Cost: line 707 $2.25 → $1.13; line 690 $0.0001 → ~$0; raise budget to $2/query)
-23. Skip key missing `chunk_strategy_version` and `taxonomy_version` (Data integrity H4, M1)
-24. `canonical/<text_id>.md` has no front-matter (Data integrity H5)
-25. Unbounded synthesis fan-out — ship `CapacityLimiter` by default (Concurrency #3)
-26. Orphaned Message Batch on Ctrl-C (Concurrency #6/#9)
-27. Curated YAML drift only warns, doesn't quarantine (Security F10)
-28. Span-event vocabulary scattered, no registry (Observability #7)
-29. Mixed structured-outputs API forms (API #2)
-30. `SourceAdapter` Protocol too vacuous; split Source vs Enricher (Architecture #10)
-31. Stage progress on stdout breaks shell pipelines (Observability #8)
-32. Task #4b (300–500-URL hand curation) blocks production utility (Architecture #9)
-33. Tool implementation race; fold Task #9 into G1 (Architecture #4)
-34. OWASP LLM Top-10 gaps: LLM07, LLM08, LLM10 (Security F9)
-35. `reliability_rank_version` forces full re-merge unnecessarily (Architecture #11)
+20. `Range` IS exported in qdrant-client (API #9)
+21. Cost arithmetic errors (Cost: line 690 $0.0001 → ~$0; raise budget to $2/query)
+22. Skip key missing `chunk_strategy_version` and `taxonomy_version` (Data integrity H4, M1)
+23. `canonical/<text_id>.md` has no front-matter (Data integrity H5)
+24. Unbounded synthesis fan-out — ship `CapacityLimiter` by default (Concurrency #3)
+25. Orphaned Message Batch on Ctrl-C (Concurrency #6/#9)
+26. Curated YAML drift only warns, doesn't quarantine (Security F10)
+27. Span-event vocabulary scattered, no registry (Observability #7)
+28. Mixed structured-outputs API forms (API #2)
+29. `SourceAdapter` Protocol too vacuous; split Source vs Enricher (Architecture #10)
+30. Stage progress on stdout breaks shell pipelines (Observability #8)
+31. Task #4b (300–500-URL hand curation) blocks production utility (Architecture #9)
+32. Tool implementation race; fold Task #9 into G1 (Architecture #4)
+33. OWASP LLM Top-10 gaps: LLM07, LLM08, LLM10 (Security F9)
+34. `reliability_rank_version` forces full re-merge unnecessarily (Architecture #11)
 
 ### LOW — polish
 
@@ -76,23 +75,22 @@ The spec is internally consistent and unusually explicit, but has three classes 
 
 1. **CONFIRMED [LOW]** lines 206, 224, 612–615, 692: `output_config={"format":{"type":"json_schema","schema":...}}` is real and GA.
 2. **MISLEADING [MED]** line 224, 559–560: spec mixes `output_config={...}` and `messages.parse(output_format=Pydantic)`. Pick one.
-3. **WRONG [HIGH]** line 206: Quoted text "Grammars apply only to Claude's direct output…" — **not found verbatim in current Anthropic docs**. Fabricated or stale citation.
-4. **CONFIRMED [LOW]** line 206: 24 optional / 16 union-typed cap is real.
-5. **MISLEADING [MED]** lines 203, 205, 864: `cache_control={"type":"ephemeral","ttl":"1h"}` syntax supported, but March 2026 dev.to article documents Anthropic silently changing default TTL from 1h to 5m.
-6. **CONFIRMED [LOW]** lines 203, 603, 668: `usage.cache_read_input_tokens`, `usage.cache_creation_input_tokens`, `stop_reason` values incl. `"refusal"` are real.
-7. **CONFIRMED [LOW]** lines 204, 864: Message Batches API real, 50% discount correct.
-8. **CONFIRMED [LOW]** lines 215, 488–514: Qdrant `FormulaQuery`/`SumExpression`/`MultExpression`/`FilterCondition`/`$score`/nested `Prefetch`+`FusionQuery(fusion=Fusion.RRF)` all exist in qdrant-client ≥1.14.
-9. **WRONG [HIGH]** lines 518, 521: spec claims "qdrant-client has no top-level Or/And/Range/IsNull classes." `Range` IS exported (`from qdrant_client.models import Range`); the distinction the spec wants is `Range` (numeric) vs `DatetimeRange`.
-10. **CONFIRMED [LOW]** line 524: `IsNullCondition(is_null=PayloadField(key=...))` and qdrant#5148 real.
-11. **CONFIRMED [LOW]** lines 214, 332: fastembed BM25 `Modifier.IDF` requirement documented.
-12. **DOUBTFUL [MED]** lines 213, 813: claim that `text-embedding-3-small` is "asymmetric-trained for retrieval" is not in OpenAI's docs. Load-bearing rationale for skipping HyDE — verify.
-13. **CONFIRMED [LOW]** line 715: text-embedding-3-small at $0.02/M tokens, 1536 dims correct.
-14. **CONFIRMED [LOW]** lines 166–167, 325, 759: Tavily Python SDK real (v0.7.23).
-15. **CONFIRMED [LOW]** lines 173, 366, 673: Laminar Python SDK real.
-16. **CONFIRMED [LOW]** lines 241, 803, 863: trafilatura, jsonref, pytest-recording, tldextract all real.
-17. **MISLEADING [LOW]** line 206: synthesis tool-use loop combined with structured outputs has community evidence (anthropic-sdk-python issue #1204) of edge cases. Worth a defensive test.
+3. **CONFIRMED [LOW]** line 206: 24 optional / 16 union-typed cap is real.
+4. **MISLEADING [MED]** lines 203, 205, 864: `cache_control={"type":"ephemeral","ttl":"1h"}` syntax supported, but March 2026 dev.to article documents Anthropic silently changing default TTL from 1h to 5m.
+5. **CONFIRMED [LOW]** lines 203, 603, 668: `usage.cache_read_input_tokens`, `usage.cache_creation_input_tokens`, `stop_reason` values incl. `"refusal"` are real.
+6. **CONFIRMED [LOW]** lines 204, 864: Message Batches API real, 50% discount correct.
+7. **CONFIRMED [LOW]** lines 215, 488–514: Qdrant `FormulaQuery`/`SumExpression`/`MultExpression`/`FilterCondition`/`$score`/nested `Prefetch`+`FusionQuery(fusion=Fusion.RRF)` all exist in qdrant-client ≥1.14.
+8. **WRONG [HIGH]** lines 518, 521: spec claims "qdrant-client has no top-level Or/And/Range/IsNull classes." `Range` IS exported (`from qdrant_client.models import Range`); the distinction the spec wants is `Range` (numeric) vs `DatetimeRange`.
+9. **CONFIRMED [LOW]** line 524: `IsNullCondition(is_null=PayloadField(key=...))` and qdrant#5148 real.
+10. **CONFIRMED [LOW]** lines 214, 332: fastembed BM25 `Modifier.IDF` requirement documented.
+11. **DOUBTFUL [MED]** lines 213, 813: claim that `text-embedding-3-small` is "asymmetric-trained for retrieval" is not in OpenAI's docs. Load-bearing rationale for skipping HyDE — verify.
+12. **CONFIRMED [LOW]** line 715: text-embedding-3-small at $0.02/M tokens, 1536 dims correct.
+13. **CONFIRMED [LOW]** lines 166–167, 325, 759: Tavily Python SDK real (v0.7.23).
+14. **CONFIRMED [LOW]** lines 173, 366, 673: Laminar Python SDK real.
+15. **CONFIRMED [LOW]** lines 241, 803, 863: trafilatura, jsonref, pytest-recording, tldextract all real.
+16. **MISLEADING [LOW]** line 206: synthesis tool-use loop combined with structured outputs has community evidence (anthropic-sdk-python issue #1204) of edge cases. Worth a defensive test.
 
-**Top 5:** (1) remove fabricated Anthropic quote at line 206; (2) fix false "no top-level Range class" claim at lines 518/521; (3) verify `text-embedding-3-small` "asymmetric-trained" claim before using it as HyDE rationale; (4) pick one structured-outputs API form; (5) add unit assertion that `cache_creation_input_tokens > 0` on first call and `cache_read_input_tokens > 0` on second.
+**Top 5:** (1) fix false "no top-level Range class" claim at lines 518/521; (2) verify `text-embedding-3-small` "asymmetric-trained" claim before using it as HyDE rationale; (3) pick one structured-outputs API form; (4) add unit assertion that `cache_creation_input_tokens > 0` on first call and `cache_read_input_tokens > 0` on second.
 
 ---
 
@@ -192,8 +190,6 @@ The spec is internally consistent and unusually explicit, but has three classes 
 
 Pricing baseline (Jan 2026): Sonnet 4.5 = $3/$15, Haiku 4.5 = $1/$5, cache-read = 10%, cache-write = 1.25×/2×, text-embedding-3-small = $0.02/M, batch = 50% off, `input_tokens` excludes cache tokens.
 
-**[HIGH] Line 707 — facet_extract ingest math is 2× overstated.** Claim: 500 × Haiku (1.5K in + 1.5K out, batched) ≈ $2.25. Actual: ($1×0.5/M)(1.5K) + ($5×0.5/M)(1.5K) = $0.00225/call × 500 = **$1.125**. Spec is 2× too high (forgot batch discount on this row only — line 708 summarize correctly applies it).
-
 **[HIGH] Line 690 — query embedding cost ~25× overstated.** Claim: ~$0.0001. Actual: 200-token query × $0.02/M = **$0.000004**. Negligible either way.
 
 **[HIGH] Line 693 — synthesize × 5 calculation is under-justified.** Per-call: 3K cache-read ($0.0009) + ~17K uncached input ($0.051) + 1.5K output ($0.0225) ≈ $0.0744; first call writes (3K @ 1.25× = $0.011) instead of reading: $0.085. Total: $0.085 + 4×$0.0744 = **$0.383**. Spec says $0.45–0.55 (implicitly accounts for tool-use turns but not stated). **Fix:** state "includes 2–3 tool-use turns/call adding ~15–20% input replay" or revise to **~$0.38–0.50**.
@@ -206,13 +202,9 @@ Pricing baseline (Jan 2026): Sonnet 4.5 = $3/$15, Haiku 4.5 = $1/$5, cache-read 
 
 **[MED] Line 668 — verify `usage.input_tokens` semantics.** Per Anthropic SDK 2025+ docs, `input_tokens` excludes both cache fields. Spec's cost formula is correct *only* under that semantics. Add a comment asserting this.
 
-**[LOW] Line 712 — total ingest $5.00 doesn't reconcile.** $1.13 + $1.00 + $0.04 + 50% re-merge ($1.085) = **~$3.26**. Spec's $5.00 is 53% over.
-
-**Top 5:** (1) line 707 fix $2.25 → ~$1.13; (2) line 690 fix to ~$0; (3) line 693/698 justify or revise synthesize × 5; (4) line 700 raise budget to $2.00; (5) line 668 add note that `input_tokens` excludes cache fields.
+**Top 4:** (1) line 690 fix to ~$0; (2) line 693/698 justify or revise synthesize × 5; (3) line 700 raise budget to $2.00; (4) line 668 add note that `input_tokens` excludes cache fields.
 
 **Rebuilt per-query table:** facet ~$0.001; query embedding ~$0.000004; rerank ~$0.046; synth × 5 ~$0.38–0.50 (with tool replay ~$0.45–0.55); total default **$0.43–0.55**, with Tavily **$0.55–0.75**; cache savings ~$0.02–0.04; budget **$2.00**.
-
-**Rebuilt per-ingest table:** facet (batched) ~$1.13; summarize (batched) ~$1.00; dense embed ~$0.04; sparse 0; re-merge +30–50% ~$0.65–1.10; total **~$3.00–3.50**; budget $10 (3× headroom).
 
 ---
 
