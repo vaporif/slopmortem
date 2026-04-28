@@ -1,0 +1,80 @@
+# Top-level keys are SINGULAR and one-for-one with the Facets Pydantic
+# field names (see slopmortem/models.py), the Qdrant payload keys
+# (`facets.<name>` at write time), and the FormulaQuery iteration variable
+# (`for name, val in query_facets.items()` reads these exact keys). Plural
+# keys would silently break the boost — the read site iterates `Facets`
+# field names.
+sector:
+  - fintech
+  - healthtech
+  - edtech
+  - climate_energy
+  - biotech
+  - devtools
+  - infra_devops
+  - ai_ml_platform
+  - data_analytics
+  - security
+  - hardware
+  - robotics
+  - logistics_supply_chain
+  - mobility_transport
+  - real_estate_proptech
+  - retail_ecommerce
+  - food_beverage
+  - media_content
+  - gaming
+  - social_communication
+  - hr_recruiting
+  - legal_compliance
+  - marketing_adtech
+  - other
+
+business_model:
+  - b2b_saas
+  - b2c_subscription
+  - b2c_marketplace
+  - b2b_marketplace
+  - b2c_ecommerce
+  - hardware_one_time
+  - hardware_with_service
+  - api_usage_based
+  - ad_supported
+  - transaction_fee
+  - prosumer_freemium
+  - services_consulting
+  - other
+
+customer_type:
+  - smb
+  - mid_market
+  - enterprise
+  - prosumer
+  - consumer
+  - developer
+  - government_public_sector
+  - non_profit
+  - other
+
+geography:
+  - us
+  - eu
+  - uk
+  - canada
+  - latam
+  - apac
+  - india
+  - middle_east_africa
+  - global
+  - other
+
+monetization:
+  - subscription_recurring
+  - usage_metered
+  - transaction_fee
+  - one_time_purchase
+  - tiered_freemium
+  - ad_revenue
+  - data_licensing
+  - services_layer
+  - other
