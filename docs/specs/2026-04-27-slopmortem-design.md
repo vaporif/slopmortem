@@ -313,8 +313,14 @@ slopmortem/
                            #   bounded asyncio.gather for ingest fan-out (CapacityLimiter from
                            #   config.ingest_concurrency, default 20)
     embedding_client.py    # EmbeddingClient Protocol + OpenAIEmbeddingClient + FakeEmbeddingClient
-    tools.py               # ToolSpec(fn, args_model: type[BaseModel], result_wrapper) +
-                           #   SYNTHESIS_TOOLS registry constant +
+    tools.py               # synthesis_tools(config: Config) -> list[ToolSpec] factory
+                           #   (always includes get_post_mortem and search_corpus;
+                           #   appends tavily_search/tavily_extract iff
+                           #   config.enable_tavily_synthesis — config-aware
+                           #   composition is why this is a factory, not a constant).
+                           #   ToolSpec itself is declared in slopmortem/models.py
+                           #   (single home — see models.py inventory below) and
+                           #   imported here.
                            #   to_openai_input_schema(args_model) -> dict:
                            #     model_json_schema() → jsonref.replace_refs(proxies=False,
                            #     lazy_load=False) → pop {$schema, $defs, $id};
@@ -365,8 +371,11 @@ slopmortem/
                            #   shared rubric block
     store.py               # Corpus protocol + QdrantCorpus impl (service mode) + on-disk reader/writer
     entity_resolution.py   # canonical_id derivation:
-                           #   tier 1: (registrable_domain, founding_year//5) with platform blocklist;
-                           #          falls through when founding_year is None
+                           #   tier 1: registrable_domain only (founding_year stored
+                           #          as attribute, not key); platform blocklist applies.
+                           #          Recycled-domain detection uses the founding-year
+                           #          delta heuristic against the deterministic
+                           #          (registrable_domain, content_sha256) cache.
                            #   tier 2: normalized name + sector
                            #   tier 3: embedding fuzzy + Haiku tiebreaker (cached per pair)
                            #   reliability_rank_version field allows re-merge when ranks change
@@ -428,6 +437,15 @@ slopmortem/
                            #     openrouter_base_url ("https://openrouter.ai/api/v1"),
                            #     embedding_provider, retry_max_attempts, retry_initial_backoff,
                            #     max_cost_usd_per_query (2.00), max_cost_usd_per_ingest (15.00),
+                           #     slop_threshold (0.7) — Binoculars score above which docs route to
+                           #         quarantine_journal instead of the main merge journal,
+                           #     max_doc_tokens (50000) — per-doc inline cap before synthesis;
+                           #         token-counted via the active model's tokenizer and
+                           #         hard-truncated before the <untrusted_document> wrap,
+                           #     tier3_calibration_band ((0.65, 0.85)) — fuzzy-embedding
+                           #         similarity range that flags a tier-3 pair into the
+                           #         pending_review queue alongside the auto-applied
+                           #         Haiku tiebreaker decision,
                            #     feature flags: enable_tavily_enrich, enable_tavily_synthesis,
                            #     enable_wayback, enable_crunchbase, enable_tracing, strict_deaths
                            #   Invariant: K_retrieve >= N_synthesize. A committed
@@ -468,9 +486,11 @@ slop_classify(markdown_text)                         → slop_score ∈ [0,1]
   (Binoculars zero-shot detector; threshold ~0.7 default,
    tuned at model's published ~1-2% FPR operating point)
   if slop_score > config.slop_threshold:
-    write to quarantine/<text_id>.md
-    merge_state="quarantined" in journal — NOT embedded
-    skip rest of pipeline; --reclassify can revive on threshold change
+    write to quarantine/<content_sha256>.md
+    write a row in quarantine_journal keyed on (content_sha256, source, source_id);
+    no merge_state column on that row — quarantined docs have no canonical_id
+    and cannot live in the main merge journal
+    NOT embedded into Qdrant; skip rest of pipeline; --reclassify can revive on threshold change
   curated YAML entries bypass slop_classify and tag provenance="curated_real"
 facet_extract(markdown_text, llm=haiku)              → Facets
                                                        (includes founding_year: int|None
@@ -522,9 +542,21 @@ if create:
   combined_text = markdown_text                   # only one section so far
   qdrant payload built from this single section
   for chunk in chunks:
-    qdrant.upsert(point: vectors + payload{canonical_id, chunk_idx, summary,
-                                          facets, founding_date, failure_date,
+    qdrant.upsert(point: vectors + payload{canonical_id, chunk_idx, name, summary,
+                                          body, facets,
+                                          founding_date, failure_date,
+                                          founding_date_unknown, failure_date_unknown,
+                                          provenance, slop_score,
                                           sources, text_id})
+    # `*_unknown` booleans are derived at ingest from None dates and are
+    # required by the recency filter at the read site (avoids the
+    # pathological "both unknown" branch firing on every doc and
+    # silently dropping recall).
+    # `name`, `provenance`, `slop_score`, `body` are referenced by the
+    # alias-graph dedupe, the curated-real provenance tag, the slop
+    # filter audit trail, and the synthesis stage's @observe redaction
+    # respectively — enumerated here so the write contract matches the
+    # read sites.
 if merge:
   load all existing raw/<other_source>/<text_id>.md sections for this canonical_id
   combined_text = deterministic_merge(existing_raw_sections + new_section,
@@ -679,7 +711,13 @@ synthesize_all(top_n, query_ctx, llm=sonnet, tools=synthesis_tools(config))
   → for each candidate: load body from disk, INLINE into prompt
                         wrap in <untrusted_document> tags + system instruction
   → cache-warm: first synthesize call runs alone; once it returns, the
-    remaining N-1 calls launch via asyncio.gather.
+    remaining N-1 calls launch via asyncio.gather(..., return_exceptions=True).
+    return_exceptions is required — a bare gather propagates the first
+    exception and cancels in-flight siblings, which would silently destroy
+    the per-candidate failure-tolerance promised in §Failure handling
+    ("that candidate drops from rerank/synthesis with a logged warning").
+    The reporting path filters exception entries out of the list, logs each
+    with its candidate_id, and notes the gap on Report.candidates.
     System block carries cache_control={"type":"ephemeral"}; warming ensures
     the parallel calls hit the populated cache rather than racing to write it.
   → tools = [get_post_mortem, search_corpus]
@@ -735,13 +773,23 @@ class PerspectiveScore(BaseModel):
     score: float                     # 0–10
     rationale: str                   # one line
 
+class SimilarityScores(BaseModel):
+    # Closed object — strict structured-output mode rejects open
+    # additionalProperties (Pydantic emits dict[str, X] as
+    # {"type":"object","additionalProperties":{...}}), so the four
+    # perspective keys are named explicitly here.
+    business_model: PerspectiveScore
+    market: PerspectiveScore
+    gtm: PerspectiveScore
+    stage_scale: PerspectiveScore
+
 class Synthesis(BaseModel):
     candidate_id: str
     name: str
     one_liner: str                   # what they did, ≤25 words
     failure_date: date | None
     lifespan_months: int | None
-    similarity: dict[str, PerspectiveScore]   # keys: business_model, market, gtm, stage_scale
+    similarity: SimilarityScores
     why_similar: str                 # 2–4 sentences, references specific facets
     where_diverged: str              # 1–3 sentences (anti-cheerleading guard)
     failure_causes: list[str]        # short bullets from post-mortem
@@ -758,7 +806,72 @@ class Synthesis(BaseModel):
                                      # plain text the user must copy. Dropped URLs emit a span
                                      # event; remaining list is what renders into the report.
 
+# Facets — closed-enum facet bundle. Field names are singular and match the
+# Qdrant payload keys (`facets.<name>` in the FormulaQuery iteration) and
+# the taxonomy.yml top-level keys (see §Appendix A) one-for-one. The closed
+# enums each carry an explicit "other" value so the LLM never has to lie.
+# Free-form fields (sub_sector, product_type, price_point) are open strings.
+# `founding_year` / `failure_year` are LLM-extracted ints; missing values are
+# `None` and the corresponding `*_date_unknown` boolean is set on the Qdrant
+# payload at write time.
+class Facets(BaseModel):
+    sector: str                      # taxonomy.yml `sector` enum value, incl. "other"
+    business_model: str              # taxonomy.yml `business_model` enum value
+    customer_type: str               # taxonomy.yml `customer_type` enum value
+    geography: str                   # taxonomy.yml `geography` enum value
+    monetization: str                # taxonomy.yml `monetization` enum value
+    sub_sector: str | None = None    # free-form
+    product_type: str | None = None  # free-form
+    price_point: str | None = None   # free-form
+    founding_year: int | None = None
+    failure_year: int | None = None
+
+# Pipeline-internal candidate type — what retrieve→collapse_to_parents emits
+# and what llm_rerank / synthesize consume. Not a structured-output schema;
+# does NOT need to be strict-mode compatible. The `payload` sub-object
+# mirrors the Qdrant payload literal at the ingest write site (see §Data
+# flow Ingest, the `qdrant.upsert(payload{...})` line) one-for-one — read
+# sites and the write contract must agree.
+class CandidatePayload(BaseModel):
+    name: str
+    summary: str                     # ≤400 tokens (used by llm_rerank)
+    body: str                        # full canonical/<text_id>.md text;
+                                     #   redacted from @observe inputs (see §Tracing)
+    facets: Facets
+    founding_date: date | None
+    failure_date: date | None
+    founding_date_unknown: bool
+    failure_date_unknown: bool
+    provenance: Literal["curated_real", "scraped"]
+    slop_score: float                # Binoculars score in [0, 1]
+    sources: list[str]               # source URLs from each contributing section
+    text_id: str                     # sha256(canonical_id)[:16]
+
+class Candidate(BaseModel):
+    canonical_id: str
+    score: float                     # RRF-fused + facet boost from FormulaQuery
+    payload: CandidatePayload
+    alias_canonicals: list[str] = [] # other canonical_ids in the same alias-graph
+                                     #   connected component (M&A / rebrand / pivot);
+                                     #   the highest-scoring component member is kept
+                                     #   as the candidate, the rest ride along here
+                                     #   for provenance.
+
+# What the user gives us — read by the query path, the eval runner, and replay.
+class InputContext(BaseModel):
+    name: str                        # startup name (free-form)
+    description: str                 # the pitch / description text
+    years_filter: int | None = None  # recency window in years; None = no recency cap
+
 # Result type for the llm_rerank stage; serves as response_format.json_schema.
+# Minimal shape — does NOT embed the full Candidate. The harness rejoins each
+# entry to the K_retrieve list by `candidate_id` after the call. Embedding the
+# full Candidate risks the model re-emitting fields and silently drifting them.
+class ScoredCandidate(BaseModel):
+    candidate_id: str                # joins back to Candidate.canonical_id
+    perspective_scores: SimilarityScores
+    rationale: str                   # one-line rationale (per-candidate)
+
 class LlmRerankResult(BaseModel):
     ranked: list[ScoredCandidate]    # length == N_synthesize.
                                      # Ordering is the rerank model's own judgment, not a formula:
@@ -788,7 +901,7 @@ Rendered to stdout as a markdown report with one section per candidate, includin
 Laminar wraps the entire system. Initialization is a no-op when env vars are unset, so the pipeline runs identically without it. `tracing.py` parses `LMNR_BASE_URL` with `urllib.parse`, resolves the host via `socket.getaddrinfo(host, None)` (IPv4 + IPv6; `gethostbyname` is IPv4-only and would let an AAAA-only `::1` slip past while an A record sits alongside), and requires **all** resolved addresses to satisfy `ipaddress.ip_address(...).is_loopback` (covers `127.0.0.0/8`, `::1`, and IPv4-mapped variants) OR be an exact match for a configured private host. **String-prefix checks are not used** — `http://localhost.attacker.com` would defeat them via DNS rebinding. The resolved IP is pinned into the URL passed to `Laminar.init` via the same custom httpx resolver used by `slopmortem/http.py:safe_get` so the SDK's connection pool bypasses further DNS lookups (closes the TOCTOU rebind window — for HTTPS this requires explicit SNI override since IP-form URLs fail standard hostname verification, handled in the resolver). Remote URLs require `LMNR_ALLOW_REMOTE=1` and emit a startup banner.
 
 - One trace per CLI invocation (`slopmortem.query` or `slopmortem.ingest`).
-- Stage functions decorated with `@observe(name="stage.<name>")`. Pydantic input/output is captured automatically — but the **synthesize stage** uses `@observe(name="stage.synthesize", ignore_inputs=["candidate.payload.body"])` because `Candidate.payload.body` contains the full corpus body. Auto-capture without this would exfiltrate `<untrusted_document>`-wrapped corpus text to remote tracing under `LMNR_ALLOW_REMOTE=1`. A regression test asserts no `<untrusted_document>` payload reaches the Laminar exporter, including via tool-result re-injection (which becomes the *next* span's input).
+- Stage functions decorated with `@observe(name="stage.<name>")`. Pydantic input/output is captured automatically — but the **synthesize stage** uses `@observe(name="stage.synthesize", ignore_inputs=["candidate"])` because `Candidate.payload.body` contains the full corpus body. `ignore_inputs` matches top-level parameter names only (verified against `lmnr-python`'s `get_input_from_func_args` — dotted paths like `"candidate.payload.body"` never match because the filter is `k in ignore_inputs` against `inspect.signature(func).parameters.keys()`), so the entire `candidate` argument is dropped and a redacted projection (`candidate_id`, `name`, `facets`, dates, `provenance`, `slop_score` — never `body`) is re-attached inside the function via `Laminar.set_span_attributes({"candidate_meta": …})`. Auto-capture without this would exfiltrate `<untrusted_document>`-wrapped corpus text to remote tracing under `LMNR_ALLOW_REMOTE=1`. A regression test asserts no body strings appear in the Laminar exporter output (asserting against the exporter, not just that `@observe` was called), including via tool-result re-injection (which becomes the *next* span's input).
 - `LLMClient.complete()` opens a manual span per SDK call; attributes include model, latency, retry count, `prompt_template_sha` (hash of the .j2 template — supports filter "all runs with prompt v3 of facet_extract"), `prompt_rendered_sha` (hash of the rendered prompt — catches accidental input contamination of the system block, since changes there break cache silently), and the full token breakdown — `prompt_tokens`, `completion_tokens`, `cache_read_tokens`, `cache_creation_tokens` (the latter two extracted from OpenRouter's usage extension into `CompletionResult` and surfaced onto the span) — plus a derived `cost_usd` computed from `slopmortem/llm/prices.yml` (the single source of truth for per-model pricing; bumping a vendor price is a one-line edit there). Cache hit rate is graphable directly from `cache_read_tokens / (cache_read_tokens + cache_creation_tokens)` without extra instrumentation.
 - `EmbeddingClient.embed()` opens a span: model, n_tokens, cost_usd, latency, retry count.
 - `Corpus.query()` opens a span attaching the filter and the (id, score) pairs of returned candidates.
@@ -878,7 +991,7 @@ v1 ships the OWASP / Anthropic / AWS baseline. The CLI has no private data and n
 - Tavily synthesis tool is OFF by default. Opt-in via `--tavily-synthesis` flag (CLI surface; `config.enable_tavily_synthesis` is the single config key the flag toggles), gated by an explicit warning that the synthesis stage can now make outbound calls to LLM-chosen URLs.
 
 **Tool surface**
-- The synthesis stage's `tools=[...]` list is constructed in code from a constant `SYNTHESIS_TOOLS` registry (`get_post_mortem`, `search_corpus`, plus `tavily_search`/`tavily_extract` only if `enable_tavily_synthesis`). The list passed to `chat.completions.create` is the enforcement boundary — there is no separate allowlist to drift from the tool registration. The model cannot call a tool that wasn't passed.
+- The synthesis stage's `tools=[...]` list is constructed in code from a `synthesis_tools(config: Config) -> list[ToolSpec]` factory (`get_post_mortem`, `search_corpus`, plus `tavily_search`/`tavily_extract` only if `config.enable_tavily_synthesis`). It must be a factory — not a module-level constant — because the Tavily tools' inclusion is config-driven and cannot be resolved at import time. The list passed to `chat.completions.create` is the enforcement boundary — there is no separate allowlist to drift from the tool registration. The model cannot call a tool that wasn't passed.
 - **Runtime sanity assertion**: when the SDK returns a `tool_calls` array, `LLMClient` asserts each call's `function.name` matches a tool in the registered set before invoking. A mismatch (which would indicate an SDK bug or schema corruption) emits `tool_allowlist_violation` and aborts the call. Cheap but catches anything weird.
 - Tool functions themselves are pure: they read Qdrant, read `data/post_mortems/`, or call Tavily's HTTP API. No filesystem writes, no shell-out, no exec — enforced by tool functions taking only typed Pydantic args and returning a `ToolResult` dataclass. A test asserts the synthesis tool registry contains no functions that import `subprocess`, `os.system`, or `shutil` write paths.
 - Tavily-enrichment at ingest (separate `--tavily-enrich` flag) runs as a non-tool-using fetch step; the LLM never has Tavily available unless `--tavily-synthesis` is set.
@@ -980,7 +1093,7 @@ These items are spec-described and tracked but explicitly out of v1 scope. The v
 
 The work decomposes into independent tasks with clear file ownership, but parallelization needs **two** contract gates rather than one:
 
-- **Gate 1 (foundation)**: Pydantic models, `LLMClient` Protocol, `EmbeddingClient` Protocol, `ToolSpec` + `SYNTHESIS_TOOLS` registry, `Corpus` Protocol, **synthesis tool signatures** (`get_post_mortem`, `search_corpus` — Pydantic arg models + return shapes, so synthesize and the tool implementations agree), `MergeState`, `safe_path`, `Budget`, tracing init. Without these pinned, parallel implementers will invent incompatible types.
+- **Gate 1 (foundation)**: Pydantic models, `LLMClient` Protocol, `EmbeddingClient` Protocol, `ToolSpec` (declared in `models.py`) + `synthesis_tools(config)` factory (in `slopmortem/llm/tools.py`), `Corpus` Protocol, **synthesis tool signatures** (`get_post_mortem`, `search_corpus` — Pydantic arg models + return shapes, so synthesize and the tool implementations agree), `MergeState`, `safe_path`, `Budget`, tracing init. Without these pinned, parallel implementers will invent incompatible types.
 
 - **Gate 2 (prompt + taxonomy contracts)**: After Task #0 (prompt skeletons + their JSON output schemas) and the taxonomy YAML are committed, prompt-driven stages (#6/#7/#8) can proceed in parallel. Without this gate, three implementers each invent incompatible Pydantic outputs.
 
@@ -1019,7 +1132,12 @@ Writing-plans may further split or merge these. Final structure decided in the p
 `slopmortem/corpus/taxonomy.yml`. Closed enums for filterable facets; each ends with an explicit `other` value so the LLM never has to lie. Free-form fields (`sub_sector`, `product_type`, `price_point`) are not in this file — they're free strings on the Pydantic model.
 
 ```yaml
-sectors:
+# Top-level keys are SINGULAR and one-for-one with the Facets Pydantic
+# field names (see §Output format), the Qdrant payload keys (`facets.<name>`
+# at write time) and the FormulaQuery iteration variable (`for name, val in
+# query_facets.items()` reads these exact keys). Plural keys would silently
+# break the boost — the read site iterates `Facets` field names.
+sector:
   - fintech
   - healthtech
   - edtech
@@ -1045,7 +1163,7 @@ sectors:
   - marketing_adtech
   - other
 
-business_models:
+business_model:
   - b2b_saas
   - b2c_subscription
   - b2c_marketplace
@@ -1060,7 +1178,7 @@ business_models:
   - services_consulting
   - other
 
-customer_types:
+customer_type:
   - smb
   - mid_market
   - enterprise
@@ -1071,7 +1189,7 @@ customer_types:
   - non_profit
   - other
 
-geographies:
+geography:
   - us
   - eu
   - uk
