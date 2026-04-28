@@ -12,7 +12,6 @@ references stay stable.
 
 | # | Issue | Severity | Status |
 |---|---|---|---|
-| 4 | asyncio.Semaphore can't shrink at runtime | blocker | resolved (cap-halving cut from v1; SDK retry only) |
 | 5 | Pydantic v2 → Anthropic tool schema rough edges | should-fix | open |
 | 6 | DNS-rebinding guard cannot bind to SDK pool | should-fix | open |
 | 7 | Async/sync boundary contradicts itself | should-fix | open |
