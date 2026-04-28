@@ -299,7 +299,7 @@ slopmortem/
                            #   event name (prompt_injection_attempted,
                            #   tool_allowlist_violation, entity.parent_subsidiary_suspected,
                            #   corpus.poisoning_warning, budget_exceeded, cache_warm_failed,
-                           #   ssrf_blocked, …). Stable surface;
+                           #   ssrf_blocked, resolver_flip_detected, …). Stable surface;
                            #   additions OK, renames are CHANGELOG entries.
   llm/
     client.py              # LLMClient Protocol + OpenRouterClient impl + FakeLLMClient impl
@@ -360,6 +360,14 @@ slopmortem/
                            #   tier 2: normalized name + sector
                            #   tier 3: embedding fuzzy + Haiku tiebreaker (cached per pair)
                            #   reliability_rank_version field allows re-merge when ranks change
+                           #   Resolver-flip detection: every call looks up the prior
+                           #   canonical_id for this (source, source_id) in the journal's
+                           #   reverse-index column; on mismatch the ingest row is marked
+                           #   merge_state="resolver_flipped" and a resolver_flip_detected
+                           #   span event is emitted. The new canonical is NOT written —
+                           #   that would duplicate. Repair is owned by `--reconcile`
+                           #   (drift class (f)), keeping the hot ingest path free of
+                           #   partial-merge logic.
     merge.py               # deterministic combined-text + SQLite merge journal
                            #   (data/journal.sqlite via stdlib `sqlite3` in WAL
                            #    mode with PRAGMA busy_timeout=5000; one short-lived
@@ -367,11 +375,14 @@ slopmortem/
                            #    call dispatched via `asyncio.to_thread` so the sync
                            #    stdlib API doesn't block the event loop. Schema:
                            #    row_key=(canonical_id, source, source_id),
+                           #    reverse_index column maps (source, source_id) →
+                           #             canonical_id (UNIQUE on (source, source_id))
+                           #             so entity_resolution can detect flips,
                            #    skip_key=(content_hash, facet_prompt_hash,
                            #             summarize_prompt_hash, haiku_model_id,
                            #             embed_model_id, chunk_strategy_version,
                            #             taxonomy_version, reliability_rank_version),
-                           #    merge_state ∈ {pending, complete, alias_blocked})
+                           #    merge_state ∈ {pending, complete, alias_blocked, resolver_flipped})
                            #   Separate `quarantine_journal` table keyed on
                            #   (content_sha256, source, source_id) — slop-classified
                            #   docs have no canonical_id and cannot live in the
@@ -472,6 +483,13 @@ for chunk in chunks:
   embed_sparse(chunk.text)                           → sparse_vec
   ↓
 entity_resolution(raw_entry, qdrant) → canonical_id, action ∈ {create, merge}
+# Resolver-flip precheck: look up reverse_index[(source, source_id)] in the journal.
+# If a prior canonical_id exists and != current canonical_id, the resolver config has
+# flipped this entry to a new entity. STOP — do not write the new canonical (that would
+# create a split-brain duplicate; the old chunks/raw/canonical for the prior canonical_id
+# remain in place and retrievable). Mark this row merge_state="resolver_flipped",
+# emit a resolver_flip_detected span event, continue to the next row in the run.
+# Repair is owned by `slopmortem ingest --reconcile` drift class (f) below.
 text_id        = sha256(canonical_id)[:16]
 raw_path       = safe_path(post_mortems_root, kind="raw", text_id=text_id, source=source)
 canonical_path = safe_path(post_mortems_root, kind="canonical", text_id=text_id)
@@ -522,7 +540,7 @@ write combined_text to "<canonical_path>.tmp", os.replace(<canonical_path>.tmp, 
 mark merge_state="complete" + write skip_key LAST
 ```
 
-Idempotency: row key in the SQLite journal is `(canonical_id, source, source_id)`; skip key is the `(content_hash, facet_prompt_hash, summarize_prompt_hash, haiku_model_id, embed_model_id, chunk_strategy_version, taxonomy_version, reliability_rank_version)` tuple written LAST when the row is marked `complete`. A `pending` row always re-runs regardless of skip_key. `--force` bypasses the skip_key short-circuit. `slopmortem ingest --reconcile` walks Qdrant + disk + journal and repairs five drift classes: (a) `canonical/<text_id>.md` exists with no Qdrant point → re-embed and upsert; (b) Qdrant point with `merge_state=pending` in journal → redo merge; (c) `combined_hash` mismatch between `canonical/<text_id>.md` and journal → re-merge from `raw/`; (d) `raw/<source>/<text_id>.md` exists with no journal row, or canonical missing while raw is present → re-merge; (e) orphaned `.tmp` files in either tree → delete. Reconcile writes its actions to a span event per row touched.
+Idempotency: row key in the SQLite journal is `(canonical_id, source, source_id)`; skip key is the `(content_hash, facet_prompt_hash, summarize_prompt_hash, haiku_model_id, embed_model_id, chunk_strategy_version, taxonomy_version, reliability_rank_version)` tuple written LAST when the row is marked `complete`. A `pending` row always re-runs regardless of skip_key. `--force` bypasses the skip_key short-circuit. `slopmortem ingest --reconcile` walks Qdrant + disk + journal and repairs six drift classes: (a) `canonical/<text_id>.md` exists with no Qdrant point → re-embed and upsert; (b) Qdrant point with `merge_state=pending` in journal → redo merge; (c) `combined_hash` mismatch between `canonical/<text_id>.md` and journal → re-merge from `raw/`; (d) `raw/<source>/<text_id>.md` exists with no journal row, or canonical missing while raw is present → re-merge; (e) orphaned `.tmp` files in either tree → delete; (f) journal row with `merge_state="resolver_flipped"` → remove this `(source, source_id)` from the prior canonical_id (re-merge its remaining raw siblings into a smaller canonical, or delete the prior canonical_id entirely if no siblings remain), then route this `(source, source_id)` through the normal create/merge path under the current canonical_id. Reconcile writes its actions to a span event per row touched.
 
 Per-source failures are logged and skipped; the run continues. Per-host rate-limit (`429`/Retry-After) backs off the source, not the whole ingest.
 

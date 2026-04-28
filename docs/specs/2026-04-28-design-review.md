@@ -5,18 +5,11 @@
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
-The original review had 34 numbered findings + LOW polish items. Mechanical fixes plus #1 (FACET_BOOST calibration) and #2 (OpenRouter Protocol scope — resolved by switching v1 to OpenRouter) have been applied to the spec; the 9 below remain because each carries a real design tradeoff or empirical question.
+The original review had 34 numbered findings + LOW polish items. Mechanical fixes plus #1 (FACET_BOOST calibration), #2 (OpenRouter Protocol scope — resolved by switching v1 to OpenRouter), and #6 (entity-resolution flip GC — resolved via reverse-index + reconcile drift class (f)) have been applied to the spec; the 8 below remain because each carries a real design tradeoff or empirical question.
 
 ---
 
 ## Open issues
-
-### CRITICAL
-
-**#6 — Entity-resolution flip silently duplicates the corpus** [Data integrity H2, spec §entity_resolution]
-If tier-3 threshold/Haiku model/prompt changes between runs, the same `(source, source_id)` may resolve to a NEW canonical_id. Old `raw/<source>/<text_id_OLD>.md` and old Qdrant chunks become orphaned but remain retrievable. The re-merge `delete + re-upsert` only touches the NEW canonical_id; reconcile only catches this on full `--reconcile` sweep.
-**Options to discuss:** (a) `(source, source_id) → canonical_id` reverse-index in the journal, GC-on-flip — every entity_resolution call checks whether this `(source, source_id)` previously resolved differently; if so, delete chunks/raw/canonical for the old canonical_id before writing the new one; (b) freeze canonical_id assignment per `(source, source_id)` once written (resolver flip never re-routes existing entries — applies only to new ingests). Option (b) is simpler but means resolver improvements don't fix existing miscategorizations without manual `--rebuild-canonicals`.
-**Where it bites:** the `resolver_config_version` is now in skip_key (already fixed), but skip_key only invalidates work *within* a canonical_id. It cannot detect that the canonical_id itself should be different.
 
 ### HIGH
 
@@ -77,7 +70,7 @@ The spec is internally consistent and unusually explicit. After the obvious-fix 
 
 Applied to spec, no longer in this doc:
 
-**Critical (7):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #7 quarantine schema; #8 Pydantic auto-capture leak.
+**Critical (8):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #6 entity-resolution flip GC (reverse-index + resolver_flipped state + reconcile drift class (f)); #7 quarantine schema; #8 Pydantic auto-capture leak.
 **High (8):** #10 SQLite blocks event loop; #11 cache-warm race assertion; #14 tool-use loop branch tests; #15 re-merge delete+upsert atomicity; #16 platform blocklist additions; #17 alias-graph dedup at retrieval; #18 recency Branch C; #19 `getaddrinfo` over `gethostbyname`.
 **Med (10):** #20 Range claim correction; #21 cost arithmetic + budget bump to $2; #22 skip_key adds chunk_strategy_version + taxonomy_version; #23 canonical front-matter; #24 default `CapacityLimiter`; #25 batch_id orphan persistence; #27 SpanEvent registry; #28 unified structured-outputs API; #30 stage progress to stderr; #32 Task #9 folded into G1.
 **Low (8):** prompt_sha split; cache_control TTL drift note; safe_path regex validator; cassette regex additions (JWT, Stripe, batch IDs); render moved to top level; test_mcp.py removed; cassette-miss meta-test; JWT/Stripe scrubber.
