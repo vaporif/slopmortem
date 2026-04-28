@@ -92,7 +92,7 @@ Default Python style: `ruff` formatting, type hints required on every function, 
 - Create: `.gitignore` (extend existing)
 - Modify: `flake.nix` (add Python deps if relevant)
 
-- [ ] **Step 1: Create `pyproject.toml`**
+- [x] **Step 1: Create `pyproject.toml`**
 
 ```toml
 [project]
@@ -146,7 +146,7 @@ target-version = "py311"
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
 ```
 
-- [ ] **Step 2: Create `Makefile`**
+- [x] **Step 2: Create `Makefile`**
 
 ```makefile
 .PHONY: install test smoke-live eval eval-record lint typecheck
@@ -176,7 +176,7 @@ typecheck:
 	uv run mypy slopmortem
 ```
 
-- [ ] **Step 3: Extend `.gitignore`**
+- [x] **Step 3: Extend `.gitignore`**
 
 Append:
 
@@ -195,12 +195,12 @@ slopmortem.local.toml
 tests/fixtures/cassettes/*.live.yaml
 ```
 
-- [ ] **Step 4: Initialize and verify**
+- [x] **Step 4: Initialize and verify**
 
 Run: `uv sync && uv run python -c 'import openai, qdrant_client, pydantic_settings; print("ok")'`
 Expected: `ok` printed; no import errors.
 
-- [ ] **Step 5: Commit the bootstrap**
+- [x] **Step 5: Commit the bootstrap** — deferred (will commit after each major task per user's discretion)
 
 `git add pyproject.toml Makefile .gitignore slopmortem/__init__.py tests/__init__.py && git commit -m "bootstrap project deps"`
 
@@ -241,7 +241,7 @@ Expected: `ok` printed; no import errors.
 
 ### Step-by-step
 
-- [ ] **Step 1.1: Write the failing test for `safe_path`**
+- [x] **Step 1.1: Write the failing test for `safe_path`**
 
 `tests/test_paths.py`:
 
@@ -275,12 +275,12 @@ def test_safe_path_rejects_unknown_kind(tmp_path: Path):
         safe_path(tmp_path, kind="other", text_id="0123456789abcdef")
 ```
 
-- [ ] **Step 1.2: Run — expect failure (module does not exist)**
+- [x] **Step 1.2: Run — expect failure (module does not exist)**
 
 Run: `uv run pytest tests/test_paths.py -v`
 Expected: `ImportError: No module named 'slopmortem.corpus.paths'`.
 
-- [ ] **Step 1.3: Implement `safe_path`**
+- [x] **Step 1.3: Implement `safe_path`**
 
 `slopmortem/corpus/paths.py`:
 
@@ -331,12 +331,12 @@ def safe_path(
     return resolved
 ```
 
-- [ ] **Step 1.4: Run — expect green**
+- [x] **Step 1.4: Run — expect green**
 
 Run: `uv run pytest tests/test_paths.py -v`
 Expected: 6 passed.
 
-- [ ] **Step 1.5: Write `tests/test_models.py` covering all Pydantic shapes**
+- [x] **Step 1.5: Write `tests/test_models.py` covering all Pydantic shapes**
 
 ```python
 from __future__ import annotations
@@ -412,7 +412,7 @@ def test_merge_state_enum_values():
     assert not hasattr(MergeState, "QUARANTINED")
 ```
 
-- [ ] **Step 1.6: Implement `slopmortem/models.py`**
+- [x] **Step 1.6: Implement `slopmortem/models.py`**
 
 Mirror the spec's §Output format Pydantic block (lines 766–896) verbatim, plus:
 
@@ -459,12 +459,12 @@ class RawEntry(BaseModel):
     fetched_at: datetime
 ```
 
-- [ ] **Step 1.7: Run — expect green**
+- [x] **Step 1.7: Run — expect green**
 
 Run: `uv run pytest tests/test_models.py -v`
 Expected: all green. If `dict[str, X]` slipped into `Synthesis.similarity`, B1 regressed; fix before moving on.
 
-- [ ] **Step 1.8: Write `tests/test_tools_schema.py` for `to_openai_input_schema`**
+- [x] **Step 1.8: Write `tests/test_tools_schema.py` for `to_openai_input_schema`**
 
 ```python
 from __future__ import annotations
@@ -511,7 +511,7 @@ def test_to_strict_response_schema_idempotent_when_no_optional_defaults():
     assert set(schema["required"]) == {"a", "b"}
 ```
 
-- [ ] **Step 1.9: Implement `to_openai_input_schema` in `slopmortem/llm/tools.py`**
+- [x] **Step 1.9: Implement `to_openai_input_schema` in `slopmortem/llm/tools.py`**
 
 ```python
 from __future__ import annotations
@@ -575,14 +575,14 @@ def synthesis_tools(config) -> list[ToolSpec]:
     return tools
 ```
 
-- [ ] **Step 1.10: Verify**
+- [x] **Step 1.10: Verify**
 
 `jsonschema` is already declared in the bootstrap `pyproject.toml` dev-deps; no extra `uv add` needed.
 
 Run: `uv run pytest tests/test_tools_schema.py -v`
 Expected: 4 passed.
 
-- [ ] **Step 1.11: Write `tests/test_budget.py`**
+- [x] **Step 1.11: Write `tests/test_budget.py`**
 
 ```python
 from __future__ import annotations
@@ -608,7 +608,7 @@ async def test_exceeded_raises():
         await b.reserve(0.10)
 ```
 
-- [ ] **Step 1.12: Implement `slopmortem/budget.py`**
+- [x] **Step 1.12: Implement `slopmortem/budget.py`**
 
 ```python
 from __future__ import annotations
@@ -643,12 +643,12 @@ class Budget:
             self.spent_usd += actual_usd
 ```
 
-- [ ] **Step 1.13: Run budget tests**
+- [x] **Step 1.13: Run budget tests**
 
 Run: `uv run pytest tests/test_budget.py -v`
 Expected: 2 passed.
 
-- [ ] **Step 1.14: Write `tests/test_tracing_guard.py`**
+- [x] **Step 1.14: Write `tests/test_tracing_guard.py`**
 
 ```python
 from __future__ import annotations
@@ -670,7 +670,7 @@ def test_remote_allowed_with_flag(monkeypatch):
     init_tracing(base_url="http://attacker.example", allow_remote=True)
 ```
 
-- [ ] **Step 1.15: Implement `slopmortem/tracing/__init__.py`**
+- [x] **Step 1.15: Implement `slopmortem/tracing/__init__.py`**
 
 ```python
 from __future__ import annotations
@@ -732,12 +732,12 @@ class SpanEvent(str, Enum):
     RESOLVER_FLIP_DETECTED = "resolver_flip_detected"
 ```
 
-- [ ] **Step 1.16: Run tracing guard tests**
+- [x] **Step 1.16: Run tracing guard tests**
 
 Run: `uv run pytest tests/test_tracing_guard.py -v`
 Expected: 4 passed.
 
-- [ ] **Step 1.17: Write `tests/test_config.py` and `slopmortem.toml`**
+- [x] **Step 1.17: Write `tests/test_config.py` and `slopmortem.toml`**
 
 ```python
 from __future__ import annotations
@@ -787,18 +787,18 @@ def test_K_retrieve_must_gte_N_synthesize(tmp_path, monkeypatch):
         load_config()
 ```
 
-- [ ] **Step 1.18: Implement `slopmortem/config.py`**
+- [x] **Step 1.18: Implement `slopmortem/config.py`**
 
 Use `pydantic-settings` v2 with `TomlConfigSettingsSource` — see spec lines 427–457 for the full tunable list and source ordering. The file must declare every key listed there, including `slop_threshold`, `max_doc_tokens`, `tier3_calibration_band` (Blocker B8). Add a `model_validator(mode='after')` that raises if `K_retrieve < N_synthesize`.
 
 Then commit the default `slopmortem.toml` at repo root mirroring the test fixture's defaults.
 
-- [ ] **Step 1.19: Run config tests**
+- [x] **Step 1.19: Run config tests**
 
 Run: `uv run pytest tests/test_config.py -v`
 Expected: 3 passed.
 
-- [ ] **Step 1.20: Stub the `LLMClient`, `EmbeddingClient`, `Corpus` Protocols**
+- [x] **Step 1.20: Stub the `LLMClient`, `EmbeddingClient`, `Corpus` Protocols**
 
 `slopmortem/llm/client.py`:
 
@@ -873,7 +873,7 @@ class Corpus(Protocol):
     async def search_corpus(self, q: str, facets: dict[str, str] | None = None) -> list[dict[str, Any]]: ...
 ```
 
-- [ ] **Step 1.21: Synthesis tool signatures (folded-in Task #9 contract)**
+- [x] **Step 1.21: Synthesis tool signatures (folded-in Task #9 contract)**
 
 `slopmortem/corpus/tools_impl.py` — declare the **signatures only** here so `synthesis_tools` factory can import. Implementations live in this file but for Task #1 the bodies can return placeholder values; Task #9's full impl replaces them.
 
@@ -917,7 +917,7 @@ search_corpus = ToolSpec(
 )
 ```
 
-- [ ] **Step 1.22: Implement `slopmortem/http.py:safe_get` (SSRF wrapper)**
+- [x] **Step 1.22: Implement `slopmortem/http.py:safe_get` (SSRF wrapper)**
 
 See spec lines 1017–1018 for blocked CIDR list. Test:
 
@@ -939,12 +939,12 @@ async def test_safe_get_blocks(url):
 
 Implementation: parse URL, refuse non-`http(s)` scheme; resolve via `socket.getaddrinfo`; refuse if any address is in {loopback, link-local, RFC1918, IPv6 ULA, CGNAT, IMDS hostnames}; pin resolved IP into a custom `httpx.AsyncHTTPTransport` with a resolver override.
 
-- [ ] **Step 1.23: Run all Task #1 tests**
+- [x] **Step 1.23: Run all Task #1 tests**
 
 Run: `uv run pytest tests/test_paths.py tests/test_models.py tests/test_tools_schema.py tests/test_budget.py tests/test_tracing_guard.py tests/test_config.py -v`
 Expected: every test green.
 
-- [ ] **Step 1.24: Verify Task #1 against blockers**
+- [x] **Step 1.24: Verify Task #1 against blockers**
 
 Run:
 
