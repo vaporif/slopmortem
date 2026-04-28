@@ -6,21 +6,18 @@
 
 Findings from a five-pass technical review of the design spec, re-verified by
 parallel cross-checks against the current spec, current SDK code, and current
-vendor docs. Issues #1 and #2 have already been resolved (see spec edits dated
-2026-04-28). The rest are captured here in priority order.
+vendor docs. Issues #1, #2, and #3 are resolved and no longer tracked here
+(see spec edits dated 2026-04-28). Original numbering retained so external
+references stay stable.
 
 | # | Issue | Severity | Status |
 |---|---|---|---|
-| 1 | Synthesis structured output mechanism | blocker | resolved 2026-04-28 |
-| 2 | Cross-encoder 512-token window | blocker | resolved 2026-04-28 (B2 — dropped cross-encoder) |
-| 3 | Per-source vs canonical markdown path | blocker | resolved 2026-04-28 (Option 1 — split raw/ + canonical/) |
 | 4 | asyncio.Semaphore can't shrink at runtime | blocker | open |
 | 5 | Pydantic v2 → Anthropic tool schema rough edges | should-fix | open |
 | 6 | DNS-rebinding guard cannot bind to SDK pool | should-fix | open |
 | 7 | Async/sync boundary contradicts itself | should-fix | open |
 | 9 | Anthropic Batches + prompt caching needs verification | should-fix | open |
 | 10 | Mixed cassette stack (vcrpy + respx) | should-fix | open |
-| n1 | M-series CPU latency in spec table | nit | open |
 | n2 | OpenAI embedding price pin | nit | open |
 | n3 | SQLite driver named for journal | nit | open |
 
