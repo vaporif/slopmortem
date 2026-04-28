@@ -197,10 +197,16 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 - Pros: every stage independently testable; tracing is uniform via decorators; v2 OpenRouter swap is one new class.
 - Cons: more files than a flat script; you have to discipline yourself not to leak state into stage modules.
 
+**Pipeline is fully async**
+- Every stage is `async def`. SDK calls use the async clients: `AsyncAnthropic`, `AsyncOpenAI`, `AsyncQdrantClient`. CPU-bound work (`fastembed` BM25 encoding) dispatches via `asyncio.to_thread` so the event loop stays responsive.
+- A single `asyncio.run(...)` lives at the CLI entry point; nothing below it spins up its own loop. This preserves keep-alive across stages (one connection pool per SDK for the whole invocation) and gives Ctrl-C a clean cancellation path: `CancelledError` propagates through the task group and in-flight HTTP requests abort via the SDK's cancel surface.
+- Rationale: synthesis already fans out via `asyncio.gather` (see §Concurrency), and mixing sync stages forces either `asyncio.run` per call (loses the pool) or sync calls inside an async stage (blocks the loop and serializes the gather). Fully-async is the only shape that doesn't pessimize one of the two.
+
 **Single LLMClient abstraction, Anthropic SDK in v1**
 - All LLM calls (facet extract, summarize, polish rerank, synthesis) go through `LLMClient.complete(prompt, *, tools=None, model=None, cache=None)`. v1 implements this with `AnthropicSDKClient` over the `anthropic` Python SDK calling `client.messages.create(...)` with `tools=[...]` for native tool use. Tools are registered as plain Python callables; argument schemas are derived via `to_anthropic_input_schema(args_model)` in `slop/llm/tools.py`, which calls `args_model.model_json_schema()`, inlines `$ref`/`$defs` via `jsonref.replace_refs(proxies=False, lazy_load=False)`, and strips draft-2020-12 metadata (`$schema`, `$defs`, `$id`). `Optional[T]` fields preserve Pydantic's `anyOf:[T,null]` shape verbatim — rewriting to `type:[T,null]` has been observed to *increase* invalid-JSON output rates, so the helper deliberately leaves it alone. Defensive flattening only: non-strict tool use accepts `$ref` today, but strict-tool-use rollout will require inlined schemas, and the dead metadata is noise in trace inspections regardless.
 - Prompt caching is explicit: `cache_control={"type": "ephemeral"}` on the shared static system block (taxonomy, instructions, untrusted-document framing). Cache hits are **measured**, not assumed: `usage.cache_read_input_tokens` and `usage.cache_creation_input_tokens` are read off every response and recorded on the Laminar span. The synthesis fan-out warms the cache deliberately by serializing the first call (or running a tiny no-op call before the gather) so the other four hit a populated cache rather than racing to write.
-- Ingest fan-out uses the **Message Batches API**: 500 facet_extract + 500 summarize_for_rerank calls are submitted as a single batch (50% discount, async, results polled). Per-query LLM calls remain synchronous (latency-sensitive). Batch results re-enter the same `LLMClient` retry/cassette/budget surface — the `Batched` mode is a method on the same Protocol, not a parallel API.
+- Ingest fan-out uses the **Message Batches API**: 500 facet_extract + 500 summarize_for_rerank calls are submitted as a single batch (50% discount, async, results polled). Batch results re-enter the same `LLMClient` retry/cassette/budget surface — the `Batched` mode is a method on the same Protocol, not a parallel API.
+- Batch + prompt cache interaction is best-effort per Anthropic (observed hit rates 30–98%). To bias toward the high end: (a) the shared system block uses **1-hour TTL** `cache_control={"type":"ephemeral","ttl":"1h"}` so cache entries survive long-draining batches, (b) a single synchronous **pre-batch warm call** with the same system block fires immediately before submission so workers find a populated cache instead of racing to write it, (c) the first 5 batch responses' `usage.cache_read_input_tokens` / `usage.cache_creation_input_tokens` are read off and logged — if `cache_read / (cache_read + cache_creation) < 0.80` on the warmed batch, we know before spending the full ingest budget. Cost projections below assume the warmed-1h pattern; the `max_cost_usd_per_ingest = $10.00` cap has 100% headroom for the pessimistic case.
 - Tool use loop: when the model returns `stop_reason="tool_use"`, the client looks up the tool in the registry. **Output tools** (`ToolSpec.is_output_tool=True`, e.g. `submit_synthesis`, `submit_llm_rerank`) terminate the loop — `args_model.model_validate(tool_use.input)` produces the final typed result and the loop exits. **Corpus tools** (`get_post_mortem`, `search_corpus`, optional Tavily) execute their Python `fn`, the return value is wrapped in a `tool_result` block (with `<untrusted_document>` framing for any corpus-derived text), and the conversation continues. Loop bound (default 5 turns) prevents runaway tool calls; on the final allowed turn the client switches `tool_choice` from `"auto"` to `{"type":"tool","name":"<output_tool>"}` to force termination via the output tool. If the model still doesn't emit the output tool by turn 6, hard failure with span event.
 - Auth: `ANTHROPIC_API_KEY` from `.env` (gitignored), `SecretStr` in config; same surface as OpenAI and Tavily keys.
 - Pros: no subprocess cold-start tax; native cache visibility; Batches API access; cassettes record SDK responses (smaller, easier to scrub); tool surface is just Python — no MCP transport, no `--allowedTools` allowlist drift, no `claude -p` version pinning.
@@ -290,6 +296,15 @@ slop/
                            #     preserves Pydantic's anyOf:[T,null] for Optional fields
                            #     (rewriting to type:[T,null] degrades output quality).
                            #   Used by ToolSpec → Anthropic SDK tool-schema conversion.
+    prices.yml             # per-model price table: input/output/cache-write/cache-read $/M tokens.
+                           #   Sole source for `cost_usd` derivations (LLM spans, embedding spans,
+                           #   budget.py, cost ballpark in spec). Bumping a vendor price is a
+                           #   one-line edit here, not a spec re-derivation. Pinned today:
+                           #     text-embedding-3-small  input=$0.02/M
+                           #     claude-haiku-4-5        input=$1.00/M  output=$5.00/M
+                           #     claude-sonnet-*         see file for current pin
+                           #   Cache-write multipliers: 1.25× (5m TTL), 2× (1h TTL).
+                           #   Cache-read: $0.10 per $1 base-input.
     prompts/               # prompt templates as .j2 files (Task #0 deliverable);
                            #   each prompt has a paired JSON Schema describing its expected output.
                            #   Schemas are imported by the stage modules and used in tests.
@@ -322,7 +337,9 @@ slop/
                            #   tier 3: embedding fuzzy + Haiku tiebreaker (cached per pair)
                            #   reliability_rank_version field allows re-merge when ranks change
     merge.py               # deterministic combined-text + SQLite merge journal
-                           #   (data/journal.sqlite, schema:
+                           #   (data/journal.sqlite via stdlib `sqlite3` in WAL
+                           #    mode with PRAGMA busy_timeout=5000; one short-lived
+                           #    connection per merge action, no pool. Schema:
                            #    row_key=(canonical_id, source, source_id),
                            #    skip_key=(content_hash, facet_prompt_hash,
                            #             summarize_prompt_hash, haiku_model_id,
@@ -550,7 +567,7 @@ render(Report)                                     → markdown → stdout
 
 - Synthesize: cache-warm pattern — the first `messages.create` call runs alone to populate the prompt cache for the shared system block; the remaining `N_synthesize - 1` run via `asyncio.gather`. No concurrency cap at default `N_synthesize = 5`: the SDK's built-in `Retry-After` backoff on 429/529 is the only rate-limit response. If `N_synthesize` is configured up (>10) or 429/529 storms are observed in Laminar, revisit by adding `anyio.CapacityLimiter` with mutable `total_tokens`. All calls are async HTTP via the SDK; no subprocess management, no signal forwarding for child processes. Ctrl-C cancels the asyncio task group; in-flight HTTP requests are aborted via the SDK's cancel surface.
 - LLM rerank is one call, no fan-out.
-- Ingest LLM calls (~1000 facet+summarize per re-seed) submit as a single Message Batch; the orchestrator polls the batch endpoint at 30s intervals, with `--no-batch` available to fall back to synchronous fan-out for small re-runs.
+- Ingest LLM calls (~1000 facet+summarize per re-seed) submit as a single Message Batch; the orchestrator polls the batch endpoint at 30s intervals, with `--no-batch` available to fall back to a sequential async fan-out for small re-runs.
 
 ### Failure handling
 
@@ -616,11 +633,11 @@ Rendered to stdout as a markdown report with one section per candidate, includin
 
 ## Tracing
 
-Laminar wraps the entire system. Initialization is a no-op when env vars are unset, so the pipeline runs identically without it. `tracing.py` parses `LMNR_BASE_URL` with `urllib.parse`, resolves the host, and requires the resolved IP to satisfy `ipaddress.ip_address(...).is_loopback` (covers `127.0.0.0/8`, `::1`, and IPv4-mapped variants) OR be an exact match for a configured private host. **String-prefix checks are not used** — `http://localhost.attacker.com` would defeat them via DNS rebinding. Remote URLs require `LMNR_ALLOW_REMOTE=1` and emit a startup banner. The DNS lookup is repeated per outbound request (TOCTOU mitigation) since the initial resolve can change.
+Laminar wraps the entire system. Initialization is a no-op when env vars are unset, so the pipeline runs identically without it. `tracing.py` parses `LMNR_BASE_URL` with `urllib.parse`, resolves the host, and requires the resolved IP to satisfy `ipaddress.ip_address(...).is_loopback` (covers `127.0.0.0/8`, `::1`, and IPv4-mapped variants) OR be an exact match for a configured private host. **String-prefix checks are not used** — `http://localhost.attacker.com` would defeat them via DNS rebinding. Remote URLs require `LMNR_ALLOW_REMOTE=1` and emit a startup banner. Host is resolved and validated once at init; the loopback-default deployment is not exposed to DNS rebinding. The `LMNR_ALLOW_REMOTE=1` path accepts a small rebinding window in v1. <!-- TODO(v2): close that window by pinning the resolved IP into `LMNR_BASE_URL` before calling `Laminar.init`, so the SDK's connection pool bypasses further DNS. Requires explicit SNI for HTTPS since IP-form URLs fail standard hostname verification. See docs/specs/2026-04-28-design-review-issues.md#6. -->
 
 - One trace per CLI invocation (`slop.query` or `slop.ingest`).
 - Stage functions decorated with `@observe(name="stage.<name>")`. Pydantic input/output is captured automatically.
-- `LLMClient.complete()` opens a manual span per SDK call; attributes include model, latency, retry count, prompt content hash, and the full `usage` breakdown — `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` — plus a derived `cost_usd` computed from the per-model price table. Cache hit rate is graphable directly from `cache_read / (cache_read + cache_creation)` without extra instrumentation.
+- `LLMClient.complete()` opens a manual span per SDK call; attributes include model, latency, retry count, prompt content hash, and the full `usage` breakdown — `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` — plus a derived `cost_usd` computed from `slop/llm/prices.yml` (the single source of truth for per-model pricing; bumping a vendor price is a one-line edit there). Cache hit rate is graphable directly from `cache_read / (cache_read + cache_creation)` without extra instrumentation.
 - `EmbeddingClient.embed()` opens a span: model, n_tokens, cost_usd, latency, retry count.
 - `Corpus.query()` opens a span attaching the filter and the (id, score) pairs of returned candidates.
 - Tool calls during synthesis are emitted as proper child spans under the synthesize span — since tools are in-process Python, OTel context propagates cleanly. Each span carries tool name, parsed args, latency, and result-byte size.
@@ -634,6 +651,8 @@ Iteration loop the tracing supports:
 4. Prompts live as `.j2` files under `slop/llm/prompts/`. Their content hash attaches to every LLM span — filter "show all runs with prompt v3 of facet_extract."
 
 ## Cost ballpark
+
+All dollar figures below are derived from `slop/llm/prices.yml` (the per-model price table). When vendor prices change, edit that file — the spec figures are illustrative at the time of writing, not the source of truth.
 
 ### Per query
 
@@ -665,9 +684,9 @@ Per-invocation budget: `config.max_cost_usd_per_query` defaults to **$1.50** (ge
 | **Total initial (batched ingest)** | **~$5.00** |
 | **Steady-state (HN feed, ~10 entries/week)** | **~$0.07/week** |
 
-Batch discount (50% via Anthropic Message Batches API) applies to the bulk ingest path. The previous figure (~$10.30) reflected synchronous calls without batching; SDK + Batches roughly halves it. The embedding row was previously over-estimated at $0.35; corrected against text-embedding-3-small pricing ($0.02/1M tokens) on ~1.9M tokens for 500 × 5 chunks.
+Batch discount (50% via Anthropic Message Batches API) applies to the bulk ingest path. The previous figure (~$10.30) reflected unbatched per-call submission; SDK + Batches roughly halves it. The embedding row was previously over-estimated at $0.35; corrected against text-embedding-3-small pricing ($0.02/1M tokens) on ~1.9M tokens for 500 × 5 chunks.
 
-Per-invocation budget: `config.max_cost_usd_per_ingest` defaults to **$10.00** (covers batched initial seeding + 100% headroom for re-merges, retries, and the synchronous `--no-batch` fallback path).
+Per-invocation budget: `config.max_cost_usd_per_ingest` defaults to **$10.00** (covers batched initial seeding + 100% headroom for re-merges, retries, and the `--no-batch` fallback path).
 
 ## Latency budget (per query)
 
@@ -719,7 +738,7 @@ The system ingests third-party scraped content and feeds it into LLMs that have 
 - Cassette write filter scrubs known secret formats with hyphen-aware patterns: `(?i)sk-(?:ant-(?:api\d+-)?|proj-|svcacct-)?[A-Za-z0-9_\-]{20,}` (Anthropic + OpenAI legacy/proj/svcacct), `tvly-[A-Za-z0-9]{20,}` (Tavily), `lmnr_[A-Za-z0-9]{20,}` (Laminar), `AKIA[0-9A-Z]{16}` / `ASIA[0-9A-Z]{16}` (AWS), `ya29\.[A-Za-z0-9_\-]+` (GCP), `ghp_[A-Za-z0-9]{36}` (GitHub), `bearer\s+\S+`, `api[_-]?key["\s:=]+\S+`. Header-name allowlist scrub: any value of `Authorization`, `x-api-key`, `x-anthropic-api-key`, `openai-api-key` is redacted regardless of value pattern. Env var values and home-directory paths also scrubbed. `RECORD=1` requires `REVIEW=1` on the same invocation. Pre-commit hook scans `tests/fixtures/cassettes/` for residual secret patterns.
 
 **Laminar URL guard**
-- `tracing.py` refuses to initialize unless `LMNR_BASE_URL`'s host resolves (via `socket.gethostbyname`) to a loopback IP (`ipaddress.is_loopback` covers `127.0.0.0/8`, `::1`, IPv4-mapped) or matches a configured private-host allowlist exactly. **Not** a `startswith` string check — `http://localhost.attacker.com` defeats prefix matching. The resolution is repeated on each outbound request to mitigate DNS rebinding TOCTOU. Override with `LMNR_ALLOW_REMOTE=1`, which logs `tracing → <host>` to stderr at startup.
+- `tracing.py` refuses to initialize unless `LMNR_BASE_URL`'s host resolves (via `socket.gethostbyname`) to a loopback IP (`ipaddress.is_loopback` covers `127.0.0.0/8`, `::1`, IPv4-mapped) or matches a configured private-host allowlist exactly. **Not** a `startswith` string check — `http://localhost.attacker.com` defeats prefix matching. Resolution happens once at init; on the loopback default there is no DNS surface to rebind. Override with `LMNR_ALLOW_REMOTE=1`, which logs `tracing → <host>` to stderr at startup and accepts a small rebinding window. <!-- TODO(v2): pin the resolved IP into `LMNR_BASE_URL` at init to eliminate that window for remote use; requires SNI override for HTTPS. See docs/specs/2026-04-28-design-review-issues.md#6. -->
 
 **Scraping etiquette**
 - All HTTP requests identify as `slop/<version> (+<repo url>)` and respect `robots.txt` via `urllib.robotparser`. Per-host token bucket defaults to 1 rps. `If-Modified-Since` / `ETag` honored to avoid re-fetching unchanged URLs.
@@ -748,7 +767,7 @@ The system ingests third-party scraped content and feeds it into LLMs that have 
 
 What we explicitly don't unit-test: subjective LLM output quality (covered by the eval runner with assertions like `where_diverged_nonempty`, not by pytest).
 
-Tooling: `pytest`, `pytest-asyncio`, `pytest-recording`, `syrupy`, `respx` for any non-`requests` HTTP mocking.
+Tooling: `pytest`, `pytest-asyncio`, `pytest-recording` (vcrpy under the hood), `syrupy`. **HTTP cassettes are pytest-recording only** — `respx` is intentionally not used. Both libraries patch httpx at the transport layer and shadow each other when active on the same client; mixing them produces non-local fixture-order flakes (a respx mock can silently swallow requests that pytest-recording expected to record/replay, or vice versa). pytest-recording covers every test shape needed here, including retry/backoff replays and multi-turn tool-use loops; assertions on request shape can be made by reading the cassette file directly.
 
 ## Open questions / future work
 
@@ -759,6 +778,7 @@ Tooling: `pytest`, `pytest-asyncio`, `pytest-recording`, `syrupy`, `respx` for a
 - **Corpus refresh schedule** — the curated YAML is hand-maintained. A periodic refresh job (cron / GH Action) running `slop ingest --source hn` to pick up new obituaries is a natural follow-on but not v1 scope.
 - **Eval dataset growth** — Task #11 ships a 10-item seed dataset and the runner. Real evaluation requires growing the dataset during iteration; this happens organically as the user spots bad runs in Laminar and saves them as JSON inputs under `tests/evals/datasets/`.
 - **HyDE re-add** — dropped from v1 because text-embedding-3-small is asymmetric-trained and BM25 covers surface-vocabulary mismatch. If retrieval recall on the eval set turns out poor for terse / jargon-light pitches, add back as `--hyde` opt-in flag and measure the delta vs baseline.
+- **Confirm batch cache hit rate** — first ingest run logs the warmed batch's per-response `cache_read_input_tokens` / `cache_creation_input_tokens`. Target ≥80% read ratio on the shared system block. If it underperforms, revisit: longer warm sequence, smaller batches, or accept the higher cost and raise `max_cost_usd_per_ingest`.
 - **Local embeddings** — `EmbeddingClient` Protocol allows swapping `OpenAIEmbeddingClient` for a local sentence-transformers backend (fully offline mode). Not a v1 deliverable.
 
 ## Execution Strategy
@@ -785,9 +805,9 @@ Tasks marked **G1** must complete before any other parallel work begins. Tasks m
 |---|------|------|------------|--------|
 | 0 | **G2 contract**: prompt skeletons (`.j2`) + per-prompt JSON output schemas + sample fixtures for facet_extract, llm_rerank, synthesize; taxonomy.yml frozen | **G2** | general-purpose | Python |
 | 1 | **Foundation**: pydantic-settings, all shared models, `LLMClient` + `EmbeddingClient` + `Corpus` + `ToolSpec` Protocols, **synthesis tool signatures** (`get_post_mortem`, `search_corpus` Pydantic arg models + return shapes), **`to_anthropic_input_schema(args_model)` helper in `slop/llm/tools.py`** (jsonref-based `$ref` inlining + `$schema`/`$defs`/`$id` strip; round-trip test: Pydantic → schema → fake `tool_use` → parse → Pydantic, identical shape; regression test that `Optional[T]` keeps `anyOf:[T,null]`), `MergeState`, `safe_path`, `Budget`, `tracing.py` (with LMNR_BASE_URL guard). Adds `jsonref` to dependencies. | **G1** | general-purpose | Python |
-| 2 | LLMClient: `AnthropicSDKClient` (`messages.create`, tool-use loop with `<untrusted_document>` wrapping of tool results, `cache_control` on shared system blocks, `usage.cache_read/creation_input_tokens` captured to span, Message Batches API path with `--no-batch` synchronous fallback, retry/budget integration) + `FakeLLMClient` cassette (with secret-scrubbing filter) + tests | — | general-purpose | Python |
+| 2 | LLMClient: `AnthropicSDKClient` (`messages.create`, tool-use loop with `<untrusted_document>` wrapping of tool results, `cache_control={ttl:"1h"}` on shared system blocks for batch use, pre-batch warm call to populate the cache before submission, `usage.cache_read/creation_input_tokens` captured to span, Message Batches API path with `--no-batch` sequential-async fallback, retry/budget integration) + `FakeLLMClient` cassette (pytest-recording / vcrpy only — no respx; secret-scrubbing filter) + tests | — | general-purpose | Python |
 | 2b | EmbeddingClient: `OpenAIEmbeddingClient` (retry, span, budget) + `FakeEmbeddingClient` cassette + tests | — | general-purpose | Python |
-| 3 | Corpus: `QdrantCorpus` (service mode), `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (merge_state persistence), `slop ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | general-purpose | Python |
+| 3 | Corpus: `QdrantCorpus` (service mode), `docker-compose.yml` for qdrant, on-disk markdown reader/writer using `safe_path`, `MergeJournal` (stdlib `sqlite3`, WAL mode, `busy_timeout=5000ms`, one connection per merge action, no pool; merge_state persistence), `slop ingest --reconcile`, sparse-vector `Modifier.IDF` setup, tests | — | general-purpose | Python |
 | 4a | Source adapters: curated YAML loader (length floor + platform blocklist + UA + robots), HN Algolia (rate-limited), Wayback, Crunchbase CSV; ships with fixture YAML of ~20 known-good URLs for tests | — | general-purpose | Python |
 | 4b | **Curate production YAML** (300–500 URLs): owned by user; acceptance = sector coverage matrix (≥10 per top sector), per-row provenance fields, CODEOWNERS on the file. Not parallelizable with adapter coding. | — | user | manual |
 | 5a | Entity resolution + merge: tier-1 `registrable_domain` (founding_year cached deterministically per `(domain, content_sha256)`, used as stored attribute + recycled-domain check, not key), platform blocklist, tier-2 normalized name+sector, tier-3 fuzzy + Haiku tiebreaker (cache-keyed on `(canon_a, canon_b, model_id, prompt_hash)`); deterministic combined-text rule; tests including platform-domain non-collapse + injection-fuzz on canonical_id + same-content-twice idempotency | — | general-purpose | Python |
@@ -796,7 +816,7 @@ Tasks marked **G1** must complete before any other parallel work begins. Tasks m
 | 7 | Stages: `retrieve` (NULL-aware date filter, non-`other` facet boost, RRF), `llm_rerank` (single Sonnet call K_retrieve→N_synthesize via `submit_llm_rerank` output tool, multi-perspective scoring) | post-G2 | general-purpose | Python |
 | 8 | Stages: `synthesize` (inlined body, `<untrusted_document>` wrapping, in-process tool functions registered with SDK, cache-warm pattern, sources allowlist filter), `render` (structural-only snapshots) | post-G2 | general-purpose | Python |
 | 9 | Synthesis tool implementations: `get_post_mortem(id) → markdown`, `search_corpus(q, facets) → list[Hit]`, both pure (read-only against Qdrant + disk), each tool's return value wrapped in `<untrusted_document>` by `LLMClient`. Signature contract test asserts the registered tools match the Gate-1 schemas exactly. | — | general-purpose | Python |
-| 10 | CLI + pipeline orchestration: typer commands, interactive flow, **`pipeline.py`** (composes stages, cache-warm-then-`asyncio.gather` over synthesize fan-out), Ctrl-C cancels the asyncio task group cleanly (no subprocess group management needed in v1), stage progress output, `slop replay --dataset <name>`, integration glue | — | general-purpose | Python |
+| 10 | CLI + pipeline orchestration: typer commands, interactive flow, **`pipeline.py`** (every stage `async def`; composes stages, cache-warm-then-`asyncio.gather` over synthesize fan-out), single `asyncio.run(...)` at the CLI entry point, fastembed wrapped in `asyncio.to_thread`, Ctrl-C cancels the asyncio task group cleanly (no subprocess group management needed in v1), stage progress output, `slop replay --dataset <name>`, integration glue | — | general-purpose | Python |
 | 11 | Eval infra: `slop/evals/runner.py`, `slop/evals/assertions.py`, seed dataset of 10 diverse `InputContext` JSON files, baseline file format, `make eval` target | — | general-purpose | Python |
 
 Writing-plans may further split or merge these. Final structure decided in the plan, but Gates 1 and 2 are fixed.
