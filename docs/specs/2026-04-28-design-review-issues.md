@@ -6,9 +6,10 @@
 
 Findings from a five-pass technical review of the design spec, re-verified by
 parallel cross-checks against the current spec, current SDK code, and current
-vendor docs. Issues #1, #2, #3, and #4 are resolved and no longer tracked here
-(see spec edits dated 2026-04-28). Original numbering retained so external
-references stay stable.
+vendor docs. Issues #1, #2, #3, and #4 are resolved and no longer tracked
+here (see spec edits dated 2026-04-28; #4 cut the cap-halving mechanism from
+v1 and now relies on the SDK's built-in `Retry-After` backoff). Original
+numbering retained so external references stay stable.
 
 | # | Issue | Severity | Status |
 |---|---|---|---|
