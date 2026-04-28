@@ -94,8 +94,9 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
             │           response_format = json_schema           │
             │             (LlmRerankResult); no tools           │
             │           top-K_retrieve → top-N_synthesize with  │
-            │             {business, market, gtm} scores +      │
-            │             one-line rationales                   │
+            │             {business, market, gtm, stage_scale}  │
+            │             scores + one-line rationales          │
+            │           ordering = model judgment (no formula)  │
             └────────────────────┬──────────────────────────────┘
                                  ▼
             ┌───────────────────────────────────────────────────┐
@@ -219,6 +220,7 @@ A Python CLI that takes a startup name and ~200-word description, finds similar 
 **Single LLM rerank stage, then synthesis**
 - top-`K_retrieve` from retrieval → one `chat.completions.create` call (OpenAI SDK pointed at OpenRouter) with multi-perspective judging cuts directly to top-`N_synthesize` with per-perspective scores → each gets a synthesis call (warm-then-fan-out). Two knobs: `K_retrieve` (default 30), `N_synthesize` (default 5); `Config` enforces `K_retrieve >= N_synthesize`.
 - The rerank stage receives each candidate's pre-extracted `summary` payload field (not the full markdown). Sonnet has no token-window pressure at K=30 × ~400 tokens/summary ≈ 12K input tokens, but keeping `summary` compact bounds rerank input cost (linear in K × summary-tokens) and lets the per-call cache hit on the shared rubric block dominate the bill. Per-perspective scores returned by the rerank tool feed structured fields straight into synthesis.
+- Four perspective axes: `business_model` (revenue model, monetization shape), `market` (customer / sector), `gtm` (go-to-market motion: sales-led, PLG, content, etc.), and `stage_scale` (comparable funding stage and burn profile, not just same industry — a $50K pre-seed pitch is not "like Pets.com" even with matching market and gtm). The rubric prompt defines each axis with one or two sentences and an example pair. Ordering of `LlmRerankResult.ranked` is the rerank model's own judgment given the pitch and the four scores it just emitted — the spec does **not** combine the axes into a scalar sort key. The four scores are inspectable rationale (why this candidate ranks here), not inputs to a downstream formula. Synthesis preserves the rerank order in `Report.candidates`.
 - Earlier drafts had a two-stage funnel: a local cross-encoder (`bge-reranker-v2-m3` ONNX int8 via fastembed) cut K_retrieve → K_rerank, then an LLM polish call cut K_rerank → N_synthesize. That was dropped because (a) the cross-encoder's 512-token (query + doc) window forced summaries down to ~200 tokens to leave room for the user pitch, which degraded *every* downstream consumer of `summary` (synthesis input, eval signal, on-disk markdown context), (b) the cost saved by skipping ~$0.024/query of additional Sonnet input was eaten by the 280 MB ONNX dependency, the first-run model download, and a whole pipeline stage to maintain, and (c) bge-reranker is general-purpose, while a Sonnet-with-rubric is tuned to *this* "similar dead startups" task in ways the cross-encoder cannot be.
 - Output is enforced via OpenRouter's OpenAI-shape **structured outputs** primitive (which routes to Anthropic's GA grammar-constrained sampling on Sonnet/Haiku): every structured-output call passes `response_format={"type":"json_schema","json_schema":{"name": Model.__name__, "schema": Model.model_json_schema(), "strict": True}}` to `chat.completions.create` and parses the assistant text via `Model.model_validate_json(...)`. SDK helper wrappers (`client.beta.chat.completions.parse(...)`) are **not** used in v1 — picking one form keeps the cassette surface uniform; mixing both produced subtly different request bodies and broke vcrpy body-match on replay. For `llm_rerank`: `schema = LlmRerankResult.model_json_schema()`, no `tools=[...]`, no termination dance. An earlier draft used a forced-`tool_choice` output tool (`submit_llm_rerank`) — that pattern still works but is now legacy. No JSON-in-prose parsing.
 - Pros: one fewer stage and one fewer dependency (no fastembed reranker, no ONNX weights, no first-run model download); summary token budget can stay sane (~400 tokens) because there is no 512-token rerank window; quality of rerank improves because Sonnet can reason about *why* two startups are similar rather than just embedding cosine; Pydantic-typed multi-perspective scores feed synthesis without a separate scoring step.
@@ -654,7 +656,11 @@ llm_rerank(candidates.summary, description, query_facets, llm=sonnet)
     `messages.parse(...)`) are intentionally NOT used in v1 — picking one
     form keeps the cassette body-match surface uniform.)
     LlmRerankResult contains top-N_synthesize ScoredCandidates with
-    {business_model, market, gtm} PerspectiveScores + one-line rationales.
+    {business_model, market, gtm, stage_scale} PerspectiveScores + one-line
+    rationales. Ordering of `ranked` is the model's own judgment given the
+    pitch and the per-axis scores it just produced — there is no scalar
+    combination formula on our side. The four perspective scores are
+    inspectable rationale, not inputs to a sort key.
   → list[ScoredCandidate]                                              (N_synthesize≈5)
   ↓
 synthesize_all(top_n, query_ctx, llm=sonnet, tools=synthesis_tools(config))
@@ -723,7 +729,7 @@ class Synthesis(BaseModel):
     one_liner: str                   # what they did, ≤25 words
     failure_date: date | None
     lifespan_months: int | None
-    similarity: dict[str, PerspectiveScore]   # keys: business_model, market, gtm
+    similarity: dict[str, PerspectiveScore]   # keys: business_model, market, gtm, stage_scale
     why_similar: str                 # 2–4 sentences, references specific facets
     where_diverged: str              # 1–3 sentences (anti-cheerleading guard)
     failure_causes: list[str]        # short bullets from post-mortem
@@ -742,7 +748,15 @@ class Synthesis(BaseModel):
 
 # Result type for the llm_rerank stage; serves as response_format.json_schema.
 class LlmRerankResult(BaseModel):
-    ranked: list[ScoredCandidate]    # length == N_synthesize, ordered best-first
+    ranked: list[ScoredCandidate]    # length == N_synthesize.
+                                     # Ordering is the rerank model's own judgment, not a formula:
+                                     # the model selects top-N and orders best-first using the
+                                     # pitch context plus the four perspective scores it just
+                                     # emitted. There is no `combined_score` field — the four
+                                     # PerspectiveScores ({business_model, market, gtm, stage_scale})
+                                     # serve as inspectable rationale only, never recombined into
+                                     # a sort key on our side. Synthesis preserves this order in
+                                     # `Report.candidates`.
 
 class Report(BaseModel):
     input: InputContext              # name, description, years filter

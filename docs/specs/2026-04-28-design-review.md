@@ -1,7 +1,7 @@
 # slopmortem design review — open issues
 
 **Date:** 2026-04-28
-**Status:** post obvious-fix pass — only items needing discussion remain (6 open)
+**Status:** post obvious-fix pass — only items needing discussion remain (5 open)
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
@@ -10,13 +10,6 @@ The original review had 34 numbered findings + LOW polish items. Mechanical fixe
 ---
 
 ## Open issues
-
-### HIGH
-
-**#13 — Multi-perspective rerank lacks a combination rule** [Retrieval F10, spec §llm_rerank]
-Sonnet returns three perspective scores (`business_model`, `market`, `gtm`) per candidate, but the spec never says how `LlmRerankResult.ranked` is ordered.
-**Options to discuss:** (a) explicit scalar in the rubric: `combined = 0.5*business_model + 0.3*market + 0.2*gtm` — what are the weights? (b) have the model emit a final `combined_score` field and only sort by that; (c) keep the three perspectives separate and let synthesis decide ordering. (a) is most testable; (b) cedes the weighting to the model and may drift across model versions; (c) defers the problem.
-**Recommendation:** (a) with weights chosen empirically against the eval seed.
 
 ### MED
 
