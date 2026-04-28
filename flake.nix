@@ -40,6 +40,8 @@
           ruff
           basedpyright
 
+          just
+
           pre-commit
           taplo
 

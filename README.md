@@ -151,7 +151,7 @@ Two corners worth knowing about. `slopmortem ingest --reconcile` patches drift b
 
 Cassettes via pytest-recording, vcrpy underneath. I don't pair it with respx because both libraries patch the same httpx transport layer, and when they coexist you get fixture-order flakes that aren't local to whatever test is actually broken. One library is enough.
 
-`make smoke-live` hits live OpenRouter on a manual trigger, roughly weekly. The point is to notice when an SDK, a model, or OpenRouter's routing layer silently shifts behavior. Everything else replays from disk.
+`just smoke-live` hits live OpenRouter on a manual trigger, roughly weekly. The point is to notice when an SDK, a model, or OpenRouter's routing layer silently shifts behavior. Everything else replays from disk.
 
 ## Design notes
 
