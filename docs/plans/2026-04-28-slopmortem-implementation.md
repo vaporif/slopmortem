@@ -1549,7 +1549,7 @@ EMBED_DIMS: dict[str, int] = {
 
 ### Step-by-step
 
-- [ ] **Step 2b.1: Failing test**
+- [x] **Step 2b.1: Failing test**
 
 ```python
 import pytest
@@ -1572,11 +1572,11 @@ def test_unknown_model_raises():
         OpenAIEmbeddingClient(sdk=sdk, budget=Budget(0.01), model="text-embedding-3-xxl")
 ```
 
-- [ ] **Step 2b.2: Implement** — call `sdk.embeddings.create(input=texts, model=model)`, retry on transient failures, accumulate cost from `usage.total_tokens / 1_000_000 × price_per_million` (prices in `prices.yml` are per 1M tokens — see header comment at the top of `prices.yml`), debit budget via `reserve/settle`.
+- [x] **Step 2b.2: Implement** — call `sdk.embeddings.create(input=texts, model=model)`, retry on transient failures, accumulate cost from `usage.total_tokens / 1_000_000 × price_per_million` (prices in `prices.yml` are per 1M tokens — see header comment at the top of `prices.yml`), debit budget via `reserve/settle`.
 
-- [ ] **Step 2b.3: `FakeEmbeddingClient`** — deterministic vectors derived from `hashlib.sha256(text)` so tests are stable.
+- [x] **Step 2b.3: `FakeEmbeddingClient`** — deterministic vectors derived from `hashlib.sha256(text)` so tests are stable.
 
-- [ ] **Step 2b.4: Verify**
+- [x] **Step 2b.4: Verify**
 
 Run: `uv run pytest tests/llm/test_embeddings.py -v`
 Expected: green.
