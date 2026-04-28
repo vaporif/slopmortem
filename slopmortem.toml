@@ -1,0 +1,27 @@
+K_retrieve = 30
+N_synthesize = 5
+ingest_concurrency = 20
+facet_boost = 0.01
+rrf_k = 60
+slop_threshold = 0.7
+max_doc_tokens = 50000
+tier3_calibration_band = [0.65, 0.85]
+max_cost_usd_per_query = 2.00
+max_cost_usd_per_ingest = 15.00
+
+openrouter_base_url = "https://openrouter.ai/api/v1"
+model_facet = "anthropic/claude-haiku-4.5"
+model_summarize = "anthropic/claude-haiku-4.5"
+model_rerank = "anthropic/claude-sonnet-4.6"
+model_synthesize = "anthropic/claude-sonnet-4.6"
+
+embedding_provider = "openai"
+retry_max_attempts = 3
+retry_initial_backoff = 1.0
+
+enable_tavily_enrich = false
+enable_tavily_synthesis = false
+enable_wayback = false
+enable_crunchbase = false
+enable_tracing = false
+strict_deaths = false
