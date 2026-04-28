@@ -1278,11 +1278,28 @@ class OpenRouterClient:
             if fr in ("length", "content_filter"):
                 raise RuntimeError(f"hard stop: {fr}")
             if fr == "error":
+                # Safety net: should be unreachable because _call_with_retry consumes the
+                # stream itself and raises MidStreamError before returning. Kept as a
+                # belt-and-braces guard in case the wrapper is bypassed in a future refactor.
                 raise MidStreamError(getattr(choice, "error", {"code": "unknown"}))
         raise RuntimeError("tool-loop bound exceeded")
 
     async def _call_with_retry(self, **kw):
-        # Retry on: HTTP 5xx, RateLimitError, MidStreamError. Reraise on 401/403/402/503.
+        # Calls chat.completions.create(stream=True, **kw), consumes the stream into a
+        # response object, and inspects the final chunk's finish_reason. If
+        # finish_reason == "error", raises MidStreamError(error) BEFORE returning.
+        # Retry policy (applied inside this method's loop, transparent to the caller):
+        #   - transient → exponential backoff with jitter, up to self._max_retries:
+        #       * HTTP 5xx (incl. 502 pre-stream from upstream Anthropic overload)
+        #       * RateLimitError (HTTP 429); SDK honors Retry-After when present
+        #       * MidStreamError when error.code == "overloaded_error" (the only place
+        #         that code surfaces — see corrections doc Issue 2)
+        #   - fatal (re-raise immediately, no retry): HTTP 401/403 (auth), 402
+        #     (insufficient credits), 503 (no provider meets routing requirements),
+        #     MidStreamError with any other error.code, structured-output schema
+        #     mismatch (retrying won't change the schema we send).
+        # On success returns the consumed response (same shape as a non-streaming
+        # ChatCompletion); the caller never sees raw chunks.
         ...
 
     def _build_messages(self, system, prompt, *, cache):
