@@ -1,0 +1,19 @@
+# Source-of-truth for cost_usd derivations. Pricing per 1M tokens, USD.
+# Verified against OpenRouter pass-through rates as of 2026-04-28.
+platform_fee_pct: 5.5
+"openai/text-embedding-3-small":
+  input: 0.02
+"anthropic/claude-haiku-4.5":
+  input: 1.00
+  output: 5.00
+  cache_write_5m: 1.25     # multiplier on input price
+  cache_write_1h: 2.0
+  cache_read: 0.10         # ratio of input price
+"anthropic/claude-sonnet-4.6":
+  input: 3.00
+  output: 15.00
+  cache_write_5m: 1.25
+  cache_write_1h: 2.0
+  cache_read: 0.10
+# PAYG 5.5% credit-deposit fee surfaced as `platform_fee_pct` (top-level) for
+# `budget.py` to apply at deposit-ceiling time; not folded into per-token rates.

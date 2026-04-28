@@ -1120,7 +1120,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 2.1: Write `prices.yml`**
+- [x] **Step 2.1: Write `prices.yml`**
 
 ```yaml
 # Source-of-truth for cost_usd derivations. Pricing per 1M tokens, USD.
