@@ -1,20 +1,21 @@
-"""HTML sanitize + extract pipeline for raw source documents.
+"""HTML sanitize and extract pipeline for raw source documents.
 
-Pipeline (per spec line 244): sanitize HTML -> trafilatura -> readability fallback ->
-length floor (<500 chars => empty). The sanitizer runs BEFORE trafilatura because
-trafilatura otherwise preserves HTML comments, JSON-LD, hidden nodes, and
-attribute text as "visible," which makes them an indirect-injection surface.
+Pipeline (per spec line 244): sanitize HTML -> trafilatura -> readability
+fallback -> length floor (<500 chars => empty). The sanitizer runs BEFORE
+trafilatura because trafilatura otherwise treats HTML comments, JSON-LD,
+hidden nodes, and attribute text as "visible," which makes them an
+indirect-injection surface.
 
-The set of surfaces stripped here is fixed by the hostile-fixture test in
-``tests/sources/test_extract_visible_text_only.py`` and must match spec line 244
-verbatim: comments, ``<script>``/``<style>``/``<noscript>``, JSON-LD scripts,
-``display:none``/``visibility:hidden``/``hidden`` nodes, and ``aria-label``/
-``alt``/``title`` attributes.
+The set of surfaces stripped here is pinned by the hostile-fixture test in
+``tests/sources/test_extract_visible_text_only.py`` and must match spec
+line 244 exactly: comments, ``<script>``/``<style>``/``<noscript>``, JSON-LD
+scripts, ``display:none``/``visibility:hidden``/``hidden`` nodes, and
+``aria-label``/``alt``/``title`` attributes.
 """
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportAny=false
-# Rationale: lxml ships no type stubs and adding `lxml-stubs` to the dep list
-# is out of scope for this task. Module-wide suppression localized to the
-# sanitizer; the surfaces are pinned by the hostile-fixture test instead.
+# lxml ships no type stubs, and pulling `lxml-stubs` into the dep list isn't
+# worth it for this module alone. Module-wide suppression is local to the
+# sanitizer; the actual surfaces are pinned by the hostile-fixture test.
 
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ _STRIPPED_ATTRS = ("aria-label", "alt", "title")
 
 
 def _drop_node(node: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Detach *node* from its parent, or clear it in place if it is the root."""
+    """Detach *node* from its parent, or clear it in place if it's the root."""
     parent = node.getparent()
     if parent is None:
         node.clear()
@@ -44,7 +45,7 @@ def _drop_node(node: Any) -> None:  # pyright: ignore[reportExplicitAny]
 
 
 def _drop_comments(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Remove HTML comments including ``<!-- IMPORTANT: ... -->`` injections."""
+    """Remove HTML comments, including ``<!-- IMPORTANT: ... -->`` injections."""
     for comment in root.xpath("//comment()"):
         _drop_node(comment)
     for comment in list(root.iter(Comment)):
@@ -52,14 +53,14 @@ def _drop_comments(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
 
 
 def _drop_stripped_tags(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Remove ``<script>``/``<style>``/``<noscript>`` (incl. JSON-LD) entirely."""
+    """Remove ``<script>``, ``<style>``, and ``<noscript>`` (including JSON-LD)."""
     for tag in _STRIPPED_TAGS:
         for node in root.iter(tag):
             _drop_node(node)
 
 
 def _drop_hidden_nodes(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Remove nodes hidden via the ``hidden`` attr or display/visibility CSS."""
+    """Remove nodes hidden by the ``hidden`` attribute or by display/visibility CSS."""
     for node in list(root.iter()):
         if not isinstance(node.tag, str):
             continue
@@ -72,7 +73,7 @@ def _drop_hidden_nodes(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
 
 
 def _strip_attribute_text(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Remove ``aria-label`` / ``alt`` / ``title`` so trafilatura can't lift them."""
+    """Strip ``aria-label``, ``alt``, and ``title`` so trafilatura can't lift their text."""
     for node in root.iter():
         if not isinstance(node.tag, str):
             continue

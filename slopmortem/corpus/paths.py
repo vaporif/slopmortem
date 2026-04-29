@@ -1,4 +1,4 @@
-"""Validated, traversal-safe path construction for raw / canonical / quarantine docs."""
+"""Validated, traversal-safe path construction for raw, canonical, and quarantine docs."""
 
 from __future__ import annotations
 
