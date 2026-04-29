@@ -22,7 +22,7 @@ slopmortem ingest                    # curated YAML + HN by default; ~$7.50 firs
 slopmortem query "your pitch here"   # ~$0.50, run whenever
 ```
 
-Ingest picks up curated + HN automatically. Add `--crunchbase-csv PATH` for a Crunchbase dump, `--enrich-wayback` to chase 404s through the Wayback Machine, and `--tavily-enrich` to fill in missing context from Tavily search. `--dry-run` counts without writing; `--force` bypasses the per-source skip key.
+Ingest picks up curated + HN automatically. Add `--crunchbase-csv PATH` for a Crunchbase dump — the repo ships the 2015 `notpeter/crunchbase-data` mirror as a git submodule under `external/crunchbase-data/`. Run `git submodule update --init` once to fetch it, then `python scripts/filter_crunchbase_closed.py` to produce a closed-only slice (~6.2K rows at `external/crunchbase-data/companies-closed.csv`) and point `--crunchbase-csv` at it. `--enrich-wayback` chases 404s through the Wayback Machine (recommended alongside the Crunchbase slice — most 2015 dead-startup homepages are gone), and `--tavily-enrich` fills missing context from Tavily search. `--dry-run` counts without writing; `--force` bypasses the per-source skip key.
 
 <details>
 <summary><b>Maintenance corners</b></summary>
