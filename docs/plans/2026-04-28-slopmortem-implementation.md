@@ -2625,7 +2625,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 11.1: Assertions**
+- [x] **Step 11.1: Assertions**
 
 ```python
 def where_diverged_nonempty(synthesis) -> bool:
@@ -2647,17 +2647,17 @@ def lifespan_months_positive(synthesis) -> bool:
     return synthesis.lifespan_months is None or synthesis.lifespan_months > 0
 ```
 
-- [ ] **Step 11.2: Runner**
+- [x] **Step 11.2: Runner**
 
 Loads dataset, runs `pipeline.run_query` per row, applies assertions, prints per-item results, exits non-zero if regression vs baseline (or any assertion fails on a row that previously passed).
 
 **LLM isolation:** the runner defaults to `FakeLLMClient` + `FakeEmbeddingClient` populated from cassettes under `tests/fixtures/cassettes/evals/`. Live API calls are gated behind a `--live` flag (or `RUN_LIVE=1` env var); both must be set explicitly to spend real budget. The `--record` flag (paired with `--live`) re-records cassettes; `make eval-record` is the recording entry point. Default `make eval` is deterministic and free.
 
-- [ ] **Step 11.3: Seed dataset**
+- [x] **Step 11.3: Seed dataset**
 
 Ten diverse `InputContext` lines covering different sectors / business models / years filters.
 
-- [ ] **Step 11.4: Tests**
+- [x] **Step 11.4: Tests**
 
 ```python
 def test_where_diverged_nonempty_catches_empty():
@@ -2669,7 +2669,7 @@ def test_runner_exits_nonzero_on_regression(tmp_path, monkeypatch):
     ...
 ```
 
-- [ ] **Step 11.5: Verify**
+- [x] **Step 11.5: Verify**
 
 Run: `make eval`
 Expected: prints per-item pass/fail (cassette-driven, no live API spend), exits 0 against baseline. To re-record cassettes against live OpenRouter, run `make eval-record`.
