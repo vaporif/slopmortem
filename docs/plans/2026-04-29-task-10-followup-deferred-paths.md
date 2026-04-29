@@ -927,7 +927,7 @@ def test_cli_reclassify_dispatches(monkeypatch, tmp_path: Path):
     assert "still_slop=2" in result.output
 ```
 
-- [ ] **Step D.4: Run the tests; confirm they fail.**
+- [x] **Step D.4: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_reclassify.py tests/test_cli_reclassify.py -v
@@ -935,7 +935,7 @@ def test_cli_reclassify_dispatches(monkeypatch, tmp_path: Path):
 
 Expected: all fail with `ImportError`.
 
-- [ ] **Step D.5: Add `ReclassifyReport` to `slopmortem/models.py`.**
+- [x] **Step D.5: Add `ReclassifyReport` to `slopmortem/models.py`.**
 
 ```python
 class ReclassifyReport(BaseModel):
@@ -947,7 +947,7 @@ class ReclassifyReport(BaseModel):
     errors: int
 ```
 
-- [ ] **Step D.6: Implement `reclassify_quarantined` in `slopmortem/corpus/reclassify.py`.**
+- [x] **Step D.6: Implement `reclassify_quarantined` in `slopmortem/corpus/reclassify.py`.**
 
 ```python
 """Re-score quarantined docs; declassify survivors and route through entity resolution."""
