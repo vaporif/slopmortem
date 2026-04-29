@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from slopmortem.llm.client import CompletionResult
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class NoCannedResponseError(KeyError):

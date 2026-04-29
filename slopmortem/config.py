@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing_extensions import override  # `typing.override` is 3.12+; project targets 3.11
+from typing import override
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import (
