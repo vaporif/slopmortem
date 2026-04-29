@@ -314,6 +314,7 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
         cutoff_iso="2000-01-01T00:00:00Z",
         strict_deaths=False,
         k_retrieve=10,
+        sparse_encoder=lambda _t: {1: 1.0},
     )
     ids = [c.canonical_id for c in candidates]
     assert "all_other" in ids
