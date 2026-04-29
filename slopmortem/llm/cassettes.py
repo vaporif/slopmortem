@@ -8,9 +8,10 @@ CASSETTE_ROOT = Path(__file__).resolve().parent.parent.parent / "tests" / "casse
 
 
 def cassette_dir_for(test_file: str | Path) -> Path:
-    """Return the on-disk directory pytest-recording should use for a given test file.
+    """On-disk directory pytest-recording should use for a given test file.
 
-    We mirror the test path under ``tests/cassettes/`` so the layout tracks the test tree.
+    The layout under ``tests/cassettes/`` mirrors the test tree so cassettes
+    sit next to the tests that recorded them.
     """
     p = Path(test_file).resolve()
     try:

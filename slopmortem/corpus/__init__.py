@@ -1,4 +1,4 @@
-"""Corpus storage, paths, retrieval, and tool-call implementations."""
+"""Corpus storage: paths, retrieval, and tool-call implementations."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
-"""Async embedding client for OpenAI-compatible APIs with budget reserve/settle.
+"""Async embedding client for OpenAI-compatible APIs that reserves and settles against the budget.
 
-Vendor SDK responses are loosely typed; this file silences `reportAny` /
+Vendor SDK responses are loosely typed; this file silences `reportAny` and
 `reportUnknown*` at the boundary while keeping `reportExplicitAny` per-site.
 """
 
@@ -43,7 +43,7 @@ def _input_rate_per_million(model: str) -> float:
 
 
 class OpenAIEmbeddingClient:
-    """Wraps an OpenAI-compatible SDK to embed text under a shared cost Budget."""
+    """OpenAI-compatible SDK wrapper that embeds text under a shared cost Budget."""
 
     def __init__(  # noqa: PLR0913 — knobs are public API; users construct this directly.
         self,
@@ -72,11 +72,11 @@ class OpenAIEmbeddingClient:
         return EMBED_DIMS[self.model]
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        """Embed *texts* and settle actual cost against the budget."""
+        """Embed *texts* and settle the real cost against the budget."""
         eff_model = model or self.model
         rate = _input_rate_per_million(eff_model)
-        # Reserve a conservative ceiling: assume worst-case ~1k tokens per text.
-        # The actual cost is settled after the call from usage.total_tokens.
+        # Reserve a conservative ceiling assuming ~1k tokens per text in the
+        # worst case. The real cost is settled from usage.total_tokens after.
         ceiling = max(len(texts), 1) * 1000 / 1_000_000 * rate
         rid = await self._budget.reserve(ceiling)
         cost_usd = 0.0

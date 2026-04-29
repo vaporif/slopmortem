@@ -1,4 +1,4 @@
-"""LLMClient Protocol — the chat-completion shape every backend (real, fake, cassette) honors."""
+"""LLMClient Protocol: the chat-completion shape every backend (real, fake, cassette) honors."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class CompletionResult:
-    """Single completion turn: text, stop reason, optional Pydantic model, cost/cache stats."""
+    """One completion turn: text, stop reason, optional Pydantic model, and cost/cache stats."""
 
     text: str
     stop_reason: str

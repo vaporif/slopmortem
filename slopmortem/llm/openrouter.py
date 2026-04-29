@@ -1,5 +1,7 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-"""Async OpenRouter / OpenAI-compatible chat client. Handles retries, the tool-call loop, and cache control.
+"""Async OpenRouter / OpenAI-compatible chat client.
+
+Handles retries, the tool-call loop, and cache control.
 
 The vendor SDK is loosely typed (`object` / `Any` payloads with duck-typed
 attributes), so this file silences `reportAny`/`reportUnknown*` at the

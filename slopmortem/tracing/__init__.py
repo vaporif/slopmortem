@@ -1,4 +1,4 @@
-"""Init guard for the laminar tracer — refuses non-loopback endpoints by default."""
+"""Init guard for the laminar tracer. Refuses non-loopback endpoints by default."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _all_loopback(addrs: list[str]) -> bool:
 
 
 def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> None:
-    """Validate *base_url* before letting the tracer phone it home."""
+    """Validate *base_url* before letting the tracer phone home."""
     if not base_url:
         return
     host = urlparse(base_url).hostname

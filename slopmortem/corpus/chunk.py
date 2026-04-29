@@ -1,10 +1,9 @@
 """Heading-aware token-window chunker for canonical post-mortem markdown.
 
 Strategy: 768-token windows with 128-token overlap, tokenized via
-``tiktoken``'s ``cl100k_base`` encoding. The window boundary is nudged to
-land at the start of a ``#`` heading whenever a heading falls in a small
-forward search range, so synthesis sees a coherent section start instead of
-a mid-paragraph cut.
+``tiktoken``'s ``cl100k_base`` encoding. When a ``#`` heading falls a few
+tokens past the window start, the boundary is nudged forward to land on it
+so synthesis sees a clean section start instead of a mid-paragraph cut.
 """
 
 from __future__ import annotations
@@ -14,9 +13,9 @@ from typing import Final
 import tiktoken
 from pydantic import BaseModel
 
-#: Bumping any of (window, overlap, tokenizer) is a CHANGELOG entry — the
-#: skip_key tuple includes ``chunk_strategy_version`` so a bump invalidates
-#: cached chunks naturally on the next ingest.
+#: Bumping any of (window, overlap, tokenizer) is a CHANGELOG entry. The
+#: skip_key tuple includes ``chunk_strategy_version``, so a bump invalidates
+#: cached chunks on the next ingest.
 CHUNK_STRATEGY_VERSION: Final[str] = "v1-768-128-cl100k"
 
 WINDOW_TOKENS: Final[int] = 768
@@ -25,7 +24,7 @@ HEADING_SEARCH_TOKENS: Final[int] = 96
 
 
 class Chunk(BaseModel):
-    """A single chunk fed to the embedder + stored as one Qdrant point."""
+    """One chunk fed to the embedder and stored as a single Qdrant point."""
 
     text: str
     parent_canonical_id: str
