@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import anyio
 import numpy as np
 from anyio import to_thread
 
@@ -36,6 +37,7 @@ class FastEmbedEmbeddingClient:
         self._budget = budget
         self._cache_dir = cache_dir
         self._te: TextEmbedding | None = None
+        self._load_lock = anyio.Lock()
 
     @property
     def dim(self) -> int:
@@ -47,11 +49,19 @@ class FastEmbedEmbeddingClient:
         await self._ensure_loaded()
 
     async def _ensure_loaded(self) -> TextEmbedding:
-        """Materialize the fastembed model on first use; idempotent."""
+        """Materialize the fastembed model on first use; idempotent.
+
+        Lock-and-double-check so concurrent embed() calls (ingest fans out to
+        ``ingest_concurrency`` callers) do not each load a separate ~550MB
+        model into memory.
+        """
         if self._te is not None:
             return self._te
-        self._te = await to_thread.run_sync(self._load_sync)
-        return self._te
+        async with self._load_lock:
+            if self._te is not None:
+                return self._te
+            self._te = await to_thread.run_sync(self._load_sync)
+            return self._te
 
     def _load_sync(self) -> TextEmbedding:
         from fastembed import TextEmbedding  # noqa: PLC0415 — heavy import, defer

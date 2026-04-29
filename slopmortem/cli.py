@@ -552,9 +552,9 @@ async def _embed_prefetch() -> None:
             f"slopmortem: provider {config.embedding_provider!r} has no local cache to prefetch",
             err=True,
         )
-        return
+        raise typer.Exit(code=1)
     try:
-        await embedder._ensure_loaded()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage] — CLI surface owns the cache-warm trigger
+        await embedder.prefetch()
     except Exception as exc:
         typer.echo(f"slopmortem: embed-prefetch failed: {exc}", err=True)
         raise typer.Exit(code=1) from exc

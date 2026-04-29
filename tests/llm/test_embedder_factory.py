@@ -28,3 +28,11 @@ def test_factory_raises_on_unknown_provider():
     cfg = Config(embedding_provider="ollama", embed_model_id="text-embedding-3-small")
     with pytest.raises(ValueError, match="ollama"):
         _make_embedder(cfg, Budget(0.0))
+
+
+def test_factory_openai_provider_without_api_key_raises(monkeypatch: pytest.MonkeyPatch):
+    """Selecting the openai provider without OPENAI_API_KEY must fail loudly at startup."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    cfg = Config(embedding_provider="openai", embed_model_id="text-embedding-3-small")
+    with pytest.raises(KeyError, match="OPENAI_API_KEY"):
+        _make_embedder(cfg, Budget(0.0))
