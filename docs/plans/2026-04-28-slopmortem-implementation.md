@@ -2151,7 +2151,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 6.1: Failing cassette test**
+- [x] **Step 6.1: Failing cassette test**
 
 ```python
 async def test_facet_extract_returns_taxonomy_valid_facets(fake_llm, taxonomy):
@@ -2167,7 +2167,7 @@ async def test_facet_extract_uses_other_when_unclear(fake_llm):
     assert facets.sector == "other" or facets.sector in TAXONOMY_SECTORS
 ```
 
-- [ ] **Step 6.2: Implement**
+- [x] **Step 6.2: Implement**
 
 ```python
 from __future__ import annotations
@@ -2195,11 +2195,11 @@ async def extract_facets(text: str, llm: LLMClient, model: str | None = None) ->
     return Facets.model_validate_json(result.text)
 ```
 
-- [ ] **Step 6.3: Taxonomy validation**
+- [x] **Step 6.3: Taxonomy validation**
 
 Add a Pydantic `model_validator(mode='after')` on `Facets` that re-checks each enum field against the loaded `taxonomy.yml`. Catches LLMs that ignore `strict: True` and invent values.
 
-- [ ] **Step 6.4: Verify**
+- [x] **Step 6.4: Verify**
 
 Run: `uv run pytest tests/stages/test_facet_extract.py -v`
 Expected: green.

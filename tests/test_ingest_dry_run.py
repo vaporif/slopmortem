@@ -26,8 +26,8 @@ def _stub_sparse(_text: str) -> dict[int, float]:
 def _facets() -> str:
     return json.dumps(
         {
-            "sector": "marketplace",
-            "business_model": "marketplace",
+            "sector": "retail_ecommerce",
+            "business_model": "b2b_marketplace",
             "customer_type": "smb",
             "geography": "us",
             "monetization": "transaction_fee",
