@@ -1612,7 +1612,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "qdrant-client", specifier = ">=1.14" },
+    { name = "qdrant-client", specifier = ">=1.17.1" },
     { name = "readability-lxml", specifier = ">=0.8.1" },
     { name = "tavily-python", specifier = ">=0.5" },
     { name = "tiktoken", specifier = ">=0.7" },
