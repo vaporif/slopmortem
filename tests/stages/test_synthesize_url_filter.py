@@ -6,12 +6,12 @@ import json
 from datetime import date
 from urllib.parse import urlparse
 
+from conftest import llm_canned_key
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages.synthesize import synthesize
-from conftest import llm_canned_key
 
 _DEFAULT_MODEL = "test-synth-model"
 
@@ -85,8 +85,9 @@ async def test_synthesize_drops_off_allowlist_urls() -> None:
     )
     fake_llm = FakeLLMClient(
         canned={
-            llm_canned_key("synthesize", model=_DEFAULT_MODEL, prompt=rendered):
-                FakeResponse(text=_bad_synthesis_payload()),
+            llm_canned_key("synthesize", model=_DEFAULT_MODEL, prompt=rendered): FakeResponse(
+                text=_bad_synthesis_payload()
+            ),
         },
         default_model=_DEFAULT_MODEL,
     )

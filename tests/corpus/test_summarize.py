@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import tiktoken
 
+from conftest import llm_canned_key
 from slopmortem.corpus.summarize import summarize_for_rerank
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
-from conftest import llm_canned_key
 
 _HAIKU = "anthropic/claude-haiku-4.5"
 _SUMMARY_TEXT = (

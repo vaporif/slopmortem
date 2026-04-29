@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import TYPE_CHECKING
 
 import pytest
 from pydantic import BaseModel
@@ -12,14 +13,27 @@ from slopmortem.evals.cassettes import (
     CassetteFormatError,
     CassetteSchemaError,
     DuplicateCassetteError,
+    EmbeddingCassette,
+    LlmCassette,
     NoCannedEmbeddingError,
+    SparseCassette,
     _slugify_model,
+    load_embedding_cassettes,
+    load_llm_cassettes,
+    write_embedding_cassette,
+    write_llm_cassette,
+    write_sparse_cassette,
 )
 from slopmortem.llm.cassettes import (
     embed_cassette_key,
     llm_cassette_key,
     template_sha,
 )
+from slopmortem.llm.fake import FakeLLMClient, FakeResponse, NoCannedResponseError
+from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class _Schema(BaseModel):
@@ -80,20 +94,6 @@ def test_slugify_model_replaces_slash_colon_at() -> None:
     assert _slugify_model("nomic-ai/nomic-embed-text-v1.5") == "nomic-ai_nomic-embed-text-v1.5"
     # Idempotent on already-safe input.
     assert _slugify_model("plain-name_v1.5") == "plain-name_v1.5"
-
-
-from pathlib import Path
-
-from slopmortem.evals.cassettes import (
-    EmbeddingCassette,
-    LlmCassette,
-    SparseCassette,
-    load_embedding_cassettes,
-    load_llm_cassettes,
-    write_embedding_cassette,
-    write_llm_cassette,
-    write_sparse_cassette,
-)
 
 
 def test_llm_cassette_round_trip(tmp_path: Path) -> None:
@@ -227,9 +227,6 @@ def test_duplicate_key_is_fatal(tmp_path: Path) -> None:
         load_llm_cassettes(tmp_path)
 
 
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse, NoCannedResponseError
-
-
 async def test_fake_llm_client_keys_on_three_tuple() -> None:
     canned = {
         ("template_sha_a", "m", "0123456789abcdef"): FakeResponse(text="hit"),
@@ -262,9 +259,6 @@ async def test_fake_llm_client_strict_no_wildcard_fallback() -> None:
     msg = str(exc_info.value)
     assert "fedcba9876543210" in msg
     assert "0123456789abcdef" in msg  # error message lists recorded keys
-
-
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 
 
 async def test_fake_embedding_client_strict_when_canned_supplied() -> None:

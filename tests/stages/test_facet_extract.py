@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
+from conftest import llm_canned_key
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.stages.facet_extract import extract_facets
-from conftest import llm_canned_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -33,8 +33,9 @@ def _canned(text: str, *, description: str) -> dict[tuple[str, str, str], FakeRe
     # ``FakeLLMClient`` keys lookups on its ``default_model``.
     rendered = render_prompt("facet_extract", description=description)
     return {
-        llm_canned_key("facet_extract", model=_DEFAULT_MODEL, prompt=rendered):
-            FakeResponse(text=text),
+        llm_canned_key("facet_extract", model=_DEFAULT_MODEL, prompt=rendered): FakeResponse(
+            text=text
+        ),
     }
 
 

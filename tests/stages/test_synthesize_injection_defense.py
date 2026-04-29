@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
@@ -15,7 +16,6 @@ from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages import synthesize as synth_module
 from slopmortem.stages.synthesize import synthesize
 from slopmortem.tracing.events import SpanEvent
-from conftest import llm_canned_key
 
 _DEFAULT_MODEL = "test-synth-model"
 _FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "injection"
@@ -124,8 +124,9 @@ async def test_synthesize_ignores_injected_instructions(
     )
     fake_llm = FakeLLMClient(
         canned={
-            llm_canned_key("synthesize", model=_DEFAULT_MODEL, prompt=rendered):
-                FakeResponse(text=_injection_synthesis_payload()),
+            llm_canned_key("synthesize", model=_DEFAULT_MODEL, prompt=rendered): FakeResponse(
+                text=_injection_synthesis_payload()
+            ),
         },
         default_model=_DEFAULT_MODEL,
     )

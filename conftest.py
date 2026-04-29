@@ -19,6 +19,7 @@ def llm_canned_key(
     tsha = prompt_template_sha(template_name)
     return llm_cassette_key(prompt=prompt, system=system, template_sha=tsha, model=model)
 
+
 SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(

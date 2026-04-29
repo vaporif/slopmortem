@@ -49,7 +49,7 @@ def template_sha(
 def llm_cassette_key(
     *, prompt: str, system: str | None, template_sha: str, model: str
 ) -> tuple[str, str, str]:
-    """Compute the LLM cassette 3-tuple key.
+    r"""Compute the LLM cassette 3-tuple key.
 
     `\x1f` (ASCII unit separator) isolates the system block from the prompt
     so the two never alias regardless of content.

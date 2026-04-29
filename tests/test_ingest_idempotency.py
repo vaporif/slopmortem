@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.corpus.merge import MergeJournal
@@ -15,7 +16,6 @@ from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import RawEntry
-from conftest import llm_canned_key
 
 _HAIKU = "anthropic/claude-haiku-4.5"
 _BODY = "Acme was a marketplace startup that ran out of money. " * 30
@@ -42,10 +42,14 @@ def _facets() -> str:
 def _canned() -> dict[tuple[str, str, str], FakeResponse]:
     """Build canned entries for one ingest of `_BODY`: cache-warm + facet + fanout summarize."""
     facets_resp = FakeResponse(
-        text=_facets(), cache_creation_tokens=1000, cache_read_tokens=5000,
+        text=_facets(),
+        cache_creation_tokens=1000,
+        cache_read_tokens=5000,
     )
     summary_resp = FakeResponse(
-        text="Acme summary here.", cache_creation_tokens=0, cache_read_tokens=5000,
+        text="Acme summary here.",
+        cache_creation_tokens=0,
+        cache_read_tokens=5000,
     )
     facet_prompt = render_prompt("facet_extract", description=_BODY)
     summarize_warm_prompt = render_prompt("summarize", body=_BODY[:1000], source_id="warm")

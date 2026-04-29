@@ -7,13 +7,13 @@ from datetime import date
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.config import Config
 from slopmortem.errors import RerankLengthError
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets
 from slopmortem.stages.llm_rerank import llm_rerank
-from conftest import llm_canned_key
 
 _DEFAULT_MODEL = "test-rerank-model"
 

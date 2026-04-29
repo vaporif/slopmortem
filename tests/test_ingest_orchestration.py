@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.corpus.merge import MergeJournal
@@ -24,7 +25,6 @@ from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import RawEntry
 from slopmortem.tracing.events import SpanEvent
-from conftest import llm_canned_key
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -59,7 +59,7 @@ def _summary_text() -> str:
     )
 
 
-def _canned_for_run(
+def _canned_for_run(  # noqa: PLR0913 — every knob is a meaningful test variable
     *,
     summary_text: str | None = None,
     facets_json: str | None = None,
@@ -270,10 +270,14 @@ async def test_ingest_cache_warm_records_creation_tokens(tmp_path, cfg):
     # canned entry gets reused for fan-out; this test only asserts warm
     # bookkeeping, so reuse is fine.
     facet_resp = FakeResponse(
-        text=_fake_facets_json(), cache_creation_tokens=0, cache_read_tokens=8000,
+        text=_fake_facets_json(),
+        cache_creation_tokens=0,
+        cache_read_tokens=8000,
     )
     summarize_resp = FakeResponse(
-        text=_summary_text(), cache_creation_tokens=2048, cache_read_tokens=8000,
+        text=_summary_text(),
+        cache_creation_tokens=2048,
+        cache_read_tokens=8000,
     )
     facet_prompt = render_prompt("facet_extract", description=_ENTRY_BODY)
     summarize_warm_prompt = render_prompt("summarize", body=_ENTRY_BODY[:1000], source_id="warm")

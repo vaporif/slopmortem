@@ -1,0 +1,30 @@
+- name: solyndra
+  description: Cylindrical thin-film solar manufacturer
+  url: https://en.wikipedia.org/wiki/Solyndra
+- name: theranos
+  description: Blood-testing platform
+  url: https://en.wikipedia.org/wiki/Theranos
+- name: webvan
+  description: Online grocery delivery (1996-2001)
+  url: https://en.wikipedia.org/wiki/Webvan
+- name: pets-com
+  description: Online pet supplies retailer
+  url: https://en.wikipedia.org/wiki/Pets.com
+- name: kozmo-com
+  description: One-hour delivery startup
+  url: https://en.wikipedia.org/wiki/Kozmo.com
+- name: better-place
+  description: EV battery-swap network
+  url: https://en.wikipedia.org/wiki/Better_Place_(company)
+- name: jawbone
+  description: Wearable fitness band
+  url: https://en.wikipedia.org/wiki/Jawbone_(company)
+- name: blockbuster
+  description: Video rental chain
+  url: https://en.wikipedia.org/wiki/Blockbuster_LLC
+- name: pebble
+  description: Smartwatch maker
+  url: https://en.wikipedia.org/wiki/Pebble_(watch)
+- name: quibi
+  description: Short-form mobile video service
+  url: https://en.wikipedia.org/wiki/Quibi

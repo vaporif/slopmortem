@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
@@ -27,7 +28,6 @@ from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis
 from slopmortem.pipeline import _cutoff_iso, _join_to_candidates, run_query
-from conftest import llm_canned_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -329,6 +329,51 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     q = fake_corpus.queries[0]
     assert q["k_retrieve"] == cfg.K_retrieve
     assert q["strict_deaths"] == cfg.strict_deaths
+
+
+async def test_run_query_forwards_sparse_encoder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_query forwards sparse_encoder to retrieve(); production fastembed not loaded."""
+    candidates = [_candidate(f"cand-{i}") for i in range(6)]
+    cfg = _build_config(k_retrieve=6, n_synthesize=3)
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
+    fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
+    fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
+    fake_corpus = _FakeCorpus(candidates=candidates)
+    budget = Budget(cap_usd=2.0)
+
+    seen_calls: list[str] = []
+
+    def my_sparse(text: str) -> dict[int, float]:
+        seen_calls.append(text)
+        return {1: 1.0}
+
+    # Sabotage the lazy fastembed default so the test fails loud if the
+    # injected encoder is NOT used.
+    def _boom(_t: str) -> dict[int, float]:
+        msg = "default sparse encoder must not be invoked"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _boom)
+
+    _ = await run_query(
+        ctx,
+        llm=fake_llm,
+        embedding_client=fake_embed,
+        corpus=fake_corpus,
+        config=cfg,
+        budget=budget,
+        sparse_encoder=my_sparse,
+    )
+
+    # The injected encoder ran during retrieve(): ctx.description goes through
+    # the sparse path verbatim.
+    assert seen_calls
+    assert ctx.description in seen_calls
 
 
 async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:

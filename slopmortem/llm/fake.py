@@ -56,13 +56,13 @@ class _Call:
 
 @dataclass
 class FakeLLMClient:
-    """In-memory LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
+    r"""In-memory LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
 
     Callers pass the template SHA via ``extra_body['prompt_template_sha']``;
     stage tests load it from ``slopmortem.llm.prompts.prompt_template_sha(name)``
     so any drift in the prompt text forces the fixture key to drift along with it.
     The ``prompt_hash`` slot is the first 16 hex chars of
-    ``sha256(system + '\\x1f' + prompt)`` (computed via
+    ``sha256(system + '\x1f' + prompt)`` (computed via
     :func:`slopmortem.llm.cassettes.llm_cassette_key`); tests may override it
     by passing ``extra_body['prompt_hash']`` directly.
     """
@@ -120,9 +120,7 @@ class FakeLLMClient:
         )
         key = (template_sha, eff_model, prompt_hash)
         if key not in self.canned:
-            msg = (
-                f"no canned response for key={key!r}; recorded keys: {sorted(self.canned)}"
-            )
+            msg = f"no canned response for key={key!r}; recorded keys: {sorted(self.canned)}"
             raise NoCannedResponseError(msg)
         item = self.canned[key]
         if isinstance(item, CompletionResult):

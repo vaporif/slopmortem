@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from datetime import date
 
+from conftest import llm_canned_key
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages.synthesize import synthesize, synthesize_all
-from conftest import llm_canned_key
 
 _DEFAULT_MODEL = "test-synth-model"
 

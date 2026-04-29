@@ -5,20 +5,18 @@ Usage:
         [--live] [--record] [--write-baseline]
 
 Modes:
-    DEFAULT (deterministic) — uses :class:`FakeLLMClient` with hardcoded canned
-        responses + :class:`FakeEmbeddingClient` + a private in-memory corpus.
-        No env vars, no Qdrant, no real API spend. This is what ``just eval``
-        and CI run.
-    --live — wires the real production deps via
-        :func:`slopmortem.cli._build_deps` and binds the corpus through
-        :func:`slopmortem.corpus.tools_impl._set_corpus`. Will fail if env
-        keys / Qdrant / OpenRouter are unavailable. Operator-invoked, out of
-        CI scope.
-    --record — paired with --live in the justfile. **Deferred to a follow-up**:
-        cassette recording for evals is not implemented in this iteration; the
-        runner prints a deferred message and exits 0.
-    --write-baseline — write the current run's results to the ``--baseline``
-        path instead of comparing. Exits 0 on success.
+    DEFAULT (cassettes) — uses FakeLLMClient + FakeEmbeddingClient backed by
+        committed cassettes under tests/fixtures/cassettes/evals/<row_id>/,
+        plus an ephemeral Qdrant collection seeded from
+        tests/fixtures/corpus_fixture.jsonl. No env vars beyond a running
+        Qdrant. This is what `just eval` and CI run.
+    --live — wires real production deps via slopmortem.cli._build_deps.
+        Operator-invoked, out of CI scope. Costs real money.
+    --record — re-record cassettes against the live API. Calls
+        record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
+    --scope <row_id> — restrict record or replay to a single row.
+    --write-baseline — write the current run's results to --baseline (v2
+        envelope, merging into any existing v2).
 
 Baseline JSON shape (normative)::
 
@@ -72,6 +70,7 @@ each candidate's own payload sources via the private in-memory corpus.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import sys
@@ -121,7 +120,6 @@ _DETERMINISTIC_SYNTH_MODEL = "test-synth"
 _DETERMINISTIC_EMBED_MODEL = "text-embedding-3-small"
 
 _BASELINE_VERSION = 1
-_RECORD_DEFERRED_MSG = "cassette recording for evals is deferred to a follow-up"
 _ROW_ID_HASH_PREFIX = 8
 
 _ASSERTION_NAMES: tuple[str, ...] = (
@@ -662,9 +660,9 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--record",
         action="store_true",
         help=(
-            "Re-record cassettes against the live API. "
-            "Cassette recording for evals is deferred to a follow-up; "
-            "this flag currently prints a deferred message and exits 0."
+            "Re-record cassettes against the live API via the recording helper. "
+            "Requires `tests/fixtures/corpus_fixture.jsonl` to exist; run "
+            "`just eval-record-corpus` first if missing."
         ),
     )
     _ = p.add_argument(
@@ -675,7 +673,66 @@ def _build_argparser() -> argparse.ArgumentParser:
             "Use this to bootstrap a baseline file."
         ),
     )
+    _ = p.add_argument(
+        "--scope",
+        type=str,
+        default=None,
+        help=(
+            "Filter to one row by name (record or replay). Without --scope, "
+            "every row in the dataset runs."
+        ),
+    )
+    _ = p.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=2.0,
+        help=(
+            "Cost ceiling per recording session ($). Only consulted in --record mode. "
+            "Override if a re-record legitimately needs more."
+        ),
+    )
     return p
+
+
+def _run_record(
+    *,
+    dataset_path: Path,
+    scope: str | None,
+    max_cost_usd: float,
+) -> None:
+    """Dispatch to the recording helper. Exits the process on completion or error."""
+    from slopmortem.config import load_config  # noqa: PLC0415
+    from slopmortem.evals import recording_helper  # noqa: PLC0415
+
+    rows = _load_dataset(dataset_path)
+    if scope is not None:
+        rows = [r for r in rows if r.name == scope]
+        if not rows:
+            valid = [r.name for r in _load_dataset(dataset_path)]
+            print(  # noqa: T201 — CLI surface
+                f"unknown scope {scope!r}; valid: {valid}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+    cfg = load_config()
+    output_dir = Path("tests/fixtures/cassettes/evals")
+    corpus_fixture_path = Path("tests/fixtures/corpus_fixture.jsonl")
+    if not corpus_fixture_path.exists():
+        print(  # noqa: T201 — CLI surface
+            f"missing {corpus_fixture_path}; run `just eval-record-corpus` first",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    asyncio.run(
+        recording_helper.record_cassettes_for_inputs(
+            inputs=rows,
+            output_dir=output_dir,
+            corpus_fixture_path=corpus_fixture_path,
+            config=cfg,
+            max_cost_usd=max_cost_usd,
+        )
+    )
+    sys.exit(0)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -690,11 +747,11 @@ def main(argv: list[str] | None = None) -> None:
     live = cast("bool", ns.live)
     record = cast("bool", ns.record)
     write_baseline = cast("bool", ns.write_baseline)
+    scope = cast("str | None", ns.scope)
+    max_cost_usd = cast("float", ns.max_cost_usd)
 
     if record:
-        # Match justfile's eval-record entry; deferred to a follow-up.
-        print(_RECORD_DEFERRED_MSG)  # noqa: T201 — CLI surface
-        sys.exit(0)
+        _run_record(dataset_path=dataset_path, scope=scope, max_cost_usd=max_cost_usd)
 
     rows = _load_dataset(dataset_path)
     row_ids = _verify_unique_row_ids(rows)

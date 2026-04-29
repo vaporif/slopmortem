@@ -19,15 +19,13 @@ from slopmortem.evals.cassettes import (
     write_sparse_cassette,
 )
 from slopmortem.llm.cassettes import embed_cassette_key, llm_cassette_key
-from slopmortem.llm.client import CompletionResult
-from slopmortem.llm.embedding_client import EmbeddingResult
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.llm.client import CompletionResult, LLMClient
+    from slopmortem.llm.embedding_client import EmbeddingClient, EmbeddingResult
 
 
 _PREVIEW_CHARS_PROMPT = 500
@@ -68,7 +66,8 @@ class RecordingLLMClient:
         """Forward to ``self._inner.complete`` then persist a cassette on success."""
         if self._max_cost_usd is not None and self._spent_usd >= self._max_cost_usd:
             raise RecordingBudgetExceededError(
-                spent=self._spent_usd, limit=self._max_cost_usd,
+                spent=self._spent_usd,
+                limit=self._max_cost_usd,
             )
         result = await self._inner.complete(
             prompt,
@@ -88,7 +87,10 @@ class RecordingLLMClient:
             prompt_hash = str(extra_body["prompt_hash"])  # pyright: ignore[reportAny]
         else:
             _, _, prompt_hash = llm_cassette_key(
-                prompt=prompt, system=system, template_sha=template_sha, model=eff_model,
+                prompt=prompt,
+                system=system,
+                template_sha=template_sha,
+                model=eff_model,
             )
         tool_names: list[str] = []
         for t in tools or []:  # pyright: ignore[reportAny]

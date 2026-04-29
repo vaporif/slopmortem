@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from slopmortem.llm.client import LLMClient
     from slopmortem.llm.embedding_client import EmbeddingClient
     from slopmortem.models import Candidate, InputContext, ScoredCandidate
+    from slopmortem.stages.retrieve import SparseEncoder
 
 
 _DAYS_PER_YEAR = 365
@@ -90,6 +91,7 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
     config: Config,
     budget: Budget,
     progress: Callable[[str], None] | None = None,
+    sparse_encoder: SparseEncoder | None = None,
 ) -> Report:
     """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
 
@@ -106,6 +108,10 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             reads ``spent_usd``/``remaining`` at the end.
         progress: Optional ``str -> None`` callback for stage progress (CLI uses
             it to write to stderr). Pipeline never writes to stderr itself.
+        sparse_encoder: Optional override for the BM25 sparse encoder forwarded
+            to ``retrieve``. ``None`` lazy-loads the production fastembed model
+            on first call. The recording helper passes a wrapped encoder so it
+            can persist sparse cassettes alongside dense + LLM cassettes.
 
     Returns:
         A :class:`Report` carrying the input echo, generated_at, the synthesized
@@ -134,6 +140,7 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             cutoff_iso=cutoff_iso,
             strict_deaths=config.strict_deaths,
             k_retrieve=config.K_retrieve,
+            sparse_encoder=sparse_encoder,
         )
 
         if progress is not None:

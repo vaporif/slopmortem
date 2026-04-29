@@ -13,8 +13,9 @@ def _key(*, prompt: str, template_sha: str, model: str) -> tuple[str, str, str]:
 
 async def test_returns_canned_response_for_matching_template_and_model():
     canned = {
-        _key(prompt="anything", template_sha="abc123", model="anthropic/claude-haiku-4.5"):
-            FakeResponse(text="hello world"),
+        _key(
+            prompt="anything", template_sha="abc123", model="anthropic/claude-haiku-4.5"
+        ): FakeResponse(text="hello world"),
     }
     fake = FakeLLMClient(canned=canned, default_model="anthropic/claude-haiku-4.5")
     r = await fake.complete(
@@ -26,8 +27,9 @@ async def test_returns_canned_response_for_matching_template_and_model():
 
 async def test_falls_back_to_default_model():
     canned = {
-        _key(prompt="anything", template_sha="abc123", model="anthropic/claude-haiku-4.5"):
-            FakeResponse(text="ok"),
+        _key(
+            prompt="anything", template_sha="abc123", model="anthropic/claude-haiku-4.5"
+        ): FakeResponse(text="ok"),
     }
     fake = FakeLLMClient(canned=canned, default_model="anthropic/claude-haiku-4.5")
     r = await fake.complete("anything", extra_body={"prompt_template_sha": "abc123"})
@@ -45,10 +47,12 @@ async def test_missing_canned_response_raises_explicit():
 
 async def test_records_calls_for_assertion():
     canned = {
-        _key(prompt="first", template_sha="abc123", model="anthropic/claude-haiku-4.5"):
-            FakeResponse(text="x"),
-        _key(prompt="second", template_sha="abc123", model="anthropic/claude-haiku-4.5"):
-            FakeResponse(text="x"),
+        _key(
+            prompt="first", template_sha="abc123", model="anthropic/claude-haiku-4.5"
+        ): FakeResponse(text="x"),
+        _key(
+            prompt="second", template_sha="abc123", model="anthropic/claude-haiku-4.5"
+        ): FakeResponse(text="x"),
     }
     fake = FakeLLMClient(canned=canned, default_model="anthropic/claude-haiku-4.5")
     await fake.complete("first", extra_body={"prompt_template_sha": "abc123"})

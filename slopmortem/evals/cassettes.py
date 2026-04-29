@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
 
 
 _SCHEMA_MAJOR = 1
@@ -53,6 +53,7 @@ class RecordingBudgetExceededError(Exception):
     """Raised when `RecordingLLMClient`'s accumulated cost would exceed `max_cost_usd`."""
 
     def __init__(self, *, spent: float, limit: float) -> None:
+        """Capture the spent and limit values for callers that want to inspect them."""
         super().__init__(f"recording cost ceiling exceeded: spent={spent:.4f} limit={limit:.4f}")
         self.spent = spent
         self.limit = limit
@@ -254,7 +255,7 @@ def write_embedding_cassette(cas: EmbeddingCassette, out_dir: Path) -> Path:
 
 
 def write_sparse_cassette(cas: SparseCassette, out_dir: Path) -> Path:
-    """Write a sparse-embedding cassette under `<out_dir>/embed__<slug(model)>__<text_hash>.json`."""
+    """Write a sparse-embedding cassette under `<out_dir>/embed__<slug>__<text_hash>.json`."""
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"embed__{_slugify_model(cas.model)}__{cas.text_hash}.json"
     path = out_dir / fname

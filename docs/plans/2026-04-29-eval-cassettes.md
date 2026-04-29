@@ -1459,7 +1459,7 @@ Owner: one subagent.
 
 The corpus fixture is regenerable; this YAML is the source of truth for what gets ingested.
 
-- [ ] **Step 1: Create `tests/fixtures/corpus_fixture_inputs.yml` with ~30 entries**
+- [x] **Step 1: Create `tests/fixtures/corpus_fixture_inputs.yml` with ~30 entries**
 
 For each entry, supply a `name`, a representative description, and the single canonical source URL. Pick a mix so the eval's facet retrieval has coverage across `(sector, business_model, customer_type, geography, monetization)`. Aim for ~30 entries; the existing `tests/fixtures/curated_test.yml` is a good starting source.
 
@@ -1502,7 +1502,7 @@ Note: Wikipedia is the safe default for test fixtures (`wikipedia.org` is in `_F
 
 ### 2B — `dump_collection_to_jsonl`, `restore_jsonl_to_collection`, `compute_fixture_sha256`
 
-- [ ] **Step 2: Write failing round-trip integration tests**
+- [x] **Step 2: Write failing round-trip integration tests**
 
 Create `tests/evals/__init__.py` (empty if missing).
 
@@ -1591,12 +1591,12 @@ def test_sha256_stable_across_calls(tmp_path: Path) -> None:
     assert compute_fixture_sha256(p) == compute_fixture_sha256(p)
 ```
 
-- [ ] **Step 3: Run the tests; expect failure**
+- [x] **Step 3: Run the tests; expect failure**
 
 Run: `uv run pytest tests/evals/test_corpus_fixture.py -v -m requires_qdrant`
 Expected: import error / fail.
 
-- [ ] **Step 4: Implement `slopmortem/evals/corpus_fixture.py`**
+- [x] **Step 4: Implement `slopmortem/evals/corpus_fixture.py`**
 
 ```python
 """JSONL dump/restore + SHA for the eval corpus fixture.
@@ -1709,12 +1709,12 @@ async def restore_jsonl_to_collection(
 
 Note: `client.scroll`, `with_vectors=True`, and the `dense`/`sparse` named-slot return shape must match what `slopmortem/corpus/qdrant_store.ensure_collection` actually creates. Verify by reading `slopmortem/corpus/qdrant_store.py:50-74`. If the named slots differ (e.g. `text_dense` / `text_sparse`), update the field names here.
 
-- [ ] **Step 5: Run the tests, fix any Qdrant slot-name mismatches**
+- [x] **Step 5: Run the tests, fix any Qdrant slot-name mismatches**
 
 Run: `docker compose up -d qdrant && uv run pytest tests/evals/test_corpus_fixture.py -v -m requires_qdrant`
 Expected: PASS.
 
-- [ ] **Step 6: Run the full suite + typecheck**
+- [x] **Step 6: Run the full suite + typecheck**
 
 Run: `just test && just typecheck`
 Expected: green (Qdrant tests skip when not available; under `docker compose up -d qdrant` they run).
@@ -1733,7 +1733,7 @@ Owner: one subagent.
 
 ### 3A — Thread `sparse_encoder` through `pipeline.run_query` (B1 from spec review)
 
-- [ ] **Step 1: Write a failing test for sparse_encoder pass-through**
+- [x] **Step 1: Write a failing test for sparse_encoder pass-through**
 
 Add to `tests/test_pipeline_e2e.py` (a new test, not modifying the migrated one):
 
@@ -1754,11 +1754,11 @@ async def test_run_query_forwards_sparse_encoder(tmp_path) -> None:
 
 (Operator: write a more concrete version of this test; the contract is "if `sparse_encoder=` is passed to `run_query`, that callable replaces the fastembed lazy-load path inside `retrieve()`.")
 
-- [ ] **Step 2: Run the test; expect `TypeError: run_query() got an unexpected keyword argument 'sparse_encoder'`**
+- [x] **Step 2: Run the test; expect `TypeError: run_query() got an unexpected keyword argument 'sparse_encoder'`**
 
 Run: `uv run pytest tests/test_pipeline_e2e.py::test_run_query_forwards_sparse_encoder -v`
 
-- [ ] **Step 3: Add `sparse_encoder` parameter to `run_query` in `slopmortem/pipeline.py:84-93`**
+- [x] **Step 3: Add `sparse_encoder` parameter to `run_query` in `slopmortem/pipeline.py:84-93`**
 
 Modify the signature:
 
@@ -1795,13 +1795,13 @@ retrieved = await retrieve(
 
 Update the `run_query` docstring to mention `sparse_encoder`.
 
-- [ ] **Step 4: Run the test; expect PASS**
+- [x] **Step 4: Run the test; expect PASS**
 
 Run: `uv run pytest tests/test_pipeline_e2e.py::test_run_query_forwards_sparse_encoder -v`
 
 ### 3B — `setup_ephemeral_qdrant()` async context manager
 
-- [ ] **Step 5: Implement `slopmortem/evals/qdrant_setup.py`**
+- [x] **Step 5: Implement `slopmortem/evals/qdrant_setup.py`**
 
 ```python
 """Async context manager that spins a uniquely-named Qdrant collection,
@@ -1862,7 +1862,7 @@ async def setup_ephemeral_qdrant(
 
 ### 3C — `record_cassettes_for_inputs()` orchestration helper (Layer 2)
 
-- [ ] **Step 6: Write failing test for the helper**
+- [x] **Step 6: Write failing test for the helper**
 
 Create `tests/evals/test_recording_helper.py`:
 
@@ -1935,12 +1935,12 @@ def test_atomic_swap_handles_missing_real_dir(tmp_path: Path) -> None:
     assert (real / "new.json").exists()
 ```
 
-- [ ] **Step 7: Run the failing tests**
+- [x] **Step 7: Run the failing tests**
 
 Run: `uv run pytest tests/evals/test_recording_helper.py -v`
 Expected: import error.
 
-- [ ] **Step 8: Implement `slopmortem/evals/recording_helper.py`**
+- [x] **Step 8: Implement `slopmortem/evals/recording_helper.py`**
 
 ```python
 """Layer-2 reusable helper: record cassettes for a set of inputs end-to-end.
@@ -2127,12 +2127,12 @@ class _ByModelLLM:
 
 Note on recording-LLM-per-stage: each stage uses a different `model` (`model_facet`, `model_rerank`, `model_synthesize`). The router dispatches based on the `model=` kwarg the stage already supplies, so no extra plumbing is needed. The `stage=` value in each wrapper's filename comes from how the wrapper was constructed, not from runtime introspection.
 
-- [ ] **Step 9: Run the recording-helper tests**
+- [x] **Step 9: Run the recording-helper tests**
 
 Run: `uv run pytest tests/evals/test_recording_helper.py -v`
 Expected: PASS for the unit tests (`test_sweep_*`, `test_atomic_swap_*`). The full Qdrant-backed recording test runs under `requires_qdrant + RUN_LIVE`; defer that to commit 5 (operator).
 
-- [ ] **Step 10: Run full suite + typecheck**
+- [x] **Step 10: Run full suite + typecheck**
 
 Run: `just test && just typecheck`
 Expected: green.
@@ -2152,7 +2152,7 @@ Owner: one subagent.
 
 The runner default is unchanged here — replay still uses canned. We only land argparse + justfile + LFS so commit 5 (operator) has the entry points.
 
-- [ ] **Step 1: Add `.gitattributes` for LFS on the corpus fixture**
+- [x] **Step 1: Add `.gitattributes` for LFS on the corpus fixture**
 
 Create `/Users/vaporif/Repos/premortem/.gitattributes`:
 
@@ -2160,11 +2160,11 @@ Create `/Users/vaporif/Repos/premortem/.gitattributes`:
 tests/fixtures/corpus_fixture.jsonl filter=lfs diff=lfs merge=lfs -text
 ```
 
-- [ ] **Step 2: Add `git-lfs` to the nix dev shell**
+- [x] **Step 2: Add `git-lfs` to the nix dev shell**
 
 Modify `flake.nix:100-121`. Add `git-lfs` to the `packages` list. Verify with: `nix develop -c which git-lfs` (operator runs this; subagent only edits the file).
 
-- [ ] **Step 3: Rewire `eval-record` and add `eval-record-corpus` in `justfile`**
+- [x] **Step 3: Rewire `eval-record` and add `eval-record-corpus` in `justfile`**
 
 Modify `justfile:23-25` to:
 
@@ -2216,7 +2216,7 @@ Note: `eval-record-corpus` is operator-only and cannot run in CI. The stub retur
 
 Update the `# Default eval runs against cassettes...` comment on `justfile:19` — **leave the comment alone for now.** Editing it in commit 4 creates a false-precondition window between commits 4 and 6. Defer the comment fix to Task 6.
 
-- [ ] **Step 4: Add `--scope` and `--max-cost-usd` to the runner argparse, wire `--record` to the helper**
+- [x] **Step 4: Add `--scope` and `--max-cost-usd` to the runner argparse, wire `--record` to the helper**
 
 Modify `slopmortem/evals/runner.py`:
 
@@ -2278,7 +2278,7 @@ if record:
 
 Note: this commit only **wires** `--record` to the helper. Replay path (when `record` is False) still uses the existing canned-mode code. The runner default flips to cassettes in Task 6.
 
-- [ ] **Step 5: Rewrite `tests/test_eval_runner.py:209-227`**
+- [x] **Step 5: Rewrite `tests/test_eval_runner.py:209-227`**
 
 Replace `test_runner_record_flag_is_deferred` with two tests: a unit test that confirms argparse wires `--record`, and a (skipped-by-default) live test that exercises the helper end-to-end. The live test goes behind `@pytest.mark.skipif(not os.environ.get("RUN_LIVE"))`.
 
@@ -2322,7 +2322,7 @@ def test_runner_record_flag_invokes_helper(monkeypatch, tmp_path):
 
 Delete the old `test_runner_record_flag_is_deferred` body and the `_RECORD_DEFERRED_MSG` constant in `runner.py`.
 
-- [ ] **Step 6: Run the test**
+- [x] **Step 6: Run the test**
 
 Run: `uv run pytest tests/test_eval_runner.py -v`
 Expected: PASS.
@@ -2886,7 +2886,7 @@ Owner: one subagent.
 - Create: `docs/cassettes.md` (cassette author guide; per the spec's three-layer surface)
 - Create: `tests/fixtures/cassettes/custom/.gitkeep`
 
-- [ ] **Step 1: Update the runner module docstring**
+- [x] **Step 1: Update the runner module docstring**
 
 In `slopmortem/evals/runner.py:1-71`, replace the "Modes" block to reflect cassette-default behavior:
 
@@ -2906,7 +2906,7 @@ Modes:
         envelope, merging into any existing v2).
 ```
 
-- [ ] **Step 2: Create `docs/cassettes.md`**
+- [x] **Step 2: Create `docs/cassettes.md`**
 
 Author guide with the three-layer surface, the marketplace-scrap walkthrough, the LFS prerequisite, and the CI checkout note. The `agent` ownership for this is **modifying** an existing repo (per CLAUDE.md, do not write `*.md` unless explicitly asked — but the spec line 808-810 explicitly enumerates this file as a deliverable, so it's on-spec). Sections:
 
@@ -2917,11 +2917,11 @@ Author guide with the three-layer surface, the marketplace-scrap walkthrough, th
 - Troubleshooting (`NoCannedResponseError`, `NoCannedEmbeddingError`, `corpus_fixture_sha256` mismatch, LFS pointer file)
 - CI/onboarding (`git lfs install`, `actions/checkout@v4` with `lfs: true`)
 
-- [ ] **Step 3: Create `tests/fixtures/cassettes/custom/.gitkeep`**
+- [x] **Step 3: Create `tests/fixtures/cassettes/custom/.gitkeep`**
 
 Reserve the subtree for ad-hoc cassette sets.
 
-- [ ] **Step 4: Run lint + typecheck**
+- [x] **Step 4: Run lint + typecheck**
 
 Run: `just lint && just typecheck && just test`
 Expected: green.

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pytest
 import pytest_asyncio
 
+from conftest import llm_canned_key
 from slopmortem.corpus.entity_resolution import ResolveResult, resolve_entity
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
@@ -14,7 +15,6 @@ from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import MergeState, RawEntry
 from slopmortem.tracing.events import SpanEvent
-from conftest import llm_canned_key
 
 
 def _tier3_canned(

@@ -29,6 +29,7 @@ from opentelemetry.sdk.trace import SynchronousMultiSpanProcessor
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
@@ -36,7 +37,6 @@ from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.pipeline import run_query
-from conftest import llm_canned_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
