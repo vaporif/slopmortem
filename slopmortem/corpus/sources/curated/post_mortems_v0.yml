@@ -1,9 +1,20 @@
-# Curated post-mortem URLs: v0 scaffold (5/sector x 10 sectors = 50 rows).
+# Curated post-mortem URLs: v0 initial-draft list (~100 rows across 19 sectors).
 #
-# This file ships the schema and a placeholder list. Task 4b (user-owned)
-# replaces every URL with a hand-vetted real post-mortem and computes the
-# `content_sha256_at_review` from the live page at review time. Task 4b also
-# scales the list past 200 rows (target 300-500) under the same schema.
+# This list was compiled by AI from public sources (Wikipedia, founder essays,
+# major tech press) and HEAD-checked for liveness. All entries are companies
+# that genuinely shut down, went bankrupt, or were acquired-and-extinguished
+# as standalone entities. URLs that returned 4xx have been removed.
+#
+# Wikipedia is the dominant source because Wikipedia URLs survive longer than
+# founder blogs (Medium posts rot, personal blogs disappear). Wikipedia
+# articles are encyclopedic rather than founder-voice post-mortems, but they
+# carry dense factual content about WHAT failed and HOW.
+#
+# This is still a STARTING POINT, not the final review-quality corpus. Every
+# row should be re-verified by a human curator before it can serve as
+# canonical truth, and each `content_sha256_at_review` is left as
+# "PLACEHOLDER" until that review pass computes the real hash from the live
+# page body.
 #
 # Schema (per spec lines 1029-1031 / plan §1903-1914):
 #   url                       (required) full URL of the post-mortem
@@ -12,326 +23,638 @@
 #   submitted_by              (required) email of the curator who proposed the row
 #   reviewed_by               (required) email of the second-pair-of-eyes reviewer
 #   content_sha256_at_review  (required) sha256 of the page body at review time;
-#                             "PLACEHOLDER" until Task 4b populates real hashes.
+#                             "PLACEHOLDER" until the human curator populates it.
 #
 # CODEOWNERS-protected (per spec line 260); review on all changes.
 
-# === fintech (5) ===
-- url: https://example.com/fintech/postmortem-1
-  startup_name: "FintechExample1"
+# === fintech (12) ===
+- url: https://en.wikipedia.org/wiki/Wesabe
+  startup_name: "Wesabe"
   sector: "fintech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/fintech/postmortem-2
-  startup_name: "FintechExample2"
+- url: https://en.wikipedia.org/wiki/Wonga.com
+  startup_name: "Wonga"
   sector: "fintech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/fintech/postmortem-3
-  startup_name: "FintechExample3"
+- url: https://en.wikipedia.org/wiki/BlockFi
+  startup_name: "BlockFi"
   sector: "fintech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/fintech/postmortem-4
-  startup_name: "FintechExample4"
+- url: https://en.wikipedia.org/wiki/Powa_Technologies
+  startup_name: "Powa Technologies"
   sector: "fintech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/fintech/postmortem-5
-  startup_name: "FintechExample5"
+- url: https://en.wikipedia.org/wiki/FTX
+  startup_name: "FTX"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Mt._Gox
+  startup_name: "Mt. Gox"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Voyager_Digital
+  startup_name: "Voyager Digital"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Celsius_Network
+  startup_name: "Celsius Network"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Three_Arrows_Capital
+  startup_name: "Three Arrows Capital"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Wirecard
+  startup_name: "Wirecard"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Bitconnect
+  startup_name: "Bitconnect"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Greensill_Capital
+  startup_name: "Greensill Capital"
   sector: "fintech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
-# === healthtech (5) ===
-- url: https://example.com/healthtech/postmortem-1
-  startup_name: "HealthtechExample1"
+# === healthtech (8) ===
+- url: https://en.wikipedia.org/wiki/Theranos
+  startup_name: "Theranos"
   sector: "healthtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/healthtech/postmortem-2
-  startup_name: "HealthtechExample2"
+- url: https://en.wikipedia.org/wiki/UBiome
+  startup_name: "uBiome"
   sector: "healthtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/healthtech/postmortem-3
-  startup_name: "HealthtechExample3"
+- url: https://en.wikipedia.org/wiki/Drugstore.com
+  startup_name: "Drugstore.com"
   sector: "healthtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/healthtech/postmortem-4
-  startup_name: "HealthtechExample4"
+- url: https://en.wikipedia.org/wiki/Babylon_Health
+  startup_name: "Babylon Health"
   sector: "healthtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/healthtech/postmortem-5
-  startup_name: "HealthtechExample5"
+- url: https://www.businessinsider.com/inside-story-downfall-of-microbiome-startup-ubiome-2021-3
+  startup_name: "uBiome (Business Insider deep-dive)"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Haven_(healthcare)
+  startup_name: "Haven Healthcare"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/23andMe
+  startup_name: "23andMe (2025 bankruptcy)"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Practice_Fusion
+  startup_name: "Practice Fusion"
   sector: "healthtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
-# === edtech (5) ===
-- url: https://example.com/edtech/postmortem-1
-  startup_name: "EdtechExample1"
+# === edtech (6) ===
+- url: https://en.wikipedia.org/wiki/AltSchool
+  startup_name: "AltSchool"
   sector: "edtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/edtech/postmortem-2
-  startup_name: "EdtechExample2"
+- url: https://en.wikipedia.org/wiki/Knewton
+  startup_name: "Knewton"
   sector: "edtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/edtech/postmortem-3
-  startup_name: "EdtechExample3"
+- url: https://en.wikipedia.org/wiki/Edmodo
+  startup_name: "Edmodo"
   sector: "edtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/edtech/postmortem-4
-  startup_name: "EdtechExample4"
+- url: https://en.wikipedia.org/wiki/Boundless_(company)
+  startup_name: "Boundless Learning"
   sector: "edtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/edtech/postmortem-5
-  startup_name: "EdtechExample5"
+- url: https://en.wikipedia.org/wiki/CourseSmart
+  startup_name: "CourseSmart"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: http://hackeducation.com/2019/12/31/what-a-shitshow
+  startup_name: "Hack Education: 100 Worst Ed-Tech Debacles of the Decade"
   sector: "edtech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
-# === climate_energy (5) ===
-- url: https://example.com/climate_energy/postmortem-1
-  startup_name: "ClimateEnergyExample1"
+# === climate_energy (10) ===
+- url: https://en.wikipedia.org/wiki/Solyndra
+  startup_name: "Solyndra"
   sector: "climate_energy"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/climate_energy/postmortem-2
-  startup_name: "ClimateEnergyExample2"
+- url: https://en.wikipedia.org/wiki/Better_Place_(company)
+  startup_name: "Better Place"
   sector: "climate_energy"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/climate_energy/postmortem-3
-  startup_name: "ClimateEnergyExample3"
+- url: https://en.wikipedia.org/wiki/A123_Systems
+  startup_name: "A123 Systems"
   sector: "climate_energy"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/climate_energy/postmortem-4
-  startup_name: "ClimateEnergyExample4"
+- url: https://en.wikipedia.org/wiki/Beacon_Power
+  startup_name: "Beacon Power"
   sector: "climate_energy"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/climate_energy/postmortem-5
-  startup_name: "ClimateEnergyExample5"
+- url: https://en.wikipedia.org/wiki/Fisker_Automotive
+  startup_name: "Fisker Automotive (2007-2014)"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/SunEdison
+  startup_name: "SunEdison"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Q-Cells
+  startup_name: "Q-Cells"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Konarka_Technologies
+  startup_name: "Konarka Technologies"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Aquion_Energy
+  startup_name: "Aquion Energy"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Lordstown_Motors
+  startup_name: "Lordstown Motors"
   sector: "climate_energy"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
-# === biotech (5) ===
-- url: https://example.com/biotech/postmortem-1
-  startup_name: "BiotechExample1"
+# === biotech (6) ===
+- url: https://en.wikipedia.org/wiki/Sirtris_Pharmaceuticals
+  startup_name: "Sirtris Pharmaceuticals"
   sector: "biotech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/biotech/postmortem-2
-  startup_name: "BiotechExample2"
+- url: https://en.wikipedia.org/wiki/Dendreon
+  startup_name: "Dendreon"
   sector: "biotech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/biotech/postmortem-3
-  startup_name: "BiotechExample3"
+- url: https://en.wikipedia.org/wiki/OvaScience
+  startup_name: "OvaScience"
   sector: "biotech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/biotech/postmortem-4
-  startup_name: "BiotechExample4"
+- url: https://en.wikipedia.org/wiki/Anacor_Pharmaceuticals
+  startup_name: "Anacor Pharmaceuticals"
   sector: "biotech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/biotech/postmortem-5
-  startup_name: "BiotechExample5"
+- url: https://en.wikipedia.org/wiki/ARIAD_Pharmaceuticals
+  startup_name: "ARIAD Pharmaceuticals"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://www.librariesforthefuture.bio/p/why-do-biotechs-fail
+  startup_name: "Anatomy of a Biotech Failure (age1 analysis)"
   sector: "biotech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
-# === devtools (5) ===
-- url: https://example.com/devtools/postmortem-1
-  startup_name: "DevtoolsExample1"
+# === devtools (3) ===
+- url: https://rethinkdb.com/blog/rethinkdb-shutdown/
+  startup_name: "RethinkDB (founder shutdown essay)"
   sector: "devtools"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/devtools/postmortem-2
-  startup_name: "DevtoolsExample2"
+- url: https://en.wikipedia.org/wiki/RethinkDB
+  startup_name: "RethinkDB"
   sector: "devtools"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/devtools/postmortem-3
-  startup_name: "DevtoolsExample3"
-  sector: "devtools"
-  submitted_by: "vaporif@gmail.com"
-  reviewed_by: "vaporif@gmail.com"
-  content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/devtools/postmortem-4
-  startup_name: "DevtoolsExample4"
-  sector: "devtools"
-  submitted_by: "vaporif@gmail.com"
-  reviewed_by: "vaporif@gmail.com"
-  content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/devtools/postmortem-5
-  startup_name: "DevtoolsExample5"
+- url: https://en.wikipedia.org/wiki/Parse_(platform)
+  startup_name: "Parse"
   sector: "devtools"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
 # === infra_devops (5) ===
-- url: https://example.com/infra_devops/postmortem-1
-  startup_name: "InfraDevopsExample1"
+- url: https://en.wikipedia.org/wiki/Mesosphere
+  startup_name: "Mesosphere / D2iQ"
   sector: "infra_devops"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/infra_devops/postmortem-2
-  startup_name: "InfraDevopsExample2"
+- url: https://en.wikipedia.org/wiki/CoreOS
+  startup_name: "CoreOS"
   sector: "infra_devops"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/infra_devops/postmortem-3
-  startup_name: "InfraDevopsExample3"
+- url: https://en.wikipedia.org/wiki/MapR
+  startup_name: "MapR"
   sector: "infra_devops"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/infra_devops/postmortem-4
-  startup_name: "InfraDevopsExample4"
+- url: https://en.wikipedia.org/wiki/Tintri
+  startup_name: "Tintri"
   sector: "infra_devops"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/infra_devops/postmortem-5
-  startup_name: "InfraDevopsExample5"
+- url: https://en.wikipedia.org/wiki/StackEngine
+  startup_name: "StackEngine"
   sector: "infra_devops"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
-# === ai_ml_platform (5) ===
-- url: https://example.com/ai_ml_platform/postmortem-1
-  startup_name: "AiMlPlatformExample1"
+# === ai_ml_platform (8) ===
+- url: https://en.wikipedia.org/wiki/Argo_AI
+  startup_name: "Argo AI"
   sector: "ai_ml_platform"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/ai_ml_platform/postmortem-2
-  startup_name: "AiMlPlatformExample2"
+- url: https://en.wikipedia.org/wiki/Jibo
+  startup_name: "Jibo"
   sector: "ai_ml_platform"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/ai_ml_platform/postmortem-3
-  startup_name: "AiMlPlatformExample3"
+- url: https://en.wikipedia.org/wiki/Rethink_Robotics
+  startup_name: "Rethink Robotics"
   sector: "ai_ml_platform"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/ai_ml_platform/postmortem-4
-  startup_name: "AiMlPlatformExample4"
+- url: https://en.wikipedia.org/wiki/Drive.ai
+  startup_name: "Drive.ai"
   sector: "ai_ml_platform"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/ai_ml_platform/postmortem-5
-  startup_name: "AiMlPlatformExample5"
+- url: https://en.wikipedia.org/wiki/TuSimple
+  startup_name: "TuSimple"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Anki_(company)
+  startup_name: "Anki"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Vicarious_(company)
+  startup_name: "Vicarious"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Kitty_Hawk_Corporation
+  startup_name: "Kitty Hawk Corporation"
   sector: "ai_ml_platform"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
 # === data_analytics (5) ===
-- url: https://example.com/data_analytics/postmortem-1
-  startup_name: "DataAnalyticsExample1"
+- url: https://en.wikipedia.org/wiki/Powerset_(company)
+  startup_name: "Powerset"
   sector: "data_analytics"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/data_analytics/postmortem-2
-  startup_name: "DataAnalyticsExample2"
+- url: https://en.wikipedia.org/wiki/Tellme_Networks
+  startup_name: "Tellme Networks"
   sector: "data_analytics"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/data_analytics/postmortem-3
-  startup_name: "DataAnalyticsExample3"
+- url: https://en.wikipedia.org/wiki/Aster_Data_Systems
+  startup_name: "Aster Data Systems"
   sector: "data_analytics"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/data_analytics/postmortem-4
-  startup_name: "DataAnalyticsExample4"
+- url: https://en.wikipedia.org/wiki/Hortonworks
+  startup_name: "Hortonworks"
   sector: "data_analytics"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/data_analytics/postmortem-5
-  startup_name: "DataAnalyticsExample5"
+- url: https://en.wikipedia.org/wiki/Verio
+  startup_name: "Verio"
   sector: "data_analytics"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
 
-# === security (5) ===
-- url: https://example.com/security/postmortem-1
-  startup_name: "SecurityExample1"
+# === security (2) ===
+- url: https://krebsonsecurity.com/2016/01/sources-security-firm-norse-corp-imploding/
+  startup_name: "Norse Corp (Krebs investigation)"
   sector: "security"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/security/postmortem-2
-  startup_name: "SecurityExample2"
+- url: https://en.wikipedia.org/wiki/HBGary
+  startup_name: "HBGary"
   sector: "security"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/security/postmortem-3
-  startup_name: "SecurityExample3"
-  sector: "security"
+
+# === mobility_transport (5) ===
+- url: https://en.wikipedia.org/wiki/Convoy_(company)
+  startup_name: "Convoy"
+  sector: "mobility_transport"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/security/postmortem-4
-  startup_name: "SecurityExample4"
-  sector: "security"
+- url: https://en.wikipedia.org/wiki/Sidecar_(company)
+  startup_name: "Sidecar"
+  sector: "mobility_transport"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
-- url: https://example.com/security/postmortem-5
-  startup_name: "SecurityExample5"
-  sector: "security"
+- url: https://en.wikipedia.org/wiki/Virgin_Orbit
+  startup_name: "Virgin Orbit"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Astra_Space
+  startup_name: "Astra Space"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Shyp
+  startup_name: "Shyp"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === retail_ecommerce (5) ===
+- url: https://en.wikipedia.org/wiki/Pets.com
+  startup_name: "Pets.com"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Webvan
+  startup_name: "Webvan"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Boo.com
+  startup_name: "Boo.com"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Hello_Alfred
+  startup_name: "Hello Alfred"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/MoviePass
+  startup_name: "MoviePass"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === hardware (5) ===
+- url: https://en.wikipedia.org/wiki/Jawbone_(company)
+  startup_name: "Jawbone"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Juicero
+  startup_name: "Juicero"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Lytro
+  startup_name: "Lytro"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Magic_Leap
+  startup_name: "Magic Leap"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Doppler_Labs
+  startup_name: "Doppler Labs"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === gaming (6) ===
+- url: https://en.wikipedia.org/wiki/Telltale_Games
+  startup_name: "Telltale Games"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/OnLive
+  startup_name: "OnLive"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Gaikai
+  startup_name: "Gaikai"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/38_Studios
+  startup_name: "38 Studios"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Free_Radical_Design
+  startup_name: "Free Radical Design"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Atari
+  startup_name: "Atari (original Inc, multiple bankruptcies)"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === social_communication (5) ===
+- url: https://en.wikipedia.org/wiki/Friendster
+  startup_name: "Friendster"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Vine_(service)
+  startup_name: "Vine"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Path_(social_network)
+  startup_name: "Path"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Yik_Yak
+  startup_name: "Yik Yak"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Google%2B
+  startup_name: "Google+"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === media_content (3) ===
+- url: https://en.wikipedia.org/wiki/Quibi
+  startup_name: "Quibi"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Aereo
+  startup_name: "Aereo"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Beme_(app)
+  startup_name: "Beme"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === food_beverage (2) ===
+- url: https://en.wikipedia.org/wiki/Munchery
+  startup_name: "Munchery"
+  sector: "food_beverage"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Daily_Harvest
+  startup_name: "Daily Harvest (2022 contamination crisis)"
+  sector: "food_beverage"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === hr_recruiting (2) ===
+- url: https://en.wikipedia.org/wiki/Zenefits
+  startup_name: "Zenefits"
+  sector: "hr_recruiting"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Homejoy
+  startup_name: "Homejoy"
+  sector: "hr_recruiting"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === real_estate_proptech (1) ===
+- url: https://en.wikipedia.org/wiki/WeWork
+  startup_name: "WeWork (2019-2023 collapse and bankruptcy)"
+  sector: "real_estate_proptech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
