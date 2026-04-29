@@ -1,4 +1,4 @@
-"""Jinja2 prompt rendering and stable template-SHA computation for fixture pinning."""
+"""Jinja2 prompt rendering plus a stable template SHA used to pin fixtures."""
 
 from __future__ import annotations
 
@@ -44,5 +44,5 @@ def render_blocks(
 
 
 def prompt_template_sha(name: str) -> str:
-    """Return the first 16 hex chars of sha256 over the ``.j2`` source — fixture key."""
+    """First 16 hex chars of sha256 over the ``.j2`` source. Used as the fixture key."""
     return hashlib.sha256(_PROMPT_DIR.joinpath(f"{name}.j2").read_bytes()).hexdigest()[:16]

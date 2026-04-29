@@ -18,8 +18,9 @@ class _EmbedCall:
 class FakeEmbeddingClient:
     """Deterministic in-memory EmbeddingClient for tests.
 
-    Vectors are derived from sha256(text) so the same input produces the same
-    vector across runs and processes — stable fixtures without recording.
+    Vectors come from sha256(text), so the same input always produces the
+    same vector across runs and processes. Fixtures stay stable without
+    needing to record anything.
     """
 
     def __init__(
@@ -58,7 +59,7 @@ class FakeEmbeddingClient:
 def _sha_vector(text: str, dim: int) -> list[float]:
     """Expand sha256(text) into ``dim`` floats in [-1, 1].
 
-    Repeats the digest with a counter suffix until we have enough bytes,
+    Repeats the hash with a counter suffix until there are enough bytes,
     then maps each byte to a float in [-1, 1].
     """
     out: list[int] = []

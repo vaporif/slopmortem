@@ -1,4 +1,4 @@
-"""In-memory LLMClient stub for stage tests — fixture-keyed canned responses."""
+"""In-memory LLMClient stub for stage tests; canned responses keyed by fixture."""
 
 from __future__ import annotations
 
@@ -12,16 +12,16 @@ if TYPE_CHECKING:
 
 
 class NoCannedResponseError(KeyError):
-    """Raised when FakeLLMClient cannot find a canned reply for the given key.
+    """Raised when FakeLLMClient can't find a canned reply for the given key.
 
-    Carries enough context for the failure message to point at the missing
-    ``(template_sha, model)`` without needing repro steps.
+    The error message names the missing ``(template_sha, model)`` so you don't
+    need a repro to find what's missing.
     """
 
 
 @dataclass
 class FakeResponse:
-    """A canned response the FakeLLMClient renders into a CompletionResult on demand."""
+    """Canned response that FakeLLMClient turns into a CompletionResult when called."""
 
     text: str
     stop_reason: str = "stop"
@@ -56,9 +56,9 @@ class _Call:
 class FakeLLMClient:
     """In-memory LLMClient stub keyed on ``(prompt_template_sha, model)``.
 
-    The template SHA is supplied by callers via ``extra_body['prompt_template_sha']``;
+    Callers pass the template SHA via ``extra_body['prompt_template_sha']``;
     stage tests load it from ``slopmortem.llm.prompts.prompt_template_sha(name)``
-    so a prompt-text drift forces the fixture key to drift in lockstep.
+    so any drift in the prompt text forces the fixture key to drift along with it.
     """
 
     canned: Mapping[tuple[str, str], FakeResponse | CompletionResult]

@@ -1,4 +1,4 @@
-"""Per-pipeline USD budget with concurrent-safe reserve/settle bookkeeping."""
+"""Per-pipeline USD budget. Concurrent-safe reserve/settle bookkeeping."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ class BudgetExceededError(Exception):
 
 @dataclass
 class Budget:
-    """Tracks an asyncio-safe USD cap shared across all LLM/embedding calls in one pipeline."""
+    """An asyncio-safe USD cap shared across every LLM and embedding call in a pipeline."""
 
     cap_usd: float
     spent_usd: float = 0.0

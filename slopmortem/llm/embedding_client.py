@@ -1,4 +1,4 @@
-"""EmbeddingClient Protocol — minimum async embedding contract (one batch in, vectors out)."""
+"""EmbeddingClient Protocol: minimum async embedding contract (batch in, vectors out)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Protocol, runtime_checkable
 
 @dataclass
 class EmbeddingResult:
-    """Single embed call result — per-text vectors plus token count and settled cost."""
+    """Result of a single embed call: per-text vectors, token count, and settled cost."""
 
     vectors: list[list[float]]
     n_tokens: int

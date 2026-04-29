@@ -1,4 +1,4 @@
-"""Re-exports of corpus-storage Pydantic models so call sites import from one place."""
+"""Re-exports of corpus-storage Pydantic models so call sites have one import path."""
 
 from __future__ import annotations
 

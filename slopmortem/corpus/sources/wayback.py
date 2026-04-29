@@ -1,0 +1,137 @@
+"""Wayback enricher — recovers content for curated rows whose live URL is dead.
+
+Per spec line 359 the v1 role is narrow: take a ``RawEntry`` whose ``raw_html``
+is empty, hit the Wayback availability API
+(``https://archive.org/wayback/available?url=<url>``), and if a snapshot is
+available, fetch it and stash the response in ``raw_html`` + ``markdown_text``.
+A no-op when ``raw_html`` is already populated.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import quote_plus
+
+import httpx
+
+from slopmortem.corpus.extract import extract_clean
+from slopmortem.corpus.sources._throttle import (
+    HTTP_BAD_REQUEST,
+    USER_AGENT,
+    respect_robots,
+    throttle_for,
+)
+from slopmortem.http import SSRFBlockedError, safe_get
+
+if TYPE_CHECKING:
+    from slopmortem.models import RawEntry
+
+logger = logging.getLogger(__name__)
+
+AVAILABILITY_ENDPOINT = "https://archive.org/wayback/available"
+
+
+def _availability_url(target: str) -> str:
+    return f"{AVAILABILITY_ENDPOINT}?url={quote_plus(target)}"
+
+
+def _pick_snapshot_url(
+    payload: dict[str, Any] | None,  # pyright: ignore[reportExplicitAny]
+) -> str | None:
+    """Return the closest available snapshot URL from a Wayback availability payload."""
+    if not payload:
+        return None
+    snapshots: object = payload.get("archived_snapshots") or {}
+    if not isinstance(snapshots, dict):
+        return None
+    snapshots_dict = cast("dict[str, object]", snapshots)
+    closest: object = snapshots_dict.get("closest")
+    if not isinstance(closest, dict):
+        return None
+    closest_dict = cast("dict[str, object]", closest)
+    if not closest_dict.get("available"):
+        return None
+    snapshot_url: object = closest_dict.get("url")
+    if not isinstance(snapshot_url, str) or not snapshot_url:
+        return None
+    return snapshot_url
+
+
+class WaybackEnricher:
+    """[Enricher] Internet Archive client that recovers dead curated URLs."""
+
+    def __init__(
+        self,
+        *,
+        user_agent: str = USER_AGENT,
+        rps: float = 1.0,
+    ) -> None:
+        """Build a Wayback enricher.
+
+        Args:
+            user_agent: UA string sent on outbound requests.
+            rps: Per-host throttle budget; defaults to 1 request/second.
+        """
+        self.user_agent = user_agent
+        self.rps = rps
+
+    async def _fetch(self, url: str) -> str | None:
+        if not await respect_robots(url, user_agent=self.user_agent):
+            logger.info("wayback: robots blocked %s", url)
+            return None
+        await throttle_for(url, rps=self.rps)
+        try:
+            resp = await safe_get(url)
+        except (SSRFBlockedError, httpx.HTTPError) as exc:
+            logger.warning("wayback: fetch failed for %s: %s", url, exc)
+            return None
+        if resp.status_code >= HTTP_BAD_REQUEST:
+            logger.warning("wayback: HTTP %s for %s", resp.status_code, url)
+            return None
+        return resp.text
+
+    async def _fetch_json(self, url: str) -> dict[str, Any] | None:  # pyright: ignore[reportExplicitAny]
+        if not await respect_robots(url, user_agent=self.user_agent):
+            return None
+        await throttle_for(url, rps=self.rps)
+        try:
+            resp = await safe_get(url)
+        except (SSRFBlockedError, httpx.HTTPError) as exc:
+            logger.warning("wayback: availability fetch failed for %s: %s", url, exc)
+            return None
+        if resp.status_code >= HTTP_BAD_REQUEST:
+            return None
+        try:
+            # Wayback returns a JSON object; downstream narrows with isinstance.
+            payload = cast(
+                "dict[str, Any]",  # pyright: ignore[reportExplicitAny]
+                resp.json(),
+            )
+        except (ValueError, TypeError) as _exc:
+            return None
+        return payload
+
+    async def enrich(self, entry: RawEntry) -> RawEntry:
+        """Populate ``raw_html``/``markdown_text`` from Wayback when the live URL is dead.
+
+        Args:
+            entry: A ``RawEntry`` produced by an upstream :class:`Source`.
+
+        Returns:
+            The same entry, optionally with ``raw_html`` and ``markdown_text`` filled
+            from the closest available Wayback snapshot.
+        """
+        if entry.raw_html is not None and entry.raw_html.strip():
+            return entry
+        if not entry.url:
+            return entry
+        payload = await self._fetch_json(_availability_url(entry.url))
+        snapshot_url = _pick_snapshot_url(payload)
+        if not snapshot_url:
+            return entry
+        html = await self._fetch(snapshot_url)
+        if not html:
+            return entry
+        markdown_text = extract_clean(html) or None
+        return entry.model_copy(update={"raw_html": html, "markdown_text": markdown_text})

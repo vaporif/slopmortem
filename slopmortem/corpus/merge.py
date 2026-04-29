@@ -1,9 +1,9 @@
 # pyright: reportAny=false
-"""SQLite-backed merge journal + quarantine + alias graph.
+"""SQLite-backed merge journal, quarantine table, and alias graph.
 
-Async surface dispatches every sqlite call via :func:`asyncio.to_thread`.
-One short-lived connection per call (no pool). WAL mode + ``busy_timeout=5000``
-set on every connection.
+The async surface dispatches every sqlite call through :func:`asyncio.to_thread`.
+One short-lived connection per call, no pool. WAL mode and
+``busy_timeout=5000`` are set on every connection.
 
 Terminal-state writers (atomicity contract per spec line 538):
 
@@ -11,13 +11,14 @@ Terminal-state writers (atomicity contract per spec line 538):
 - :meth:`MergeJournal.upsert_resolver_flipped`
 - :meth:`MergeJournal.upsert_alias_blocked`
 
-Each runs its inserts inside a single ``BEGIN; … COMMIT;`` so a crash either
-commits all rows or none. ``mark_complete`` is the lone promotion path
-(``pending`` → ``complete``) and runs after qdrant + disk writes succeed.
+Each runs its inserts in one ``BEGIN; ... COMMIT;`` so a crash either
+commits all rows or none. ``mark_complete`` is the only promotion path
+from ``pending`` to ``complete``, and runs after the qdrant and disk
+writes succeed.
 
-Note: quarantine rows live in their own table keyed on
-``(content_sha256, source, source_id)``; they have **no** ``canonical_id`` or
-``merge_state`` column — quarantined docs cannot live in the main journal.
+Quarantine rows live in their own table keyed on
+``(content_sha256, source, source_id)``. They have **no** ``canonical_id``
+or ``merge_state`` column; quarantined docs cannot live in the main journal.
 """
 
 from __future__ import annotations
@@ -97,7 +98,7 @@ def _utcnow_iso() -> str:
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    """Open a short-lived connection with WAL + 5s busy timeout."""
+    """Open a short-lived connection with WAL and a 5s busy timeout."""
     conn = sqlite3.connect(db_path, timeout=5.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -111,14 +112,14 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:  # type: ignore[explicit-a
 
 
 class MergeJournal:
-    """Async wrapper over a SQLite merge journal — see module docstring."""
+    """Async wrapper over a SQLite merge journal. See module docstring."""
 
     def __init__(self, db_path: Path) -> None:
         """Bind the journal to a sqlite file path; ``init()`` creates the schema."""
         self._db = db_path
 
     async def init(self) -> None:
-        """Create tables + indexes if they don't exist."""
+        """Create tables and indexes if they don't already exist."""
         await asyncio.to_thread(self._init_sync)
 
     def _init_sync(self) -> None:
@@ -136,7 +137,7 @@ class MergeJournal:
         source: str,
         source_id: str,
     ) -> None:
-        """Mark a row pending — single-row transaction."""
+        """Mark a row pending in a single-row transaction."""
         await asyncio.to_thread(self._upsert_state, canonical_id, source, source_id, "pending")
 
     async def upsert_resolver_flipped(
@@ -146,7 +147,7 @@ class MergeJournal:
         source: str,
         source_id: str,
     ) -> None:
-        """Mark a row resolver_flipped — single-row transaction."""
+        """Mark a row resolver_flipped in a single-row transaction."""
         await asyncio.to_thread(
             self._upsert_state, canonical_id, source, source_id, "resolver_flipped"
         )
@@ -159,9 +160,9 @@ class MergeJournal:
         source_id: str,
         alias_edge: AliasEdge,
     ) -> None:
-        """Atomically write a journal alias_blocked row + alias graph edge.
+        """Atomically write a journal alias_blocked row and an alias graph edge.
 
-        Both inserts run inside a single ``BEGIN; … COMMIT;`` per spec line 538.
+        Both inserts run inside one ``BEGIN; ... COMMIT;`` per spec line 538.
         """
         await asyncio.to_thread(
             self._upsert_alias_blocked_sync,
@@ -175,12 +176,13 @@ class MergeJournal:
         with _connect(self._db) as conn:
             conn.execute("BEGIN")
             try:
-                # Resolver flip: the (source, source_id) is now bound to a new
-                # canonical_id; the UNIQUE reverse index would block the insert
-                # otherwise. Drop the prior row for this (source, source_id)
-                # FIRST when the new state is 'resolver_flipped' (the prior
-                # canonical's chunks/raw/canonical files stay on disk; reconcile
-                # owns drift class (f) repair).
+                # Resolver flip: this (source, source_id) is now bound to a
+                # new canonical_id, and the UNIQUE reverse index would block
+                # the insert otherwise. Drop the prior row for this
+                # (source, source_id) FIRST when the new state is
+                # 'resolver_flipped'. The prior canonical's chunks, raw, and
+                # canonical files stay on disk; reconcile handles drift class
+                # (f) repair.
                 if state == "resolver_flipped":
                     conn.execute(
                         """
@@ -259,7 +261,7 @@ class MergeJournal:
         merged_at: str,
         content_hash: str | None = None,
     ) -> None:
-        """Promote a pending row to ``merge_state='complete'`` writing skip_key last."""
+        """Promote a pending row to ``merge_state='complete'``, writing skip_key last."""
         await asyncio.to_thread(
             self._mark_complete_sync,
             canonical_id,
@@ -295,7 +297,7 @@ class MergeJournal:
     # ─── Reads ──────────────────────────────────────────────────────────────
 
     async def fetch_pending(self) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
-        """Return all rows currently in ``merge_state='pending'`` as dicts."""
+        """Return every row currently in ``merge_state='pending'`` as a dict."""
         return await asyncio.to_thread(self._fetch_pending_sync)
 
     def _fetch_pending_sync(self) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
@@ -306,7 +308,7 @@ class MergeJournal:
     async def fetch_by_key(
         self, canonical_id: str, source: str, source_id: str
     ) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
-        """Return the row(s) matching the full primary key — 0 or 1 entries."""
+        """Return the row(s) matching the full primary key. Always 0 or 1 entries."""
         return await asyncio.to_thread(self._fetch_by_key_sync, canonical_id, source, source_id)
 
     def _fetch_by_key_sync(
@@ -323,7 +325,7 @@ class MergeJournal:
             return [_row_to_dict(r) for r in cur.fetchall()]
 
     async def lookup_canonical_for_source(self, source: str, source_id: str) -> str | None:
-        """Reverse-index lookup: prior canonical_id for (source, source_id)."""
+        """Reverse-index lookup: the prior canonical_id for (source, source_id)."""
         return await asyncio.to_thread(self._lookup_reverse_sync, source, source_id)
 
     def _lookup_reverse_sync(self, source: str, source_id: str) -> str | None:
@@ -345,7 +347,7 @@ class MergeJournal:
             return None if row is None else str(row["canonical_id"])
 
     async def fetch_aliases(self, canonical_id: str) -> list[AliasEdge]:
-        """Return all alias edges with ``canonical_id`` as the source."""
+        """Return every alias edge that has ``canonical_id`` as the source."""
         rows = await asyncio.to_thread(self._fetch_aliases_sync, canonical_id)
         return [AliasEdge.model_validate(r) for r in rows]
 
@@ -363,7 +365,7 @@ class MergeJournal:
             return [_row_to_dict(r) for r in cur.fetchall()]
 
     async def fetch_all(self) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
-        """Return every merge_journal row — used by reconcile."""
+        """Return every merge_journal row. Used by reconcile."""
         return await asyncio.to_thread(self._fetch_all_sync)
 
     def _fetch_all_sync(self) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
@@ -371,7 +373,7 @@ class MergeJournal:
             cur = conn.execute("SELECT * FROM merge_journal")
             return [_row_to_dict(r) for r in cur.fetchall()]
 
-    # ─── Quarantine — separate table, no canonical_id, no merge_state ──────
+    # ─── Quarantine: separate table, no canonical_id, no merge_state ──────
 
     async def write_quarantine(
         self,
@@ -382,7 +384,7 @@ class MergeJournal:
         reason: str,
         slop_score: float | None,
     ) -> None:
-        """Record a slop-classified quarantine row (no canonical_id assignment)."""
+        """Record a slop-classified quarantine row. No canonical_id is assigned."""
         await asyncio.to_thread(
             self._write_quarantine_sync,
             content_sha256,
@@ -414,7 +416,7 @@ class MergeJournal:
             )
 
     async def fetch_quarantined(self) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
-        """Return every quarantine row as a dict — column set has no merge_state."""
+        """Return every quarantine row as a dict. The column set has no merge_state."""
         return await asyncio.to_thread(self._fetch_quarantined_sync)
 
     def _fetch_quarantined_sync(self) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
@@ -423,7 +425,7 @@ class MergeJournal:
             return [_row_to_dict(r) for r in cur.fetchall()]
 
 
-# Helper used by ingest in later tasks. Exported here for symmetry.
+# Used by ingest in later tasks. Exported here for symmetry with the other writers.
 def aliases_iterable(edges: Iterable[AliasEdge]) -> list[dict[str, Any]]:  # type: ignore[explicit-any]
-    """Render a list of :class:`AliasEdge` to plain dicts (e.g. for journaling)."""
+    """Render a list of :class:`AliasEdge` to plain dicts (for journaling, etc.)."""
     return [e.model_dump() for e in edges]

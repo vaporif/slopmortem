@@ -1,5 +1,7 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-"""Async OpenRouter / OpenAI-compatible chat client with retry, tool loop, and cache control.
+"""Async OpenRouter / OpenAI-compatible chat client.
+
+Handles retries, the tool-call loop, and cache control.
 
 The vendor SDK is loosely typed (`object` / `Any` payloads with duck-typed
 attributes), so this file silences `reportAny`/`reportUnknown*` at the
@@ -60,10 +62,9 @@ async def gather_with_limit[T](
 ) -> list[T | BaseException]:
     """Run *coros* concurrently with at most *limit* in flight.
 
-    Wraps ``asyncio.gather(..., return_exceptions=True)`` with an
+    Wraps ``asyncio.gather(..., return_exceptions=True)`` behind an
     ``anyio.CapacityLimiter`` so callers can cap parallel OpenRouter calls
-    against ``config.ingest_concurrency`` without writing the bookkeeping
-    themselves.
+    against ``config.ingest_concurrency`` without rewriting the bookkeeping.
     """
     limiter = anyio.CapacityLimiter(limit)
 
@@ -75,7 +76,7 @@ async def gather_with_limit[T](
 
 
 class OpenRouterClient:
-    """Wraps an OpenAI-compatible SDK to drive OpenRouter with retry + tool loop semantics."""
+    """OpenAI-compatible SDK wrapper that drives OpenRouter; runs the retry and tool-call loops."""
 
     def __init__(  # noqa: PLR0913 — knobs are public API; users construct this directly.
         self,
@@ -108,7 +109,7 @@ class OpenRouterClient:
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> CompletionResult:
-        """Run a chat completion, handling tool calls, cache re-warming, and retries."""
+        """Run a chat completion. Handles tool calls, cache re-warming, and retries."""
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
         registered = {t.name: t for t in (tools or [])}
@@ -135,8 +136,8 @@ class OpenRouterClient:
 
             if fr == "stop":
                 if cache and cache_write == 0:
-                    # Cache-warm assertion: one re-warm retry. If still zero, log
-                    # CACHE_WARM_FAILED and proceed.
+                    # Cache should have warmed but didn't. Try one re-warm; if it
+                    # still comes back empty, log CACHE_WARM_FAILED and move on.
                     retry_resp = await self._call_with_retry(
                         messages=messages,
                         tools=tools_payload,
@@ -190,8 +191,8 @@ class OpenRouterClient:
                 raise RuntimeError(msg)
 
             if fr == "error":
-                # Belt-and-braces: _call_with_retry is supposed to consume the
-                # stream and raise MidStreamError before we ever see this.
+                # _call_with_retry should have consumed the stream and raised
+                # MidStreamError before this branch ever runs. Defensive only.
                 raise MidStreamError(getattr(choice, "error", {"code": "unknown"}))
 
         msg = "tool-loop bound exceeded"
@@ -338,11 +339,11 @@ def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore
 
 
 def is_transient_http(exc: BaseException) -> bool:
-    """Best-effort transient-vs-fatal classification on openai SDK exceptions.
+    """Classify openai SDK exceptions as transient or fatal.
 
-    We check duck-typed attributes so this works for the openai SDK's typed
-    exception hierarchy (RateLimitError, APIStatusError, APIConnectionError,
-    APITimeoutError, …) without taking a hard import dependency on internals.
+    We duck-type the attributes so this works against the SDK's exception
+    hierarchy (RateLimitError, APIStatusError, APIConnectionError,
+    APITimeoutError, ...) without importing internals.
     """
     name = type(exc).__name__
     if name in ("APIConnectionError", "APITimeoutError", "RateLimitError"):
