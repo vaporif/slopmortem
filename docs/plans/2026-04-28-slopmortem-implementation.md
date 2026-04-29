@@ -2325,7 +2325,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 8.1: Failing test for synthesize**
+- [x] **Step 8.1: Failing test for synthesize**
 
 ```python
 async def test_synthesize_returns_filled_synthesis(fake_llm, fixture_candidate):
@@ -2336,7 +2336,7 @@ async def test_synthesize_returns_filled_synthesis(fake_llm, fixture_candidate):
     assert len(s.candidate_id) > 0
 ```
 
-- [ ] **Step 8.2: URL filter test (defense in depth)**
+- [x] **Step 8.2: URL filter test (defense in depth)**
 
 ```python
 async def test_synthesize_drops_off_allowlist_urls(fake_llm_returns_bad_urls,

@@ -1,0 +1,22 @@
+# serializer version: 1
+# name: test_render_strips_autolinks_and_images
+  list([
+    '# Premortem report for newco',
+    '## Acme',
+    'Similarity:',
+    'Why similar:',
+    'Where diverged:',
+    'Failure causes:',
+    'Lessons:',
+    'Sources:',
+    '## BetaCo',
+    'Similarity:',
+    'Why similar:',
+    'Where diverged:',
+    'Failure causes:',
+    'Lessons:',
+    'Sources:',
+    'Pipeline meta:',
+    'Models:',
+  ])
+# ---
