@@ -213,7 +213,7 @@ class QdrantCorpus:
         # Collapse chunk hits to parents: best-score per canonical_id.
         # ``query_points`` returns ``QueryResponse`` whose ``.points`` is a
         # list of ``ScoredPoint``.
-        best: dict[str, tuple[float, dict[str, Any]]] = {}
+        best: dict[str, tuple[float, dict[str, Any]]] = {}  # type: ignore[explicit-any]
         for hit in resp.points:
             payload = dict(hit.payload or {})
             cid = str(payload.get("canonical_id", ""))
