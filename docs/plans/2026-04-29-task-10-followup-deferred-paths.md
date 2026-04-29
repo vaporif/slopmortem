@@ -79,9 +79,9 @@ The synthesis-time Tavily tools from Plan #1 Task A are designed to be called *b
 
 ### Step-by-step
 
-- [ ] **Step A.1: Read spec lines 245, 1014, and look at `slopmortem/corpus/sources/wayback.py` end-to-end** as the reference Enricher implementation.
+- [x] **Step A.1: Read spec lines 245, 1014, and look at `slopmortem/corpus/sources/wayback.py` end-to-end** as the reference Enricher implementation.
 
-- [ ] **Step A.2: Write failing tests for `TavilyEnricher`.**
+- [x] **Step A.2: Write failing tests for `TavilyEnricher`.**
 
 `tests/sources/test_tavily_enricher.py`:
 
@@ -191,7 +191,7 @@ async def test_returns_entry_unchanged_when_api_key_missing(monkeypatch):
 
 **Why "return unchanged on missing API key" rather than raise:** the Enricher contract is best-effort. Wayback handles its failures the same way (returns the entry unchanged on robots block, fetch failure, or empty payload). Raising at ingest start would be surprising; logging once and skipping every entry afterwards is the consistent choice.
 
-- [ ] **Step A.3: Run the tests; confirm they fail.**
+- [x] **Step A.3: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/sources/test_tavily_enricher.py -v
@@ -199,7 +199,7 @@ async def test_returns_entry_unchanged_when_api_key_missing(monkeypatch):
 
 Expected: 5 tests fail with `ModuleNotFoundError: slopmortem.corpus.sources.tavily`.
 
-- [ ] **Step A.4: Implement `TavilyEnricher`.**
+- [x] **Step A.4: Implement `TavilyEnricher`.**
 
 `slopmortem/corpus/sources/tavily.py`:
 
@@ -277,7 +277,7 @@ class TavilyEnricher:
         return entry.model_copy(update={"raw_html": raw_content, "markdown_text": markdown_text})
 ```
 
-- [ ] **Step A.5: Run the tests; confirm they pass.**
+- [x] **Step A.5: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/sources/test_tavily_enricher.py -v
@@ -285,7 +285,7 @@ class TavilyEnricher:
 
 Expected: 5 passed.
 
-- [ ] **Step A.6: Wire `--tavily-enrich` in the CLI.**
+- [x] **Step A.6: Wire `--tavily-enrich` in the CLI.**
 
 In `slopmortem/cli.py:_run_ingest`, find the block Plan #1 Task C added:
 
@@ -315,7 +315,7 @@ if tavily_enrich:
     enrichers.append(TavilyEnricher())
 ```
 
-- [ ] **Step A.7: Update the test from Plan #1 Task C that asserted `--tavily-enrich` rejected.**
+- [x] **Step A.7: Update the test from Plan #1 Task C that asserted `--tavily-enrich` rejected.**
 
 `tests/test_cli_ingest.py:test_ingest_tavily_enrich_rejected` — invert it to `test_ingest_tavily_enrich_appends_enricher`. Capture the enrichers passed to the orchestrator and assert `TavilyEnricher` appears:
 
@@ -344,7 +344,7 @@ def test_ingest_tavily_enrich_appends_enricher(monkeypatch, tmp_path):
     assert "TavilyEnricher" in enricher_classnames
 ```
 
-- [ ] **Step A.8: Run the full sweep.**
+- [x] **Step A.8: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -369,9 +369,9 @@ Expected: all green; test count = (Plan #1 baseline) + 5 new + 1 test inverted (
 
 ### Step-by-step
 
-- [ ] **Step B.1: Read spec line 264 and the existing `pending_review` table schema in `slopmortem/corpus/merge.py:76`.**
+- [x] **Step B.1: Read spec line 264 and the existing `pending_review` table schema in `slopmortem/corpus/merge.py:76`.**
 
-- [ ] **Step B.2: Define `PendingReviewRow` failing test.**
+- [x] **Step B.2: Define `PendingReviewRow` failing test.**
 
 `tests/test_list_review.py`:
 
@@ -466,7 +466,7 @@ def test_cli_list_review_prints_queue(monkeypatch, tmp_path: Path):
     assert "0.78" in result.output
 ```
 
-- [ ] **Step B.3: Run the tests; confirm they fail.**
+- [x] **Step B.3: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_list_review.py -v
@@ -474,7 +474,7 @@ def test_cli_list_review_prints_queue(monkeypatch, tmp_path: Path):
 
 Expected: imports fail (`PendingReviewRow` does not exist), or runtime failures (`list_pending_review` does not exist).
 
-- [ ] **Step B.4: Add `PendingReviewRow` to `slopmortem/models.py`.**
+- [x] **Step B.4: Add `PendingReviewRow` to `slopmortem/models.py`.**
 
 ```python
 class PendingReviewRow(BaseModel):
@@ -487,7 +487,7 @@ class PendingReviewRow(BaseModel):
     raw_section_heads: str | None
 ```
 
-- [ ] **Step B.5: Add `MergeJournal.list_pending_review` to `slopmortem/corpus/merge.py`.**
+- [x] **Step B.5: Add `MergeJournal.list_pending_review` to `slopmortem/corpus/merge.py`.**
 
 ```python
 async def list_pending_review(self) -> list[PendingReviewRow]:
@@ -516,7 +516,7 @@ def _list_pending_review_sync(self) -> list[PendingReviewRow]:
 
 The exact private helper signature depends on the existing `MergeJournal` patterns (run `grep "to_thread\|_sync" slopmortem/corpus/merge.py` and follow the existing form).
 
-- [ ] **Step B.6: Wire the CLI path.**
+- [x] **Step B.6: Wire the CLI path.**
 
 In `slopmortem/cli.py:_run_ingest`, find the deferred-flag block Plan #1 added that exits 1 on `list_review` and replace with a real path. Order matters — `list_review` must be checked BEFORE the orchestrator dispatches:
 
@@ -546,7 +546,7 @@ if reconcile or reclassify:
     # ... unchanged rejection until Tasks C / D land ...
 ```
 
-- [ ] **Step B.7: Run the tests; confirm they pass.**
+- [x] **Step B.7: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_list_review.py -v
@@ -555,7 +555,7 @@ if reconcile or reclassify:
 
 Update `test_ingest_deferred_flags_rejected` from Plan #1 to no longer parametrize over `--list-review` — now only `--reconcile` and `--reclassify` are deferred.
 
-- [ ] **Step B.8: Run the full sweep.**
+- [x] **Step B.8: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -582,7 +582,7 @@ Expected: all green; test count = +3 (one model round-trip, one journal reader, 
 
 ### Step-by-step
 
-- [ ] **Step C.1: Read `slopmortem/corpus/reconcile.py:reconcile`'s signature and `ReconcileReport`'s shape.**
+- [x] **Step C.1: Read `slopmortem/corpus/reconcile.py:reconcile`'s signature and `ReconcileReport`'s shape.**
 
 ```
 ./.venv/bin/python -c "
@@ -595,7 +595,7 @@ print(ReconcileReport.model_fields)
 
 If the signature differs from what this plan assumes, adjust the wiring below. Do not modify `reconcile.py` itself.
 
-- [ ] **Step C.2: Write failing CLI test.**
+- [x] **Step C.2: Write failing CLI test.**
 
 `tests/test_cli_reconcile.py`:
 
@@ -669,7 +669,7 @@ def test_cli_reconcile_prints_drift_findings(monkeypatch, tmp_path: Path):
 
 The exact `ReconcileRow` field names should be lifted from the actual `slopmortem/corpus/reconcile.py` source — this plan's example uses `drift_class`, `path`, `action`, but the real shape may vary. Step C.1's grep confirms the schema before writing the test.
 
-- [ ] **Step C.3: Run the tests; confirm they fail.**
+- [x] **Step C.3: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_reconcile.py -v
@@ -677,7 +677,7 @@ The exact `ReconcileRow` field names should be lifted from the actual `slopmorte
 
 Expected: 2 tests fail because the CLI still rejects `--reconcile`.
 
-- [ ] **Step C.4: Wire the CLI path.**
+- [x] **Step C.4: Wire the CLI path.**
 
 In `slopmortem/cli.py`, add the import:
 
@@ -703,18 +703,18 @@ if reconcile_flag:  # rename param to avoid shadowing the imported function
 
 **Note:** Python parameter named `reconcile` in `_run_ingest` shadows the imported function. Either rename the typer Option to a different Python name (e.g. `reconcile_flag: Annotated[bool, typer.Option("--reconcile", ...)]`), or import the function under an alias (`from slopmortem.corpus.reconcile import reconcile as _reconcile`). Pick one and stay consistent in `_run_ingest`.
 
-- [ ] **Step C.5: Update `_run_ingest`'s deferred-flag block.**
+- [x] **Step C.5: Update `_run_ingest`'s deferred-flag block.**
 
 Drop `reconcile` from the rejection condition; only `reclassify` remains deferred until Task D lands. Update the parametrized `test_ingest_deferred_flags_rejected` similarly.
 
-- [ ] **Step C.6: Run the tests; confirm they pass.**
+- [x] **Step C.6: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_reconcile.py -v
 ./.venv/bin/pytest tests/test_cli_ingest.py -v
 ```
 
-- [ ] **Step C.7: Full sweep.**
+- [x] **Step C.7: Full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -752,13 +752,13 @@ Expected: all green; test count = +2.
 
 ### Step-by-step
 
-- [ ] **Step D.1: Read spec lines 252 and 408–445** (the quarantine routing diagram and reclassify semantics).
+- [x] **Step D.1: Read spec lines 252 and 408–445** (the quarantine routing diagram and reclassify semantics).
 
-- [ ] **Step D.2: Verify `quarantine_journal` schema** (`slopmortem/corpus/merge.py` lines 56–62).
+- [x] **Step D.2: Verify `quarantine_journal` schema** (`slopmortem/corpus/merge.py` lines 56–62).
 
 The columns are `(content_sha256, source, source_id, reason, slop_score, quarantined_at)` per the schema in merge.py. Confirm by reading those lines directly before writing tests.
 
-- [ ] **Step D.3: Write failing orchestrator tests.**
+- [x] **Step D.3: Write failing orchestrator tests.**
 
 `tests/test_reclassify.py`:
 
@@ -927,7 +927,7 @@ def test_cli_reclassify_dispatches(monkeypatch, tmp_path: Path):
     assert "still_slop=2" in result.output
 ```
 
-- [ ] **Step D.4: Run the tests; confirm they fail.**
+- [x] **Step D.4: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_reclassify.py tests/test_cli_reclassify.py -v
@@ -935,7 +935,7 @@ def test_cli_reclassify_dispatches(monkeypatch, tmp_path: Path):
 
 Expected: all fail with `ImportError`.
 
-- [ ] **Step D.5: Add `ReclassifyReport` to `slopmortem/models.py`.**
+- [x] **Step D.5: Add `ReclassifyReport` to `slopmortem/models.py`.**
 
 ```python
 class ReclassifyReport(BaseModel):
@@ -947,7 +947,7 @@ class ReclassifyReport(BaseModel):
     errors: int
 ```
 
-- [ ] **Step D.6: Implement `reclassify_quarantined` in `slopmortem/corpus/reclassify.py`.**
+- [x] **Step D.6: Implement `reclassify_quarantined` in `slopmortem/corpus/reclassify.py`.**
 
 ```python
 """Re-score quarantined docs; declassify survivors and route through entity resolution."""
@@ -1030,7 +1030,7 @@ async def reclassify_quarantined(
 
 The exact `MergeJournal` reader / writer method names are placeholders. Step D.7 fills in the missing ones.
 
-- [ ] **Step D.7: Add `MergeJournal.list_quarantine_journal`, `drop_quarantine_row`, and `write_pending_merge_row` if not already present.**
+- [x] **Step D.7: Add `MergeJournal.list_quarantine_journal`, `drop_quarantine_row`, and `write_pending_merge_row` if not already present.**
 
 These three methods may or may not exist on `MergeJournal` today. Run:
 
@@ -1042,7 +1042,7 @@ For each that does not exist, add it next to existing analogous methods (`_write
 
 If `list_quarantine_journal` already exists under a different name (e.g. `_iter_quarantine`), use that; do not invent a duplicate. Document the chosen name in `reclassify.py`.
 
-- [ ] **Step D.8: Wire the CLI path.**
+- [x] **Step D.8: Wire the CLI path.**
 
 In `slopmortem/cli.py`:
 
@@ -1067,15 +1067,15 @@ if reclassify:
     return
 ```
 
-- [ ] **Step D.9: Update `test_ingest_deferred_flags_rejected`** — drop `--reclassify` from the parametrize. The test now has zero parameters; delete it and any companion deferred-flag tests entirely.
+- [x] **Step D.9: Update `test_ingest_deferred_flags_rejected`** — drop `--reclassify` from the parametrize. The test now has zero parameters; delete it and any companion deferred-flag tests entirely.
 
-- [ ] **Step D.10: Run the tests.**
+- [x] **Step D.10: Run the tests.**
 
 ```
 ./.venv/bin/pytest tests/test_reclassify.py tests/test_cli_reclassify.py tests/test_cli_ingest.py -v
 ```
 
-- [ ] **Step D.11: Full sweep.**
+- [x] **Step D.11: Full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -1141,17 +1141,17 @@ The counter is shared between `tavily_search` and `tavily_extract` because the s
 
 ### Step-by-step
 
-- [ ] **Step E.1: Read spec line 1005.** Confirm "≤2 per synthesis" is the right cap and that both Tavily tools share the budget.
+- [x] **Step E.1: Read spec line 1005.** Confirm "≤2 per synthesis" is the right cap and that both Tavily tools share the budget.
 
-- [ ] **Step E.2: Verify the current `synthesis_tools` factory at `slopmortem/llm/tools.py:80`.** Read it end-to-end before modifying.
+- [x] **Step E.2: Verify the current `synthesis_tools` factory at `slopmortem/llm/tools.py:80`.** Read it end-to-end before modifying.
 
-- [ ] **Step E.3: Add `tavily_calls_per_synthesis: int = 2` to `slopmortem/config.py`.**
+- [x] **Step E.3: Add `tavily_calls_per_synthesis: int = 2` to `slopmortem/config.py`.**
 
 ```python
 tavily_calls_per_synthesis: int = 2  # spec line 1005
 ```
 
-- [ ] **Step E.4: Write failing tests.**
+- [x] **Step E.4: Write failing tests.**
 
 Append to `tests/test_synthesis_tools.py` (or create the file if it does not exist; check first):
 
@@ -1265,7 +1265,7 @@ def test_tavily_disabled_means_no_tavily_tools_in_factory():
     assert "tavily_extract" not in names
 ```
 
-- [ ] **Step E.5: Run the tests; confirm they fail.**
+- [x] **Step E.5: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_synthesis_tools.py -v -k "tavily"
@@ -1273,11 +1273,11 @@ def test_tavily_disabled_means_no_tavily_tools_in_factory():
 
 Expected: 4 of the 5 tests fail (the disabled-case test may pass already if the factory short-circuits). The cap-enforcement tests fail because no gate is in place.
 
-- [ ] **Step E.6: Implement the wrapper in `synthesis_tools`.**
+- [x] **Step E.6: Implement the wrapper in `synthesis_tools`.**
 
 Apply the closure-based pattern shown in the "Why a per-synthesis counter" section above. Keep `get_post_mortem` and `search_corpus` un-wrapped; only the two Tavily tools get the counter. The counter dict (`{"used": 0}`) is captured by the inner closure of each Tavily wrapper, and both wrappers share the same dict instance.
 
-- [ ] **Step E.7: Run the tests; confirm they pass.**
+- [x] **Step E.7: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_synthesis_tools.py -v
@@ -1285,7 +1285,7 @@ Apply the closure-based pattern shown in the "Why a per-synthesis counter" secti
 
 Expected: all 5 cases pass.
 
-- [ ] **Step E.8: Run the existing pipeline e2e tests** — make sure the wrapper does not break anything when Tavily is disabled (default).
+- [x] **Step E.8: Run the existing pipeline e2e tests** — make sure the wrapper does not break anything when Tavily is disabled (default).
 
 ```
 ./.venv/bin/pytest tests/test_pipeline_e2e.py -v
@@ -1293,7 +1293,7 @@ Expected: all 5 cases pass.
 
 Expected: same green count as before, 8 passed.
 
-- [ ] **Step E.9: Full sweep.**
+- [x] **Step E.9: Full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -1313,7 +1313,7 @@ Expected: all green; test count = +5 (or +4 if the disabled-case test already ex
 
 ## Final verification (after all five tasks land)
 
-- [ ] **Run the full sweep.**
+- [x] **Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -v
@@ -1325,7 +1325,7 @@ Expected: all green; test count = +5 (or +4 if the disabled-case test already ex
 
 Expected: all green; eval runner exits 0.
 
-- [ ] **Confirm the spec invariants still hold.**
+- [x] **Confirm the spec invariants still hold.**
 
 ```
 grep -RIn "deferred to a follow-up" slopmortem/cli.py
@@ -1345,7 +1345,7 @@ grep -n "tavily_calls_per_synthesis" slopmortem/config.py slopmortem/llm/tools.p
 
 Expected: present in both.
 
-- [ ] **Smoke the CLI surface (no real network).**
+- [x] **Smoke the CLI surface (no real network).**
 
 ```
 ./.venv/bin/python -m slopmortem.cli ingest --help

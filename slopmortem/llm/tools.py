@@ -81,6 +81,7 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
     """Build the synthesis tool list. Tavily inclusion depends on config, so it isn't a constant."""
     # Lazy import to break the cycle with corpus.tools_impl, which imports
     # ToolSpec from models through this module's transitive deps.
+    from slopmortem.corpus import tools_impl  # noqa: PLC0415 — break import cycle
     from slopmortem.corpus.tools_impl import (  # noqa: PLC0415 — break import cycle
         get_post_mortem,
         search_corpus,
@@ -89,6 +90,42 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
     )
 
     tools = [get_post_mortem, search_corpus]
-    if getattr(config, "enable_tavily_synthesis", False):
-        tools.extend([tavily_search, tavily_extract])
+    if config.enable_tavily_synthesis:
+        # Each synthesize() call gets its own quota (spec line 1005:
+        # <=2 Tavily calls per synthesis), shared across both tools.
+        used = 0
+        cap = config.tavily_calls_per_synthesis
+
+        async def _bounded_search(*, q: str, limit: int = 5) -> str:
+            nonlocal used
+            if used >= cap:
+                return f"tavily call budget exceeded ({cap} per synthesis); refusing"
+            used += 1
+            # Runtime attr lookup so tests can monkeypatch the impl.
+            return await tools_impl._tavily_search(q, limit)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+        async def _bounded_extract(*, url: str) -> str:
+            nonlocal used
+            if used >= cap:
+                return f"tavily call budget exceeded ({cap} per synthesis); refusing"
+            used += 1
+            # Runtime attr lookup so tests can monkeypatch the impl.
+            return await tools_impl._tavily_extract(url)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+        tools.extend(
+            [
+                ToolSpec(
+                    name=tavily_search.name,
+                    description=tavily_search.description,
+                    args_model=tavily_search.args_model,
+                    fn=_bounded_search,
+                ),
+                ToolSpec(
+                    name=tavily_extract.name,
+                    description=tavily_extract.description,
+                    args_model=tavily_extract.args_model,
+                    fn=_bounded_extract,
+                ),
+            ]
+        )
     return tools

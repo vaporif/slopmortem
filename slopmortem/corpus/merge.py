@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 from anyio import to_thread
 
 from slopmortem._time import utcnow_iso
-from slopmortem.models import AliasEdge
+from slopmortem.models import AliasEdge, PendingReviewRow
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -418,6 +418,55 @@ class MergeJournal:
         with _connect(self._db) as conn:
             cur = conn.execute("SELECT * FROM quarantine_journal")
             return [_row_to_dict(r) for r in cur.fetchall()]
+
+    async def drop_quarantine_row(
+        self,
+        *,
+        content_sha256: str,
+        source: str,
+        source_id: str,
+    ) -> None:
+        """Delete the quarantine_journal row for the given primary key.
+
+        Used by ``slopmortem ingest --reclassify`` after a doc is declassified
+        (re-scored below ``slop_threshold``) and its markdown is moved out of
+        the quarantine tree.
+        """
+        await to_thread.run_sync(self._drop_quarantine_row_sync, content_sha256, source, source_id)
+
+    def _drop_quarantine_row_sync(self, content_sha256: str, source: str, source_id: str) -> None:
+        with _connect(self._db) as conn:
+            conn.execute(
+                """
+                DELETE FROM quarantine_journal
+                 WHERE content_sha256 = ? AND source = ? AND source_id = ?
+                """,
+                (content_sha256, source, source_id),
+            )
+
+    # ─── Pending review queue (entity-resolution borderline pairs) ─────────
+
+    async def list_pending_review(self) -> list[PendingReviewRow]:
+        """Read all rows from the ``pending_review`` table (spec line 264).
+
+        Returns rows in INSERT order (no explicit ``ORDER BY`` — ``--list-review``
+        is exploratory; the caller can sort if it cares about ordering).
+        """
+        return await to_thread.run_sync(self._list_pending_review_sync)
+
+    def _list_pending_review_sync(self) -> list[PendingReviewRow]:
+        with _connect(self._db) as conn:
+            cur = conn.execute("SELECT * FROM pending_review")
+            return [
+                PendingReviewRow(
+                    pair_key=row["pair_key"],
+                    similarity_score=row["similarity_score"],
+                    haiku_decision=row["haiku_decision"],
+                    haiku_rationale=row["haiku_rationale"],
+                    raw_section_heads=row["raw_section_heads"],
+                )
+                for row in cur.fetchall()
+            ]
 
 
 # Used by ingest in later tasks. Exported here for symmetry with the other writers.

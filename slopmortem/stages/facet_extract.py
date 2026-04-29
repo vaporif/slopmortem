@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from lmnr import observe
+
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
 from slopmortem.llm.tools import to_strict_response_schema
 from slopmortem.models import Facets
@@ -12,6 +14,7 @@ if TYPE_CHECKING:
     from slopmortem.llm.client import LLMClient
 
 
+@observe(name="stage.facet_extract")
 async def extract_facets(text: str, llm: LLMClient, model: str | None = None) -> Facets:
     """Extract a :class:`Facets` bundle from *text* via one strict-mode JSON call.
 

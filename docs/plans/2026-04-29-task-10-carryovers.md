@@ -79,9 +79,9 @@ Do NOT run `git add` / `git commit` from inside an implementer subagent. The par
 
 ### Step-by-step
 
-- [ ] **Step A.1: Read the spec sections listed above.** No code yet.
+- [x] **Step A.1: Read the spec sections listed above.** No code yet.
 
-- [ ] **Step A.2: Write `safe_post` failing tests.**
+- [x] **Step A.2: Write `safe_post` failing tests.**
 
 Add `tests/test_safe_post.py`. Mirror the existing `tests/test_ssrf.py` pattern (which exercises `safe_get`'s scheme + DNS pinning). Cover at least:
 
@@ -107,13 +107,13 @@ async def test_safe_post_passes_json_body_through(httpx_mock):
     assert resp.json() == {"ok": True}
 ```
 
-- [ ] **Step A.3: Run the tests; confirm they fail with "safe_post not defined".**
+- [x] **Step A.3: Run the tests; confirm they fail with "safe_post not defined".**
 
 ```
 ./.venv/bin/pytest tests/test_safe_post.py -v
 ```
 
-- [ ] **Step A.4: Implement `safe_post` in `slopmortem/http.py`.**
+- [x] **Step A.4: Implement `safe_post` in `slopmortem/http.py`.**
 
 Lift the SSRF-pinning machinery from `safe_get` into a private `_resolve_and_validate(url) -> str` helper, then have both `safe_get` and `safe_post` call it. New public function:
 
@@ -133,11 +133,11 @@ async def safe_post(
 
 Refactor `safe_get` to call `_resolve_and_validate` so the two helpers share one implementation of the DNS pin. Do not change `safe_get`'s public signature.
 
-- [ ] **Step A.5: Run `pytest tests/test_safe_post.py -v` + the existing `tests/test_ssrf.py` to confirm both helpers stay green.**
+- [x] **Step A.5: Run `pytest tests/test_safe_post.py -v` + the existing `tests/test_ssrf.py` to confirm both helpers stay green.**
 
 The existing `safe_get` tests must still pass after the refactor. If any test fails, the refactor introduced a regression. Fix it before moving on; do not paper over by skipping a test.
 
-- [ ] **Step A.6: Write the Tavily tool failing tests.**
+- [x] **Step A.6: Write the Tavily tool failing tests.**
 
 Add `tests/test_tavily_tools.py`. The Tavily tools currently raise `NotImplementedError`; the tests describe the post-implementation contract. At minimum:
 
@@ -200,7 +200,7 @@ async def test_tavily_extract_propagates_http_error(monkeypatch):
         await _tavily_extract("https://example.com/x")
 ```
 
-- [ ] **Step A.7: Run the tests; confirm they fail.**
+- [x] **Step A.7: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_tavily_tools.py -v
@@ -208,7 +208,7 @@ async def test_tavily_extract_propagates_http_error(monkeypatch):
 
 Expected: all four tests fail with `NotImplementedError` (or import errors if `safe_post` import in the impl breaks first).
 
-- [ ] **Step A.8: Implement `_tavily_search` and `_tavily_extract` in `slopmortem/corpus/tools_impl.py`.**
+- [x] **Step A.8: Implement `_tavily_search` and `_tavily_extract` in `slopmortem/corpus/tools_impl.py`.**
 
 ```python
 import os
@@ -259,7 +259,7 @@ async def _tavily_extract(url: str) -> str:
 
 The `api_key` is read from the env var rather than `Config` because the Tavily tools are passed bare to OpenRouter (not the full `Config`), and the existing `_set_corpus(corpus)` indirection would not extend cleanly to a `_set_config(config)` second binding. Reading from env at call time is the pattern `_get_post_mortem` / `_search_corpus` already break (those use a module-level `_corpus`); the env var read is acceptable here because `TAVILY_API_KEY` is the documented surface in the spec (line 207, line 1023). Document this in the function docstring.
 
-- [ ] **Step A.9: Run all the Tavily-tool tests; confirm they pass.**
+- [x] **Step A.9: Run all the Tavily-tool tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_tavily_tools.py -v
@@ -267,7 +267,7 @@ The `api_key` is read from the env var rather than `Config` because the Tavily t
 
 Expected: 4 passed.
 
-- [ ] **Step A.10: Run the full sweep.**
+- [x] **Step A.10: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -310,9 +310,9 @@ The `synthesize` stage is already correctly decorated (`ignore_inputs=["candidat
 
 ### Step-by-step
 
-- [ ] **Step B.1: Read spec lines 914–924 in full.** Especially the wording "matches top-level parameter names only". The `ignore_inputs` filter is `k in ignore_inputs` against `inspect.signature(func).parameters.keys()`, so it has to use the exact parameter name (`candidates`, not `retrieved`).
+- [x] **Step B.1: Read spec lines 914–924 in full.** Especially the wording "matches top-level parameter names only". The `ignore_inputs` filter is `k in ignore_inputs` against `inspect.signature(func).parameters.keys()`, so it has to use the exact parameter name (`candidates`, not `retrieved`).
 
-- [ ] **Step B.2: Verify lmnr-python's `@observe` API.**
+- [x] **Step B.2: Verify lmnr-python's `@observe` API.**
 
 Confirm `ignore_outputs=True` exists and behaves the way the spec implies. Inspect the installed package:
 
@@ -322,7 +322,7 @@ Confirm `ignore_outputs=True` exists and behaves the way the spec implies. Inspe
 
 Expected: signature includes `ignore_inputs`, `ignore_outputs` (or equivalent). If `ignore_outputs` does NOT exist as a kwarg, the fallback is to capture `name` only (no inputs/outputs auto-captured) and re-attach everything manually. Document the choice in the stage's docstring.
 
-- [ ] **Step B.3: Write the regression test (failing — neither file decorated yet).**
+- [x] **Step B.3: Write the regression test (failing — neither file decorated yet).**
 
 Add `tests/test_observe_redaction.py`. The test runs the full pipeline against fakes (lifting the pattern from `tests/test_pipeline_e2e.py`) but inserts a Laminar `InMemorySpanExporter` (or whatever `lmnr-python` ships as its in-memory exporter). After the run, the test scrapes every span attribute value and asserts no candidate `payload.body` substring appears anywhere.
 
@@ -375,7 +375,7 @@ async def test_no_corpus_body_in_laminar_spans(monkeypatch):
 
 If `lmnr-python` does not expose an exporter override hook, fall back to monkeypatching the OTel tracer provider directly via `opentelemetry.trace.set_tracer_provider`. Document the chosen wiring inline.
 
-- [ ] **Step B.4: Run the test; confirm it fails.**
+- [x] **Step B.4: Run the test; confirm it fails.**
 
 ```
 ./.venv/bin/pytest tests/test_observe_redaction.py -v
@@ -383,7 +383,7 @@ If `lmnr-python` does not expose an exporter override hook, fall back to monkeyp
 
 Expected: FAIL. Body sentinel appears in span attributes (because `retrieve` and `llm_rerank` don't have any redaction yet, and `synthesize`'s `ignore_inputs=["candidate"]` only handles its own input, not the upstream stages' captures).
 
-- [ ] **Step B.5: Decorate `extract_facets`.**
+- [x] **Step B.5: Decorate `extract_facets`.**
 
 In `slopmortem/stages/facet_extract.py`, add the import and decorator. No redaction needed.
 
@@ -395,7 +395,7 @@ async def extract_facets(text: str, llm: LLMClient, model: str | None = None) ->
     ...
 ```
 
-- [ ] **Step B.6: Decorate `retrieve` with output redaction.**
+- [x] **Step B.6: Decorate `retrieve` with output redaction.**
 
 In `slopmortem/stages/retrieve.py`:
 
@@ -422,7 +422,7 @@ async def retrieve(*, description, facets, corpus, embedding_client, cutoff_iso,
 
 If lmnr-python does not expose `ignore_outputs`, use `@observe(name="stage.retrieve", ignore_inputs=[<every-param-name>], ignore_outputs=...)` or whatever the SDK supports. Write a one-line note in the docstring documenting the fallback.
 
-- [ ] **Step B.7: Decorate `llm_rerank` with input redaction.**
+- [x] **Step B.7: Decorate `llm_rerank` with input redaction.**
 
 In `slopmortem/stages/llm_rerank.py`:
 
@@ -440,7 +440,7 @@ async def llm_rerank(candidates, pitch, ...) -> LlmRerankResult:
     ...  # existing body
 ```
 
-- [ ] **Step B.8: Run the regression test; confirm it passes.**
+- [x] **Step B.8: Run the regression test; confirm it passes.**
 
 ```
 ./.venv/bin/pytest tests/test_observe_redaction.py -v
@@ -448,7 +448,7 @@ async def llm_rerank(candidates, pitch, ...) -> LlmRerankResult:
 
 Expected: PASS. Sentinel does not appear in any captured span.
 
-- [ ] **Step B.9: Run the existing pipeline e2e tests; confirm they still pass.**
+- [x] **Step B.9: Run the existing pipeline e2e tests; confirm they still pass.**
 
 ```
 ./.venv/bin/pytest tests/test_pipeline_e2e.py -v
@@ -456,7 +456,7 @@ Expected: PASS. Sentinel does not appear in any captured span.
 
 Expected: 8 passed (same as before; decorators are no-ops when Laminar is not initialized).
 
-- [ ] **Step B.10: Run the full sweep.**
+- [x] **Step B.10: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -499,9 +499,9 @@ For `--reconcile`, `--reclassify`, `--list-review`: these are SEPARATE orchestra
 
 ### Pre-flight
 
-- [ ] **Step C.0: Read `slopmortem/ingest.py:660-720` (`ingest()` orchestrator's full signature and docstring).** Confirm the dependency list. If new fields landed since this plan was written, propagate them in this task's wiring.
+- [x] **Step C.0: Read `slopmortem/ingest.py:660-720` (`ingest()` orchestrator's full signature and docstring).** Confirm the dependency list. If new fields landed since this plan was written, propagate them in this task's wiring.
 
-- [ ] **Step C.0a: Confirm `MergeJournal` constructor signature.**
+- [x] **Step C.0a: Confirm `MergeJournal` constructor signature.**
 
 ```
 grep -n "^class MergeJournal\|def __init__" slopmortem/corpus/journal.py | head -5
@@ -509,7 +509,7 @@ grep -n "^class MergeJournal\|def __init__" slopmortem/corpus/journal.py | head 
 
 Use the result to pin the `MergeJournal(...)` line in Step C.4.
 
-- [ ] **Step C.0b: Confirm whether `Config` has `journal_sqlite_path` or similar.**
+- [x] **Step C.0b: Confirm whether `Config` has `journal_sqlite_path` or similar.**
 
 ```
 grep -n "journal\|sqlite" slopmortem/config.py
@@ -519,7 +519,7 @@ If yes, use it. If no, default to `Path("data/journal.sqlite")` and document inl
 
 ### Step-by-step
 
-- [ ] **Step C.1: Write the CLI ingest test scaffolding (failing — wiring not in place).**
+- [x] **Step C.1: Write the CLI ingest test scaffolding (failing — wiring not in place).**
 
 Add `tests/test_cli_ingest.py`:
 
@@ -618,7 +618,7 @@ def test_ingest_with_crunchbase_csv_appends_source(monkeypatch, tmp_path):
     assert "HNAlgoliaSource" in source_classnames
 ```
 
-- [ ] **Step C.2: Run the tests; confirm they fail.**
+- [x] **Step C.2: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_ingest.py -v
@@ -626,7 +626,7 @@ def test_ingest_with_crunchbase_csv_appends_source(monkeypatch, tmp_path):
 
 Expected: all four tests fail. The first three fail because `_build_ingest_deps` doesn't exist yet and the stub body still echoes flags rather than dispatching. The fourth fails for the same reason.
 
-- [ ] **Step C.3: Add `_build_ingest_deps` helper to `slopmortem/cli.py`.**
+- [x] **Step C.3: Add `_build_ingest_deps` helper to `slopmortem/cli.py`.**
 
 Add next to `_build_deps`:
 
@@ -687,7 +687,7 @@ def _build_ingest_deps(
 
 If `MergeJournal`'s constructor signature differs from `MergeJournal(path)`, adjust per Step C.0a's grep.
 
-- [ ] **Step C.4: Replace `_run_ingest`'s body with real wiring.**
+- [x] **Step C.4: Replace `_run_ingest`'s body with real wiring.**
 
 Replace `slopmortem/cli.py:_run_ingest` (the existing body that just echoes flags) with:
 
@@ -769,7 +769,7 @@ from slopmortem.ingest import ingest
 
 If the actual class names differ (run `grep "^class " slopmortem/corpus/sources/*.py` to confirm), substitute correctly.
 
-- [ ] **Step C.5: Run the CLI ingest tests; confirm they pass.**
+- [x] **Step C.5: Run the CLI ingest tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_ingest.py -v
@@ -777,7 +777,7 @@ If the actual class names differ (run `grep "^class " slopmortem/corpus/sources/
 
 Expected: 6 passed (the four written + two `test_ingest_deferred_flags_rejected` parametrized cases — actually 3 parametrized cases = 6 total).
 
-- [ ] **Step C.6: Update the `cli.py` module docstring.**
+- [x] **Step C.6: Update the `cli.py` module docstring.**
 
 The current docstring at `slopmortem/cli.py` line 15-17 says "The `ingest` command is unchanged from the v1 5b stub — production wiring lands in a follow-up." Update to reflect that the stub is now real:
 
@@ -793,7 +793,7 @@ follow-up plan and currently exit non-zero with a clear message.
 """
 ```
 
-- [ ] **Step C.7: Run the full test suite.**
+- [x] **Step C.7: Run the full test suite.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -804,7 +804,7 @@ follow-up plan and currently exit non-zero with a clear message.
 
 Expected: all green; test count = 229 + 6 = 235.
 
-- [ ] **Step C.8: Smoke-run the CLI surface (no real network).**
+- [x] **Step C.8: Smoke-run the CLI surface (no real network).**
 
 Verify the CLI surface is wired correctly:
 

@@ -9,14 +9,20 @@ methods).
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from slopmortem.http import safe_post
 from slopmortem.models import ToolSpec
 
 if TYPE_CHECKING:
     from slopmortem.corpus.store import Corpus
+
+_TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
+_TAVILY_SNIPPET_CHARS = 500
 
 __all__ = [
     "GetPostMortemArgs",
@@ -114,16 +120,66 @@ async def _search_corpus(
     return hits
 
 
+def _tavily_api_key() -> str:
+    """Return ``TAVILY_API_KEY`` from the environment, or raise.
+
+    Read at call time (rather than from :class:`Config`) because the tool
+    callables are passed bare to OpenRouter's function-calling surface and
+    the existing ``_set_corpus`` indirection would not extend cleanly to a
+    second binding. ``TAVILY_API_KEY`` is the documented surface in the
+    spec (§Auth, §Synthesis tool registry).
+    """
+    key = os.environ.get("TAVILY_API_KEY", "")
+    if not key:
+        msg = "TAVILY_API_KEY not set; --tavily-synthesis path is unavailable"
+        raise RuntimeError(msg)
+    return key
+
+
 async def _tavily_search(q: str, limit: int = 5) -> str:
-    _ = (q, limit)
-    msg = "Task #11"
-    raise NotImplementedError(msg)
+    r"""Search the live web via Tavily and return a compact text summary for the LLM.
+
+    Reads ``TAVILY_API_KEY`` from the environment at call time. Returns a
+    newline-joined ``- title — url\n  snippet`` listing, capped at
+    *limit* results, or ``"(no results)"`` if Tavily returned an empty set.
+    """
+    resp = await safe_post(
+        _TAVILY_SEARCH_URL,
+        json={"api_key": _tavily_api_key(), "query": q, "max_results": limit},
+    )
+    resp.raise_for_status()
+    payload = resp.json()  # pyright: ignore[reportAny]  # httpx Response.json() is Any by design
+    raw_hits: list[dict[str, object]] = (
+        payload.get("results", [])[:limit] if payload else []  # pyright: ignore[reportAny]
+    )
+    lines: list[str] = []
+    for hit in raw_hits:
+        title = str(hit.get("title", "(no title)"))
+        url = str(hit.get("url", ""))
+        snippet = str(hit.get("content") or "")[:_TAVILY_SNIPPET_CHARS]
+        lines.append(f"- {title} — {url}\n  {snippet}")
+    return "\n".join(lines) if lines else "(no results)"
 
 
 async def _tavily_extract(url: str) -> str:
-    _ = url
-    msg = "Task #11"
-    raise NotImplementedError(msg)
+    """Fetch and extract the readable text of a single URL via Tavily.
+
+    Reads ``TAVILY_API_KEY`` from the environment at call time. Returns
+    the first result's ``raw_content`` string, or ``""`` if Tavily
+    returned no results.
+    """
+    resp = await safe_post(
+        TAVILY_EXTRACT_URL,
+        json={"api_key": _tavily_api_key(), "urls": [url]},
+    )
+    resp.raise_for_status()
+    payload = resp.json()  # pyright: ignore[reportAny]  # httpx Response.json() is Any by design
+    results: list[dict[str, object]] = (
+        payload.get("results", []) if payload else []  # pyright: ignore[reportAny]
+    )
+    if not results:
+        return ""
+    return str(results[0].get("raw_content", ""))
 
 
 get_post_mortem = ToolSpec(

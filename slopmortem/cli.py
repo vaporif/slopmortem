@@ -12,8 +12,17 @@ The ``replay`` command iterates an evals dataset (Task 11 ships the dataset
 format and content). The missing-dataset path exits with code 2 so CI smoke
 tests can probe the wiring without a fixture corpus.
 
-The ``ingest`` command is unchanged from the v1 5b stub. Production wiring
-lands in a follow-up.
+The ``ingest`` command assembles real :class:`Source` / :class:`Enricher`
+/ :class:`MergeJournal` / :class:`Corpus` / :class:`LLMClient` /
+:class:`EmbeddingClient` / :class:`SlopClassifier` instances from
+:class:`Config` and env vars and dispatches to
+:func:`slopmortem.ingest.ingest`. ``--list-review`` is a read-only path that
+queries :class:`MergeJournal` for the pending entity-resolution review queue
+and prints it to stdout. ``--reconcile`` runs the six-drift-class scan with
+``repair=True`` and prints the report. ``--reclassify`` re-runs the slop
+classifier against every quarantine row and routes survivors back out of
+the quarantine tree; ``--tavily-enrich`` appends a :class:`TavilyEnricher`
+to the enrichers list.
 """
 
 from __future__ import annotations
@@ -24,7 +33,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 import anyio
 import typer
@@ -34,7 +43,15 @@ from openai import AsyncOpenAI
 from slopmortem.budget import Budget
 from slopmortem.config import load_config
 from slopmortem.corpus.qdrant_store import QdrantCorpus
+from slopmortem.corpus.reclassify import reclassify_quarantined
+from slopmortem.corpus.reconcile import reconcile
+from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource
+from slopmortem.corpus.sources.curated import CuratedSource
+from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
+from slopmortem.corpus.sources.tavily import TavilyEnricher
+from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.corpus.tools_impl import _set_corpus
+from slopmortem.ingest import ingest
 from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.models import InputContext
@@ -46,7 +63,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from slopmortem.config import Config
+    from slopmortem.corpus.merge import MergeJournal
+    from slopmortem.corpus.sources.base import Enricher, Source
     from slopmortem.corpus.store import Corpus
+    from slopmortem.ingest import Corpus as IngestCorpus
+    from slopmortem.ingest import SlopClassifier
     from slopmortem.llm.client import LLMClient
     from slopmortem.llm.embedding_client import EmbeddingClient
 
@@ -66,7 +87,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
     force: Annotated[
         bool, typer.Option("--force", help="Bypass the skip_key short-circuit.")
     ] = False,
-    reconcile: Annotated[
+    reconcile_flag: Annotated[
         bool,
         typer.Option(
             "--reconcile",
@@ -122,7 +143,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
             _run_ingest,
             dry_run=dry_run,
             force=force,
-            reconcile=reconcile,
+            reconcile_flag=reconcile_flag,
             reclassify=reclassify,
             list_review=list_review,
             crunchbase_csv=crunchbase_csv,
@@ -137,7 +158,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     *,
     dry_run: bool,
     force: bool,
-    reconcile: bool,
+    reconcile_flag: bool,
     reclassify: bool,
     list_review: bool,
     crunchbase_csv: Path | None,
@@ -146,27 +167,93 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     post_mortems_root: Path,
 ) -> None:
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
-    # Production wiring (sources, qdrant client, embedder, llm, classifier) lands
-    # in a follow-up; for v1 5b the CLI is a thin shim. Surface the chosen flag
-    # combination so it shows up in the run log.
-    flags = {
-        "dry_run": dry_run,
-        "force": force,
-        "reconcile": reconcile,
-        "reclassify": reclassify,
-        "list_review": list_review,
-        "crunchbase_csv": str(crunchbase_csv) if crunchbase_csv else None,
-        "enrich_wayback": enrich_wayback,
-        "tavily_enrich": tavily_enrich,
-        "post_mortems_root": str(post_mortems_root),
-    }
-    logger.info("slopmortem ingest invoked: %s", flags)
-    typer.echo(f"slopmortem ingest invoked: {flags}")
-    note = (
-        "production wiring (sources/qdrant/openrouter/openai-embed) lands in a follow-up; "
-        "the orchestrator itself is exercised by the test suite."
+    config = load_config()
+    _maybe_init_tracing(config)
+
+    # Read-only short-circuits are wired before the full LLM/embedder build so
+    # they don't require ``OPENROUTER_API_KEY`` / ``OPENAI_API_KEY``.
+    if list_review:
+        journal = _build_journal(post_mortems_root)
+        rows = await journal.list_pending_review()
+        if not rows:
+            typer.echo("(no pending_review rows)")
+        for r in rows:
+            score = r.similarity_score
+            decision = r.haiku_decision
+            rationale = r.haiku_rationale
+            typer.echo(f"{r.pair_key}\tscore={score}\tdecision={decision}\trationale={rationale}")
+        return
+
+    # Spec: §Quarantine and reclassify line 252.
+    if reclassify:
+        journal = _build_journal(post_mortems_root)
+        classifier = _build_slop_classifier()
+        report = await reclassify_quarantined(
+            journal=journal,
+            slop_classifier=classifier,
+            post_mortems_root=post_mortems_root,
+            slop_threshold=config.slop_threshold,
+        )
+        counts = f"total={report.total} declassified={report.declassified}"
+        tail = f"still_slop={report.still_slop} errors={report.errors}"
+        typer.echo(f"reclassify: {counts} {tail}")
+        return
+
+    # Spec: §Atomicity / six drift classes (a-f).
+    if reconcile_flag:
+        journal = _build_journal(post_mortems_root)
+        corpus = _build_ingest_corpus(config, post_mortems_root)
+        report = await reconcile(
+            journal=journal,
+            corpus=corpus,
+            post_mortems_root=post_mortems_root,
+            repair=True,
+        )
+        typer.echo(f"reconcile: {len(report.rows)} drift findings, {len(report.applied)} repaired")
+        for r in report.rows:
+            typer.echo(f"  drift_class={r.drift_class}\t{r.path}\t{r.detail}")
+        return
+
+    llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
+        config, post_mortems_root
     )
-    typer.echo(f"{note} flags={flags}")
+    # The ingest-side Corpus Protocol is wider than the query-side one used by
+    # ``_set_corpus``; the underlying ``QdrantCorpus`` instance satisfies both.
+    _set_corpus(cast("Corpus", corpus))
+
+    sources: list[Source] = [
+        CuratedSource(yaml_path=_default_curated_yaml()),
+        HNAlgoliaSource(query="post-mortem"),
+    ]
+    if crunchbase_csv is not None:
+        sources.append(CrunchbaseCsvSource(csv_path=crunchbase_csv))
+
+    enrichers: list[Enricher] = []
+    if enrich_wayback:
+        enrichers.append(WaybackEnricher())
+    if tavily_enrich:
+        enrichers.append(TavilyEnricher())
+
+    result = await ingest(
+        sources=sources,
+        enrichers=enrichers,
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embedder,
+        budget=budget,
+        slop_classifier=classifier,
+        config=config,
+        post_mortems_root=post_mortems_root,
+        dry_run=dry_run,
+        force=force,
+    )
+    typer.echo(f"slopmortem ingest result: {result}")
+
+
+def _default_curated_yaml() -> Path:
+    """Return the in-tree curated post-mortem YAML path shipped with the package."""
+    return Path(__file__).parent / "corpus" / "sources" / "curated" / "post_mortems_v0.yml"
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +377,79 @@ def _build_deps(
     )
 
     return llm, embedder, corpus, budget
+
+
+def _build_journal(post_mortems_root: Path) -> MergeJournal:
+    """Construct only the merge journal; no LLM/embedder/Qdrant env vars required."""
+    from slopmortem.corpus.merge import MergeJournal  # noqa: PLC0415
+
+    journal_path = Path(
+        os.environ.get("MERGE_JOURNAL_PATH", str(post_mortems_root.parent / "journal.sqlite"))
+    )
+    return MergeJournal(journal_path)
+
+
+def _build_slop_classifier() -> SlopClassifier:
+    """Construct the production :class:`BinocularsSlopClassifier`."""
+    from slopmortem.ingest import BinocularsSlopClassifier  # noqa: PLC0415
+
+    return BinocularsSlopClassifier()
+
+
+def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
+    """Construct only the Qdrant-backed ingest corpus; no LLM/embedder env vars required."""
+    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
+
+    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
+    qdrant_port = int(os.environ.get("QDRANT_PORT", "6333"))
+    qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
+    corpus = QdrantCorpus(
+        client=qdrant_client,
+        collection=os.environ.get("QDRANT_COLLECTION", "slopmortem"),
+        post_mortems_root=post_mortems_root,
+        facet_boost=config.facet_boost,
+        rrf_k=config.rrf_k,
+    )
+    # ``QdrantCorpus`` ships ``upsert_chunk`` but not yet ``has_chunks`` /
+    # ``delete_chunks_for_canonical`` (production gap tracked separately);
+    # cast at this boundary so the CLI surface compiles against the strict
+    # ingest-side ``Corpus`` Protocol declared in :mod:`slopmortem.ingest`.
+    return cast("IngestCorpus", corpus)
+
+
+def _build_ingest_deps(
+    config: Config,
+    post_mortems_root: Path,
+) -> tuple[LLMClient, EmbeddingClient, IngestCorpus, Budget, MergeJournal, SlopClassifier]:
+    """Construct the full ingest-side wiring: LLM / embed / corpus / budget / journal / classifier.
+
+    Mirrors :func:`_build_deps` but uses ``max_cost_usd_per_ingest`` for the
+    budget cap and additionally constructs a :class:`MergeJournal` and the
+    production :class:`BinocularsSlopClassifier`.
+    """
+    budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
+
+    openrouter_sdk = AsyncOpenAI(
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        base_url=config.openrouter_base_url,
+    )
+    llm = OpenRouterClient(
+        sdk=openrouter_sdk,
+        budget=budget,
+        model=config.model_facet,  # ingest uses the cheap model
+    )
+
+    openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    embedder = OpenAIEmbeddingClient(
+        sdk=openai_sdk,
+        budget=budget,
+        model=config.embed_model_id,
+    )
+
+    corpus = _build_ingest_corpus(config, post_mortems_root)
+    journal = _build_journal(post_mortems_root)
+    classifier = _build_slop_classifier()
+    return llm, embedder, corpus, budget, journal, classifier
 
 
 def _make_progress() -> Callable[[str], None] | None:
