@@ -84,6 +84,10 @@ ignore = [
   "ASYNC240", # blocking Path I/O is fine in async test setup/assertions
 ]
 "conftest.py" = ["ANN", "D", "INP001"]
+"scripts/**" = [
+  "T201",     # CLI scripts print to stdout
+  "INP001",   # scripts dir is not a package
+]
 
 [tool.ruff.lint.flake8-type-checking]
 # Pydantic needs annotation classes available at runtime for model_rebuild() /
