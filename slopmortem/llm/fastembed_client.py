@@ -42,6 +42,10 @@ class FastEmbedEmbeddingClient:
         """Vector dimensionality for the configured embedding model."""
         return EMBED_DIMS[self.model]
 
+    async def prefetch(self) -> None:
+        """Force the ONNX model to load now (e.g. CI cache warm); otherwise lazy on first embed."""
+        await self._ensure_loaded()
+
     async def _ensure_loaded(self) -> TextEmbedding:
         """Materialize the fastembed model on first use; idempotent."""
         if self._te is not None:
