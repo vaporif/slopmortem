@@ -28,6 +28,23 @@ def to_openai_input_schema(
     return dict(inlined)
 
 
+def _force_required(node: object) -> None:
+    if not isinstance(node, dict):
+        return
+    if node.get("type") == "object" and "properties" in node:
+        node["required"] = list(node["properties"].keys())
+        node["additionalProperties"] = False
+        for v in node["properties"].values():
+            _force_required(v)
+    for key in ("items", "anyOf", "oneOf", "allOf"):
+        v = node.get(key)
+        if isinstance(v, list):
+            for elem in v:
+                _force_required(elem)
+        elif isinstance(v, dict):
+            _force_required(v)
+
+
 def to_strict_response_schema(
     model: type[BaseModel],
 ) -> dict[str, Any]:  # type: ignore[explicit-any]  # JSON Schema is heterogeneous by spec
@@ -46,23 +63,6 @@ def to_strict_response_schema(
     if isinstance(inlined, dict):
         for k in ("$defs", "$schema", "$id"):
             inlined.pop(k, None)
-
-    def _force_required(node: object) -> None:
-        if not isinstance(node, dict):
-            return
-        if node.get("type") == "object" and "properties" in node:
-            node["required"] = list(node["properties"].keys())
-            node["additionalProperties"] = False
-            for v in node["properties"].values():
-                _force_required(v)
-        for key in ("items", "anyOf", "oneOf", "allOf"):
-            v = node.get(key)
-            if isinstance(v, list):
-                for elem in v:
-                    _force_required(elem)
-            elif isinstance(v, dict):
-                _force_required(v)
-
     _force_required(inlined)
     return dict(inlined)
 

@@ -193,6 +193,12 @@ class OpenRouterClient:
         msg = "tool-loop bound exceeded"
         raise RuntimeError(msg)
 
+    @staticmethod
+    def _is_transient(exc: BaseException) -> bool:
+        if isinstance(exc, MidStreamError):
+            return exc.code in _TRANSIENT_MIDSTREAM_CODES
+        return _is_transient_http(exc)
+
     async def _call_with_retry(self, **kw: Any) -> Any:  # type: ignore[explicit-any]  # SDK passthrough
         """Call SDK with retry/backoff on transient errors.
 
@@ -214,21 +220,10 @@ class OpenRouterClient:
                 if resp.choices and resp.choices[0].finish_reason == "error":
                     err = getattr(resp.choices[0], "error", None) or {"code": "unknown"}
                     raise MidStreamError(err)  # noqa: TRY301 — caught locally to drive retry loop
-            except MidStreamError as exc:
-                last_exc = exc
-                if exc.code not in _TRANSIENT_MIDSTREAM_CODES:
-                    raise
-                if attempt >= self._max_retries:
-                    raise
-                await self._backoff(attempt)
-                attempt += 1
-                continue
             except Exception as exc:
-                if not _is_transient_http(exc):
+                if not self._is_transient(exc) or attempt >= self._max_retries:
                     raise
                 last_exc = exc
-                if attempt >= self._max_retries:
-                    raise
                 await self._backoff(attempt)
                 attempt += 1
                 continue
@@ -260,12 +255,12 @@ class OpenRouterClient:
         msgs.append({"role": "user", "content": [user_block]})
         return msgs
 
-    def _build_tools(
-        self, tools: list[ToolSpec] | None
-    ) -> list[dict[str, Any]] | None:  # type: ignore[explicit-any]  # SDK payload
+    def _build_tools(self, tools: list[ToolSpec] | None) -> list[dict[str, Any]] | None:  # type: ignore[explicit-any]  # SDK payload
         if not tools:
             return None
-        from slopmortem.llm.tools import to_openai_input_schema  # noqa: PLC0415 — break import cycle
+        from slopmortem.llm.tools import (  # noqa: PLC0415 — break import cycle
+            to_openai_input_schema,
+        )
 
         return [
             {

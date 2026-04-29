@@ -63,7 +63,7 @@ class Config(BaseSettings):  # type: ignore[explicit-any]  # BaseSettings inheri
         return self
 
     @classmethod
-    def settings_customise_sources(  # noqa: PLR0913 — pydantic-settings hook signature is fixed
+    def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,

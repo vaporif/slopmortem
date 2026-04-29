@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class CompletionResult:
-    """Single completion turn — text, stop reason, optional parsed Pydantic model, cost/cache stats."""
+    """Single completion turn: text, stop reason, optional Pydantic model, cost/cache stats."""
 
     text: str
     stop_reason: str

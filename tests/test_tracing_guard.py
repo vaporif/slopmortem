@@ -21,4 +21,3 @@ def test_localhost_attacker_subdomain_refused():
 
 def test_remote_allowed_with_flag(monkeypatch):
     init_tracing(base_url="http://attacker.example", allow_remote=True)
-

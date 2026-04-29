@@ -28,20 +28,21 @@ def _is_blocked_address(addr: str) -> bool:
         ip = ipaddress.ip_address(addr)
     except ValueError:
         return True
-    if ip.is_loopback or ip.is_link_local or ip.is_private or ip.is_multicast:
-        return True
-    if ip.is_reserved or ip.is_unspecified:
+    if (
+        ip.is_loopback
+        or ip.is_link_local
+        or ip.is_private
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
         return True
     if isinstance(ip, ipaddress.IPv4Address):
-        if ip in ipaddress.ip_network("100.64.0.0/10"):
-            return True
-        if ip in ipaddress.ip_network("169.254.0.0/16"):
-            return True
-    elif isinstance(ip, ipaddress.IPv6Address):
-        if ip in ipaddress.ip_network("fc00::/7"):
-            return True
-        if ip in ipaddress.ip_network("fe80::/10"):
-            return True
+        return ip in ipaddress.ip_network("100.64.0.0/10") or ip in ipaddress.ip_network(
+            "169.254.0.0/16"
+        )
+    if isinstance(ip, ipaddress.IPv6Address):
+        return ip in ipaddress.ip_network("fc00::/7") or ip in ipaddress.ip_network("fe80::/10")
     return False
 
 
@@ -56,8 +57,10 @@ def _resolve_all(host: str) -> list[str]:
     return list({str(info[4][0]) for info in infos})
 
 
-async def safe_get(  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
-    url: str, *, timeout: float = 30.0
+async def safe_get(
+    url: str,
+    *,
+    timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
 ) -> httpx.Response:
     """Fetch *url* via httpx after enforcing scheme + DNS-pinned SSRF checks."""
     parsed = urlparse(url)
