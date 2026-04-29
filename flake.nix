@@ -112,6 +112,7 @@
 
           nodejs_25
 
+          docker
           docker-compose
 
           yq-go
