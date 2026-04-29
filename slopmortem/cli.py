@@ -373,7 +373,7 @@ def _build_deps(
     budget = Budget(cap_usd=config.max_cost_usd_per_query)
 
     openrouter_sdk = AsyncOpenAI(
-        api_key=os.environ["OPENROUTER_API_KEY"],
+        api_key=os.environ.get("OPENROUTER_API_KEY", "missing-OPENROUTER_API_KEY"),
         base_url=config.openrouter_base_url,
     )
     llm = OpenRouterClient(
@@ -449,7 +449,7 @@ def _build_ingest_deps(
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
 
     openrouter_sdk = AsyncOpenAI(
-        api_key=os.environ["OPENROUTER_API_KEY"],
+        api_key=os.environ.get("OPENROUTER_API_KEY", "missing-OPENROUTER_API_KEY"),
         base_url=config.openrouter_base_url,
     )
     llm = OpenRouterClient(
