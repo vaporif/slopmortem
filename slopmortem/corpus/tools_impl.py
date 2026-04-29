@@ -1,10 +1,34 @@
-"""Tool implementations exposed to the LLM via OpenRouter function-calling."""
+"""Tool implementations exposed to the LLM via OpenRouter function-calling.
+
+The corpus tools (``_get_post_mortem`` / ``_search_corpus``) delegate to a
+module-level :class:`Corpus` bound at CLI startup via :func:`_set_corpus`.
+This indirection keeps the tool functions plain ``async def`` so they match
+the :class:`ToolSpec` signature contract (no closures, no bound methods).
+"""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from slopmortem.models import ToolSpec
+
+if TYPE_CHECKING:
+    from slopmortem.corpus.store import Corpus
+
+__all__ = [
+    "GetPostMortemArgs",
+    "SearchCorpusArgs",
+    "SearchHit",
+    "TavilyExtractArgs",
+    "TavilySearchArgs",
+    "_set_corpus",
+    "get_post_mortem",
+    "search_corpus",
+    "tavily_extract",
+    "tavily_search",
+]
 
 
 class GetPostMortemArgs(BaseModel):
@@ -43,29 +67,61 @@ class TavilyExtractArgs(BaseModel):
     url: str
 
 
+_corpus: Corpus | None = None
+
+
+def _set_corpus(c: Corpus) -> None:
+    """Bind the module-level :class:`Corpus` used by ``_get_post_mortem`` / ``_search_corpus``.
+
+    Called once at CLI startup so tool functions can stay plain ``async def``.
+    Tests pass a fake here and reset to ``None`` in teardown.
+    """
+    global _corpus  # noqa: PLW0603 — the module-level binding is the public init surface
+    _corpus = c
+
+
 async def _get_post_mortem(canonical_id: str) -> str:
-    _ = canonical_id
-    msg = "Task #9"
-    raise NotImplementedError(msg)
+    if _corpus is None:
+        msg = "corpus not initialized"
+        raise RuntimeError(msg)
+    return await _corpus.get_post_mortem(canonical_id)
 
 
 async def _search_corpus(
     q: str, facets: dict[str, str] | None = None, limit: int = 5
 ) -> list[SearchHit]:
-    _ = (q, facets, limit)
-    msg = "Task #9"
-    raise NotImplementedError(msg)
+    if _corpus is None:
+        msg = "corpus not initialized"
+        raise RuntimeError(msg)
+    raw = await _corpus.search_corpus(q, facets=facets)
+    hits: list[SearchHit] = []
+    for row in raw[:limit]:
+        # The Corpus.search_corpus protocol returns list[dict[str, Any]] —
+        # implementations vary (Qdrant payload shapes, fakes, future stores),
+        # so the per-row dict values are deliberately Any. We coerce each
+        # field to its expected scalar type at this boundary.
+        summary = row.get("summary") or row.get("body") or ""
+        snippet = str(summary)[:500]
+        hits.append(
+            SearchHit(
+                canonical_id=str(row.get("canonical_id", "")),  # pyright: ignore[reportAny]
+                name=str(row.get("name", "")),  # pyright: ignore[reportAny]
+                snippet=snippet,
+                score=float(row.get("score", 0.0)),  # pyright: ignore[reportAny]
+            )
+        )
+    return hits
 
 
 async def _tavily_search(q: str, limit: int = 5) -> str:
     _ = (q, limit)
-    msg = "Task #9"
+    msg = "Task #11"
     raise NotImplementedError(msg)
 
 
 async def _tavily_extract(url: str) -> str:
     _ = url
-    msg = "Task #9"
+    msg = "Task #11"
     raise NotImplementedError(msg)
 
 
