@@ -67,14 +67,12 @@ def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[in
         idx = text.find("\n#", cur)
         if idx == -1:
             break
-        # The heading starts at idx + 1 (skip the leading newline). Map to a
-        # token index.
+        # Heading starts at idx + 1; skip the leading newline.
         offsets.append(char_to_token_idx(idx + 1))
         cur = idx + 1
-    # Also catch a heading at the very start of the doc.
+    # A heading at the very start of the doc has no leading newline.
     if text.startswith("#"):
         offsets.insert(0, 0)
-    # Dedup + sort.
     return sorted(set(offsets))
 
 
@@ -109,9 +107,9 @@ def chunk_markdown(text: str, *, parent_canonical_id: str) -> list[Chunk]:
     chunk_idx = 0
     while start < len(tokens):
         end = min(start + WINDOW_TOKENS, len(tokens))
-        # If a heading falls within HEADING_SEARCH_TOKENS *after* start, snap
-        # forward so the chunk begins at the heading. Skip on the first chunk
-        # (start == 0) — we want the doc's first tokens regardless.
+        # If a heading sits within HEADING_SEARCH_TOKENS after start, snap
+        # forward so the chunk begins at the heading. Skip on the first
+        # chunk (start == 0); we always want the doc's opening tokens.
         if start > 0:
             for h in headings:
                 if start < h <= start + HEADING_SEARCH_TOKENS and h < end:
