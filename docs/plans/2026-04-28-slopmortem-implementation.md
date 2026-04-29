@@ -6,7 +6,7 @@
 
 **Architecture:** Async Python pipeline of pure stage functions (`facet_extract → embed → retrieve → llm_rerank → synthesize → render`) under one `asyncio.run` at the CLI edge. All LLM traffic goes through an `LLMClient` Protocol implemented by `OpenRouterClient` (openai SDK pointed at `openrouter.ai/api/v1`). Corpus persistence is Qdrant (Docker service) for vectors + payload, on-disk markdown for raw and merged bodies, and a SQLite journal for merge state. Laminar wraps every stage and SDK call.
 
-**Tech Stack:** Python 3.11+, async (`asyncio` + `anyio.CapacityLimiter`), `openai` SDK, `qdrant-client>=1.14`, `fastembed` (BM25 + cross-encoder), `pydantic-settings` v2 with TOML sources, `pydantic` v2 models, `lmnr-python`, `typer`, `trafilatura`, `tldextract`, `jsonref`, `pytest` + `pytest-recording` + `syrupy`. Dependencies pinned in `pyproject.toml`; tooling via `uv`.
+**Tech Stack:** Python 3.11+, async (`asyncio` + `anyio.CapacityLimiter`), `openai` SDK, `qdrant-client>=1.17.1`, `fastembed` (BM25 + cross-encoder), `pydantic-settings` v2 with TOML sources, `pydantic` v2 models, `lmnr-python`, `typer`, `trafilatura`, `tldextract`, `jsonref`, `pytest` + `pytest-recording` + `syrupy`. Dependencies pinned in `pyproject.toml`; tooling via `uv`.
 
 **Source spec:** [`docs/specs/2026-04-27-slopmortem-design.md`](../specs/2026-04-27-slopmortem-design.md) (read first; this plan does not duplicate every contract). Companion docs: [blockers](../specs/2026-04-28-design-spec-blockers.md), [openrouter corrections](../specs/2026-04-28-openrouter-api-corrections.md), [LIMITATIONS / review issues](../specs/2026-04-28-design-review-issues.md).
 
@@ -101,7 +101,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "openai>=1.50",
-  "qdrant-client>=1.14",
+  "qdrant-client>=1.17.1",
   "fastembed>=0.4",
   "pydantic>=2.7",
   "pydantic-settings>=2.4",
@@ -1600,22 +1600,22 @@ Expected: green.
 
 **Spec refs:** §Architecture Qdrant decisions (lines 229–238), §Components & file layout merge journal (lines 393–411), §Data flow Ingest atomicity (lines 534–590), §Failure handling (line 762).
 
-**Pre-flight:** Add `qdrant-client>=1.14` and `fastembed` if not already in pyproject.
+**Pre-flight:** Add `qdrant-client>=1.17.1` and `fastembed` if not already in pyproject.
 
 ### Step-by-step
 
-- [ ] **Step 3.1: `docker-compose.yml`**
+- [x] **Step 3.1: `docker-compose.yml`**
 
 ```yaml
 services:
   qdrant:
-    image: qdrant/qdrant:v1.14.0
+    image: qdrant/qdrant:v1.17.1
     ports: ["6333:6333"]
     volumes:
       - ./data/qdrant:/qdrant/storage
 ```
 
-- [ ] **Step 3.2: Failing test for Qdrant collection setup**
+- [x] **Step 3.2: Failing test for Qdrant collection setup**
 
 ```python
 import pytest
@@ -1641,7 +1641,7 @@ async def test_collection_dim_mismatch_raises(qdrant_client):
 
 `conftest.py` fixture spins a real Qdrant container (or skips if `pytest -m 'not requires_qdrant'`).
 
-- [ ] **Step 3.3: Implement `ensure_collection`**
+- [x] **Step 3.3: Implement `ensure_collection`**
 
 ```python
 from qdrant_client.models import (
@@ -1670,12 +1670,12 @@ async def ensure_collection(client, name: str, *, dim: int) -> None:
 
 Callers pass `dim=EMBED_DIMS[settings.embed_model_id]` — the embedding model name in `config.py` is the single source of truth for the dimension.
 
-- [ ] **Step 3.4: Run setup test**
+- [x] **Step 3.4: Run setup test**
 
 Run: `docker compose up -d qdrant && uv run pytest tests/corpus/test_qdrant_setup.py -v -m requires_qdrant`
 Expected: green.
 
-- [ ] **Step 3.5: Failing tests for `MergeJournal`**
+- [x] **Step 3.5: Failing tests for `MergeJournal`**
 
 ```python
 from __future__ import annotations
@@ -1739,7 +1739,7 @@ async def test_upsert_alias_blocked_atomic(journal):
     assert len(edges) == 1 and edges[0].target_canonical_id == "acme.com"
 ```
 
-- [ ] **Step 3.6: Implement `MergeJournal`**
+- [x] **Step 3.6: Implement `MergeJournal`**
 
 Use `sqlite3` from stdlib; every call wrapped in `asyncio.to_thread`. Schema:
 
@@ -1802,7 +1802,7 @@ CREATE TABLE founding_year_cache (
 
 Callers MUST use these methods instead of composing their own write sequences — they are the only sanctioned path to a non-`complete` `merge_state` and they encode the invariant that every row enters the journal in its terminal classification (closing the B6 race window). `mark_complete` is the one promotion path (`pending` → `complete`) and runs after all qdrant + disk writes succeed.
 
-- [ ] **Step 3.7: Failing test for atomic disk writes**
+- [x] **Step 3.7: Failing test for atomic disk writes**
 
 ```python
 async def test_atomic_canonical_write(tmp_path):
@@ -1815,21 +1815,21 @@ async def test_atomic_canonical_write(tmp_path):
     assert not list((base / "canonical").glob("*.tmp"))
 ```
 
-- [ ] **Step 3.8: Implement** — write to `<path>.tmp`, then `os.replace(<path>.tmp, <path>)`. Front-matter records `canonical_id`, `combined_hash`, `skip_key`, `merged_at`, `source_ids[]` (canonical) or `canonical_id`, `source`, `source_id`, `content_hash`, `facet_prompt_hash`, `embed_model_id`, `chunk_strategy_version`, `taxonomy_version` (raw).
+- [x] **Step 3.8: Implement** — write to `<path>.tmp`, then `os.replace(<path>.tmp, <path>)`. Front-matter records `canonical_id`, `combined_hash`, `skip_key`, `merged_at`, `source_ids[]` (canonical) or `canonical_id`, `source`, `source_id`, `content_hash`, `facet_prompt_hash`, `embed_model_id`, `chunk_strategy_version`, `taxonomy_version` (raw).
 
-- [ ] **Step 3.9: `chunk_markdown` test + impl**
+- [x] **Step 3.9: `chunk_markdown` test + impl**
 
 768-token windows with 128-token overlap; respects `#` headings. Each chunk carries `parent_canonical_id` and `chunk_idx`. Use `tiktoken` or model-specific tokenizer for token counts (deps: add `tiktoken`).
 
-- [ ] **Step 3.10: `QdrantCorpus.query` skeleton (full impl in Task #7)**
+- [x] **Step 3.10: `QdrantCorpus.query` skeleton (full impl in Task #7)**
 
 Implement collection-level read methods (`get_post_mortem`, `search_corpus`) for Task #9; the full `query()` with FormulaQuery lives in Task #7. Provide `upsert_chunk(point)` for ingest.
 
-- [ ] **Step 3.11: `slopmortem ingest --reconcile` skeleton**
+- [x] **Step 3.11: `slopmortem ingest --reconcile` skeleton**
 
 A function `reconcile(journal, corpus, post_mortems_root)` walking the six drift classes from spec line 592. CLI wiring lives in Task #5b but the function itself with tests belongs here.
 
-- [ ] **Step 3.12: Verify**
+- [x] **Step 3.12: Verify**
 
 Run: `uv run pytest tests/corpus/ -v`
 Expected: all green (with Qdrant running for the integration tests).

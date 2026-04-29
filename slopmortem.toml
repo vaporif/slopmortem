@@ -16,8 +16,12 @@ model_rerank = "anthropic/claude-sonnet-4.6"
 model_synthesize = "anthropic/claude-sonnet-4.6"
 
 embedding_provider = "openai"
+embed_model_id = "text-embedding-3-small"
 retry_max_attempts = 3
 retry_initial_backoff = 1.0
+
+taxonomy_version = "v1"
+reliability_rank_version = "v1"
 
 enable_tavily_enrich = false
 enable_tavily_synthesis = false

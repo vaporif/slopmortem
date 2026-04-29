@@ -155,3 +155,13 @@ class RawEntry(BaseModel):
     raw_html: str | None = None
     markdown_text: str | None = None
     fetched_at: datetime
+
+
+class AliasEdge(BaseModel):
+    """Edge in the alias graph — links a canonical to a parent / acquirer / rebrand target."""
+
+    canonical_id: str
+    alias_kind: Literal["acquired_by", "rebranded_to", "pivoted_from", "parent_of", "subsidiary_of"]
+    target_canonical_id: str
+    evidence_source_id: str
+    confidence: float
