@@ -164,15 +164,21 @@ tests/
 
 ## Running it
 
-`OPENROUTER_API_KEY` goes in `.env`. `OPENAI_API_KEY` only if you flipped `embedding_provider` to OpenAI. Tavily is optional. Qdrant runs in Docker.
+Dev shell is a Nix flake. With direnv: `direnv allow` and the shell loads on `cd`. Without: `nix develop`. Either path provisions Python 3.14, `uv`, `ruff`, `basedpyright`, `just`, `taplo`, `pre-commit`, `docker`/`docker-compose`, plus the C/zlib/openssl runtime libs fastembed needs. The shellHook calls `uv venv` + `uv sync --frozen` for you, so the Python env is ready by the time the prompt returns.
+
+Secrets go in `.env` (gitignored): `OPENROUTER_API_KEY` is required; `OPENAI_API_KEY` only if you flip `embedding_provider` to OpenAI; `TAVILY_API_KEY` only if you turn on Tavily; `LMNR_PROJECT_API_KEY` only if `enable_tracing = true`. Configuration knobs live in `slopmortem.toml` with comments — see [Configuration](#configuration) for the override pattern.
+
+First-run sequence:
 
 ```
-uv sync
-docker-compose up -d qdrant
+direnv allow                         # or: nix develop
+docker compose up -d qdrant          # Qdrant on :6333
 slopmortem embed-prefetch            # one-time ~550 MB ONNX download
 slopmortem ingest                    # curated YAML + HN by default; ~$7.50 first run
 slopmortem query "your pitch here"   # ~$0.50, run whenever
 ```
+
+Day-to-day uses `just`: `just test`, `just lint`, `just format`, `just typecheck`, `just coverage`, `just eval` (offline cassette replay), `just eval-record` and `just eval-record-corpus` (live, costs real money), `just smoke-live` (weekly sanity check against live OpenRouter).
 
 Ingest picks up curated + HN automatically. Add `--crunchbase-csv PATH` for a Crunchbase dump, `--enrich-wayback` to chase 404s through the Wayback Machine, and `--tavily-enrich` to fill in missing context from Tavily search. `--dry-run` counts without writing; `--force` bypasses the per-source skip key.
 

@@ -1,17 +1,17 @@
 """CLI: regenerate ``corpus_fixture.jsonl`` by running real ingest then dumping.
 
-Operator-only entry point. Builds ``tests/fixtures/corpus_fixture.jsonl`` by:
+Operator-only. Builds ``tests/fixtures/corpus_fixture.jsonl`` by:
 
 1. Translating ``corpus_fixture_inputs.yml`` (``name``/``url``) into the curated
    YAML schema (``startup_name``/``url``) inside a ``TemporaryDirectory``.
-2. Running the real ingest pipeline against a uniquely-named throwaway Qdrant
-   collection. Per-pid + uuid4 collection naming makes any leak from ``kill -9``
-   identifiable and droppable manually.
-3. Scrolling the populated collection out via ``dump_collection_to_jsonl`` and
-   atomically swapping a ``.recording`` temp file into place.
+2. Running the real ingest pipeline against a throwaway Qdrant collection. The
+   pid + uuid4 in the collection name makes any leak (e.g. from ``kill -9``)
+   easy to find and drop by hand.
+3. Scrolling the collection out via ``dump_collection_to_jsonl`` and atomically
+   swapping a ``.recording`` temp file into place.
 
-Gated on ``RUN_LIVE=1`` because every run hits OpenRouter and the embedder
-(real spend). Production CLI surfaces (``slopmortem.cli``) stay untouched.
+Gated on ``RUN_LIVE=1`` — every run hits OpenRouter and the embedder, so the
+gate exists to prevent accidental spend.
 """
 
 import argparse
@@ -47,15 +47,13 @@ _DEFAULT_MAX_COST_USD = 1.5
 
 
 def _translate_seed_yaml(src: Path, dst: Path) -> None:
-    """Translate seed-input YAML (``name``/``url``) to curated schema (``startup_name``/``url``).
+    """Translate seed YAML (``name``/``url``) to curated schema (``startup_name``/``url``).
 
-    The curated YAML schema is the one consumed by
-    :class:`slopmortem.corpus.sources.curated.CuratedSource`. ``description`` is
-    dropped because the curated path doesn't read it.
+    The curated path doesn't read ``description``, so it's dropped.
 
     Args:
-        src: Path to the seed-input YAML — list of rows, each a mapping with
-            string ``name`` and ``url``.
+        src: Seed-input YAML — list of rows, each a mapping with string
+            ``name`` and ``url``.
         dst: Destination path for the translated curated YAML.
 
     Raises:
@@ -93,12 +91,11 @@ async def _record(
     max_cost_usd: float,
     qdrant_url: str,
 ) -> None:
-    """Run the real ingest against a throwaway collection and dump to JSONL.
+    """Run the real ingest against a throwaway collection and dump it to JSONL.
 
-    Wraps client + tempdir lifetimes in a single :class:`contextlib.AsyncExitStack`
-    so every dependency closes on any exit path. The throwaway-collection drop
-    stays in a plain ``try/finally`` because it's stateful, not a context
-    manager.
+    Client and tempdir lifetimes ride on a single :class:`contextlib.AsyncExitStack`
+    so they close on any exit path. The collection drop stays in a plain
+    ``try/finally`` since it's stateful, not a context manager.
 
     Args:
         inputs_path: Seed-input YAML; see :func:`_translate_seed_yaml`.
@@ -114,22 +111,20 @@ async def _record(
     collection_name = f"slopmortem_corpus_record_{os.getpid()}_{uuid.uuid4().hex}"
 
     async with contextlib.AsyncExitStack() as stack:
-        # ── Tempdir for journal sqlite + post_mortems_root + translated YAML ──
         tempdir = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="corpus_record_")))
         post_mortems_root = tempdir / "post_mortems"
         post_mortems_root.mkdir(parents=True, exist_ok=True)
         translated_yaml = tempdir / "curated.yml"
         _translate_seed_yaml(inputs_path, translated_yaml)
 
-        # ── Journal (sqlite-backed; no async close, but init() builds schema) ──
+        # Fresh tempdir means the journal schema doesn't exist yet; init() creates it.
         journal = MergeJournal(tempdir / "journal.sqlite")
         await journal.init()
 
-        # ── Qdrant client; close() runs on any exit path ──
         qclient = AsyncQdrantClient(url=qdrant_url)
         stack.push_async_callback(qclient.close)
 
-        # ── Wiring mirrors slopmortem.cli._build_ingest_deps prod path ──
+        # Wiring mirrors slopmortem.cli._build_ingest_deps.
         budget = Budget(cap_usd=max_cost_usd)
         openrouter_sdk = AsyncOpenAI(
             api_key=os.environ["OPENROUTER_API_KEY"],
@@ -164,13 +159,18 @@ async def _record(
 
         classifier = BinocularsSlopClassifier()
 
-        # ── Throwaway collection: create now, drop in the finally below ──
         if config.embed_model_id not in EMBED_DIMS:
             msg = f"unknown embed model {config.embed_model_id!r}; add to EMBED_DIMS"
             raise ValueError(msg)
         dim = EMBED_DIMS[config.embed_model_id]
-        await ensure_collection(qclient, collection_name, dim=dim)
+
+        # ensure_collection lives inside the try so a partial-create still hits
+        # the cleanup path. The suppress below covers the never-created case.
         try:
+            await ensure_collection(qclient, collection_name, dim=dim)
+            # QdrantCorpus implements upsert_chunk but not has_chunks /
+            # delete_chunks_for_canonical (see cli.py:432-436); cast at the
+            # boundary so the strict ingest-side Corpus Protocol holds.
             qcorpus = QdrantCorpus(
                 client=qclient,
                 collection=collection_name,
@@ -178,9 +178,6 @@ async def _record(
                 facet_boost=config.facet_boost,
                 rrf_k=config.rrf_k,
             )
-            # ``QdrantCorpus`` ships ``upsert_chunk`` but not yet ``has_chunks``
-            # / ``delete_chunks_for_canonical`` (see cli.py:432-436); cast at
-            # the boundary so the strict ingest-side ``Corpus`` Protocol holds.
             corpus = cast("IngestCorpus", qcorpus)
 
             sources = [CuratedSource(yaml_path=translated_yaml)]
@@ -199,33 +196,30 @@ async def _record(
                 post_mortems_root=post_mortems_root,
             )
 
+            # Append, not replace: with_suffix(".recording") would clobber .jsonl.
             out_tmp = out_path.with_suffix(out_path.suffix + ".recording")
             out_tmp.parent.mkdir(parents=True, exist_ok=True)
             await dump_collection_to_jsonl(qclient, collection_name, out_tmp)
-            # Plan-mandated atomic swap; ``os.replace`` is the documented surface.
-            os.replace(out_tmp, out_path)  # noqa: PTH105 — plan calls for os.replace
-            # Final stat() is the operator confirmation message; the recorder
-            # is exiting after this line so a brief sync stat is acceptable.
-            size_bytes = out_path.stat().st_size  # noqa: ASYNC240 — terminal sync stat
+            os.replace(out_tmp, out_path)  # noqa: PTH105 — atomic POSIX rename
+            size_bytes = out_path.stat().st_size  # noqa: ASYNC240 — last line before exit
             print(f"wrote {out_path} ({size_bytes} bytes)")  # noqa: T201 — CLI surface
         finally:
-            # Drop the throwaway collection on any exit (success or failure).
-            # ``contextlib.suppress`` because the collection may not have been
-            # created yet (e.g. ensure_collection raised) and a failed delete
-            # must not mask the original exception.
+            # Suppress: the collection may not exist (ensure_collection failed
+            # before creating it), and a delete failure must not mask whatever
+            # exception is already propagating.
             with contextlib.suppress(Exception):
                 await qclient.delete_collection(collection_name)
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry: parse args, gate on ``RUN_LIVE``, dispatch to :func:`_record`.
+    """Parse args, gate on ``RUN_LIVE``, dispatch to :func:`_record`.
 
     Args:
-        argv: Optional argv list for testing; ``None`` defaults to ``sys.argv``.
+        argv: Optional argv list for testing; ``None`` reads ``sys.argv``.
 
     Raises:
-        SystemExit: Exit code 2 when ``RUN_LIVE`` is unset (live API spend
-            guard). Exit code 0 on success.
+        SystemExit: Exit code 2 when ``RUN_LIVE`` is unset (spend guard);
+            exit code 0 on success.
     """
     parser = argparse.ArgumentParser(prog="slopmortem.evals.corpus_recorder")
     _ = parser.add_argument("--inputs", required=True, type=Path)
@@ -235,9 +229,8 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=_DEFAULT_MAX_COST_USD,
     )
-    # Default mirrors ``slopmortem.cli._build_ingest_corpus``: QDRANT_HOST /
-    # QDRANT_PORT env vars, falling back to localhost:6333. The Config object
-    # does not carry a Qdrant URL, so env is the canonical source.
+    # Config has no qdrant fields; cli._build_ingest_corpus reads QDRANT_HOST /
+    # QDRANT_PORT from env, so we mirror that.
     default_qdrant_url = (
         f"http://{os.environ.get('QDRANT_HOST', 'localhost')}"
         f":{os.environ.get('QDRANT_PORT', '6333')}"
