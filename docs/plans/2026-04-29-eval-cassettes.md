@@ -59,8 +59,10 @@ Audit result for the record: all five `.j2` templates render deterministically g
 Owner: one subagent.
 
 **Files:**
-- Create: `slopmortem/evals/cassettes.py`
+- Create: `slopmortem/llm/cassettes.py` (key derivation only — P17 fix; sibling of `slopmortem/llm/fake.py` so no lazy imports)
+- Create: `slopmortem/evals/cassettes.py` (envelope models, loaders, writers, slugifier, schema-version policy)
 - Create: `slopmortem/evals/recording.py`
+- Create: `tests/llm/test_cassette_keys.py` (key derivation tests live with the module they test)
 - Create: `tests/test_cassettes.py`
 - Create: `tests/test_recording.py`
 - Modify: `slopmortem/llm/fake.py`
@@ -106,6 +108,8 @@ from slopmortem.evals.cassettes import (
     NoCannedEmbeddingError,
     RecordingBudgetExceededError,
     _slugify_model,
+)
+from slopmortem.llm.cassettes import (
     embed_cassette_key,
     llm_cassette_key,
     template_sha,
@@ -177,68 +181,36 @@ def test_slugify_model_replaces_slash_colon_at() -> None:
 Run: `uv run pytest tests/test_cassettes.py -v`
 Expected: collection error or `ImportError: cannot import name ... from slopmortem.evals.cassettes`.
 
-- [ ] **Step 3: Implement `cassettes.py` key derivation, error types, slug helper**
+- [ ] **Step 3a: Implement `slopmortem/llm/cassettes.py` — pure key derivation (P17 fix)**
 
-Create `slopmortem/evals/cassettes.py`:
+Cassette **key derivation** is a property of the LLM call's identity (prompt, system, tools, response schema, model), so it lives next to the LLM contract — not under `evals/`. This way `FakeLLMClient.complete()` imports from a sibling module (`slopmortem.llm.cassettes`) instead of needing a lazy import to dodge an `evals → llm` cycle.
+
+Create `slopmortem/llm/cassettes.py`:
 
 ```python
-"""Cassette loaders, key derivation, slugifier, and error types.
+"""Cassette key derivation: structural hashes that identify an LLM call.
 
-This module is the single source of truth for how cassette files are keyed
-and named on disk. Both the recording wrappers and the replay loaders
-import from here so record/replay can never disagree on the key shape.
+Lives under `slopmortem/llm/` (not `slopmortem/evals/`) because cassette
+keys are a property of the LLM contract — they identify a unique
+`(template, tools, response_format, model, prompt, system)` invocation.
+The on-disk cassette format and the loaders/writers live in
+`slopmortem.evals.cassettes`; this module is import-free of `evals` so
+`FakeLLMClient` and `RecordingLLMClient` can both depend on it without
+cycles.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import re
-from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from pydantic import BaseModel
 
 
-CASSETTE_SCHEMA_VERSION = 1
 _PROMPT_HASH_LEN = 16
 _TEXT_HASH_LEN = 16
-
-_SLUG_RE = re.compile(r"[^A-Za-z0-9._-]")
-
-
-class CassetteFormatError(Exception):
-    """Raised when a cassette file's JSON cannot be parsed or is missing required fields."""
-
-
-class CassetteSchemaError(Exception):
-    """Raised when a cassette file's `schema_version` is unknown."""
-
-
-class DuplicateCassetteError(Exception):
-    """Raised when two cassette files in the same scope dir resolve to the same key."""
-
-
-class NoCannedEmbeddingError(KeyError):
-    """Raised when an embedding cassette miss occurs under strict (canned-not-None) lookup."""
-
-
-class RecordingBudgetExceededError(Exception):
-    """Raised when `RecordingLLMClient`'s accumulated cost would exceed `max_cost_usd`."""
-
-    def __init__(self, *, spent: float, limit: float) -> None:
-        super().__init__(f"recording cost ceiling exceeded: spent={spent:.4f} limit={limit:.4f}")
-        self.spent = spent
-        self.limit = limit
-
-
-def _slugify_model(model: str) -> str:
-    """Replace any character not in [A-Za-z0-9._-] with `_`. Used only for filenames."""
-    return _SLUG_RE.sub("_", model)
 
 
 def template_sha(
@@ -280,6 +252,97 @@ def embed_cassette_key(*, text: str, model: str) -> tuple[str, str]:
     """Compute the embedding cassette 2-tuple key (shared by dense and sparse)."""
     h = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return (model, h[:_TEXT_HASH_LEN])
+```
+
+- [ ] **Step 3b: Implement `slopmortem/evals/cassettes.py` — error types, slugifier, schema versioning**
+
+The on-disk format, error types, slug helper, and schema-version policy live under `evals/`. Format-level concerns belong with the persistence layer (loaders/writers added in 1B).
+
+Create `slopmortem/evals/cassettes.py`:
+
+```python
+"""Cassette loaders, writers, slugifier, error types, and schema-version policy.
+
+Key derivation lives in `slopmortem.llm.cassettes` (see G14/P17). This
+module is the single source of truth for how cassette files are *written*
+and *read*; both the recording wrappers and the replay loaders import
+from here so record/replay can never disagree on disk shape.
+
+Forward-compat policy (P12): `schema_version` is `"<major>.<minor>"`. The
+reader hard-fails on **major** mismatch (breaking change: renamed/removed
+fields, semantic shifts) and accepts any **minor** at the same major
+(minor bumps are purely additive). Pydantic models are configured with
+`extra="ignore"` so unknown fields a future writer adds are tolerated by
+older readers without re-recording.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path  # noqa: F401  # imported by loaders added in 1B
+
+
+_SCHEMA_MAJOR = 1
+_SCHEMA_MINOR = 0
+CASSETTE_SCHEMA_VERSION = f"{_SCHEMA_MAJOR}.{_SCHEMA_MINOR}"
+
+_SLUG_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+class CassetteFormatError(Exception):
+    """Raised when a cassette file's JSON cannot be parsed or fails type validation."""
+
+
+class CassetteSchemaError(Exception):
+    """Raised when a cassette file's `schema_version` is unparseable or major-mismatched."""
+
+
+class DuplicateCassetteError(Exception):
+    """Raised when two cassette files in the same scope dir resolve to the same key."""
+
+
+class NoCannedEmbeddingError(KeyError):
+    """Raised when an embedding cassette miss occurs under strict (canned-not-None) lookup."""
+
+
+class RecordingBudgetExceededError(Exception):
+    """Raised when `RecordingLLMClient`'s accumulated cost would exceed `max_cost_usd`."""
+
+    def __init__(self, *, spent: float, limit: float) -> None:
+        super().__init__(f"recording cost ceiling exceeded: spent={spent:.4f} limit={limit:.4f}")
+        self.spent = spent
+        self.limit = limit
+
+
+def _slugify_model(model: str) -> str:
+    """Replace any character not in [A-Za-z0-9._-] with `_`. Used only for filenames."""
+    return _SLUG_RE.sub("_", model)
+
+
+def _check_schema_version(version: object, *, path: Path) -> None:
+    """Enforce the `major == reader_major` policy. Minor is always accepted at same major.
+
+    Raises `CassetteSchemaError` on any mismatch; unknown extra fields in the
+    envelope are tolerated by the loaders (Pydantic models use `extra="ignore"`).
+    """
+    if not isinstance(version, str) or "." not in version:
+        msg = f"cassette {path} has unparseable schema_version={version!r}"
+        raise CassetteSchemaError(msg)
+    try:
+        major_str, _ = version.split(".", 1)
+        major = int(major_str)
+    except ValueError as exc:
+        msg = f"cassette {path} has unparseable schema_version={version!r}"
+        raise CassetteSchemaError(msg) from exc
+    if major != _SCHEMA_MAJOR:
+        msg = (
+            f"cassette {path} schema major mismatch: file={major}, "
+            f"reader={_SCHEMA_MAJOR}; cassette must be re-recorded"
+        )
+        raise CassetteSchemaError(msg)
 ```
 
 - [ ] **Step 4: Run the tests to verify the slugifier + key derivation tests pass**
@@ -358,11 +421,59 @@ def test_sparse_embedding_round_trip(tmp_path: Path) -> None:
     assert sparse[("Qdrant/bm25", "abcdef0123456789")] == ([12, 47], [0.341, 0.118])
 
 
-def test_unknown_schema_version_is_fatal(tmp_path: Path) -> None:
+def test_major_schema_mismatch_is_fatal(tmp_path: Path) -> None:
+    """Major bump means breaking change → reader must hard-fail (P12 policy)."""
+    bad = tmp_path / "facet_extract__m__0123456789abcdef.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "schema_version": "2.0",
+                "key": {"template_sha": "t", "model": "m", "prompt_hash": "0123456789abcdef"},
+                "response": {"text": "x", "stop_reason": "stop", "cost_usd": 0.0},
+                "request_debug": {},
+            }
+        )
+    )
+    with pytest.raises(CassetteSchemaError):
+        load_llm_cassettes(tmp_path)
+
+
+def test_unparseable_schema_version_is_fatal(tmp_path: Path) -> None:
+    """Non-string or non-dotted version → fail loud, never silently accept (P12)."""
     bad = tmp_path / "facet_extract__m__0123456789abcdef.json"
     bad.write_text(json.dumps({"schema_version": 99, "key": {}, "response": {}}))
     with pytest.raises(CassetteSchemaError):
         load_llm_cassettes(tmp_path)
+
+
+def test_minor_bump_is_accepted_with_unknown_fields_ignored(tmp_path: Path) -> None:
+    """A future writer adds a benign field at minor=1; current reader (1.0) tolerates it (P12)."""
+    cas_path = tmp_path / "facet_extract__m__0123456789abcdef.json"
+    cas_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.99",  # any minor at same major
+                "key": {"template_sha": "t", "model": "m", "prompt_hash": "0123456789abcdef"},
+                "response": {
+                    "text": "hello",
+                    "stop_reason": "stop",
+                    "cost_usd": 0.01,
+                    "logprobs": [-0.1, -0.2],  # hypothetical future field
+                    "cache_read_tokens": None,
+                    "cache_creation_tokens": None,
+                },
+                "request_debug": {
+                    "prompt_preview": "",
+                    "system_preview": "",
+                    "tools_present": [],
+                    "response_format_present": False,
+                    "trace_id": "abc123",  # hypothetical future field
+                },
+            }
+        )
+    )
+    loaded = load_llm_cassettes(tmp_path)
+    assert loaded[("t", "m", "0123456789abcdef")].text == "hello"
 
 
 def test_malformed_json_is_fatal(tmp_path: Path) -> None:
@@ -397,14 +508,32 @@ def test_duplicate_key_is_fatal(tmp_path: Path) -> None:
 Run: `uv run pytest tests/test_cassettes.py -v`
 Expected: tests fail with `ImportError` or `AttributeError` for `LlmCassette` / `load_llm_cassettes` / etc.
 
-- [ ] **Step 7: Implement loaders, writers, and JSON envelope dataclasses in `cassettes.py`**
+- [ ] **Step 7: Implement loaders, writers, and Pydantic envelope models in `cassettes.py`**
 
-Append to `slopmortem/evals/cassettes.py`:
+Cassettes are written as flat JSON with a nested envelope (`schema_version` / `key` / `response` / `request_debug`). The consumer-facing types are flat Pydantic models (P16: validated via `TypeAdapter`, not `# pyright: ignore`-coerced). Read-side envelope models use `extra="ignore"` so future minor schema bumps that add fields do not require a re-record (P12 forward-compat).
+
+Append to `slopmortem/evals/cassettes.py` (the module created in 3b). Merge the new imports into the existing top-of-file import block — do not duplicate `from __future__ import annotations` or `import re`.
 
 ```python
-@dataclass(frozen=True)
-class LlmCassette:
-    """LLM cassette envelope. Mirrors the JSON shape declared in the spec."""
+# add to top-of-file imports (merge with what 3b already wrote):
+import json
+from pathlib import Path
+from typing import TYPE_CHECKING  # already present from 3b — keep one
+
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+
+_FROZEN_IGNORE = ConfigDict(frozen=True, extra="ignore", protected_namespaces=())
+_IGNORE = ConfigDict(extra="ignore", protected_namespaces=())
+
+
+class LlmCassette(BaseModel):
+    """LLM cassette — flat consumer-facing shape. Validated via Pydantic on load."""
+
+    model_config = _FROZEN_IGNORE
 
     template_sha: str
     model: str
@@ -420,9 +549,10 @@ class LlmCassette:
     response_format_present: bool
 
 
-@dataclass(frozen=True)
-class EmbeddingCassette:
-    """Dense embedding cassette envelope."""
+class EmbeddingCassette(BaseModel):
+    """Dense embedding cassette."""
+
+    model_config = _FROZEN_IGNORE
 
     model: str
     text_hash: str
@@ -430,15 +560,77 @@ class EmbeddingCassette:
     text_preview: str
 
 
-@dataclass(frozen=True)
-class SparseCassette:
-    """Sparse embedding cassette envelope (Qdrant/bm25)."""
+class SparseCassette(BaseModel):
+    """Sparse embedding cassette (Qdrant/bm25)."""
+
+    model_config = _FROZEN_IGNORE
 
     model: str
     text_hash: str
     indices: list[int]
     values: list[float]
     text_preview: str
+
+
+# Read-side envelope models mirror the on-disk JSON. `extra="ignore"` is the
+# P12 lenient-versioning hook: a future writer adding `logprobs` or
+# `trace_id` deserializes cleanly under the current reader.
+
+
+class _LlmKey(BaseModel):
+    model_config = _IGNORE
+    template_sha: str
+    model: str
+    prompt_hash: str
+
+
+class _LlmResponse(BaseModel):
+    model_config = _IGNORE
+    text: str
+    stop_reason: str = "stop"
+    cost_usd: float = 0.0
+    cache_read_tokens: int | None = None
+    cache_creation_tokens: int | None = None
+
+
+class _LlmDebug(BaseModel):
+    model_config = _IGNORE
+    prompt_preview: str = ""
+    system_preview: str = ""
+    tools_present: list[str] = []
+    response_format_present: bool = False
+
+
+class _LlmEnvelope(BaseModel):
+    model_config = _IGNORE
+    schema_version: str
+    key: _LlmKey
+    response: _LlmResponse
+    request_debug: _LlmDebug = _LlmDebug()
+
+
+class _EmbedKey(BaseModel):
+    model_config = _IGNORE
+    model: str
+    text_hash: str
+
+
+class _EmbedResponse(BaseModel):
+    model_config = _IGNORE
+    vector: list[float] | None = None  # dense
+    indices: list[int] | None = None  # sparse
+    values: list[float] | None = None  # sparse
+
+
+class _EmbedEnvelope(BaseModel):
+    model_config = _IGNORE
+    schema_version: str
+    key: _EmbedKey
+    response: _EmbedResponse
+
+
+_LLM_ADAPTER: TypeAdapter[_LlmEnvelope] = TypeAdapter(_LlmEnvelope)
+_EMBED_ADAPTER: TypeAdapter[_EmbedEnvelope] = TypeAdapter(_EmbedEnvelope)
 
 
 def write_llm_cassette(cas: LlmCassette, out_dir: Path, *, stage: str) -> Path:
@@ -523,7 +715,7 @@ def write_sparse_cassette(cas: SparseCassette, out_dir: Path) -> Path:
     return path
 
 
-def _parse_envelope(path: Path) -> dict[str, object]:
+def _read_json_object(path: Path) -> dict[str, object]:
     try:
         raw = json.loads(path.read_text())
     except json.JSONDecodeError as exc:
@@ -532,48 +724,45 @@ def _parse_envelope(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         msg = f"cassette {path} top-level must be an object"
         raise CassetteFormatError(msg)
-    version = raw.get("schema_version")
-    if version != CASSETTE_SCHEMA_VERSION:
-        msg = f"cassette {path} has unknown schema_version={version!r}"
-        raise CassetteSchemaError(msg)
     return raw  # pyright: ignore[reportReturnType]
 
 
 def load_llm_cassettes(
     scope_dir: Path,
 ) -> Mapping[tuple[str, str, str], LlmCassette]:
-    """Load every `<stage>__*.json` (non-`embed__`) under `scope_dir`."""
+    """Load every `<stage>__*.json` (non-`embed__`) under `scope_dir`.
+
+    Validates each file via `TypeAdapter[_LlmEnvelope]` (P16): a cassette
+    with the wrong type for `cost_usd` raises `CassetteFormatError` with
+    the path, not a confusing `TypeError` later at use site.
+    """
     out: dict[tuple[str, str, str], LlmCassette] = {}
     if not scope_dir.exists():
         return out
     for path in sorted(scope_dir.glob("*.json")):
         if path.name.startswith("embed__"):
             continue
-        env = _parse_envelope(path)
+        raw = _read_json_object(path)
+        _check_schema_version(raw.get("schema_version"), path=path)
         try:
-            key_obj = env["key"]
-            resp_obj = env["response"]
-            dbg_obj = env.get("request_debug", {})
-            assert isinstance(key_obj, dict)
-            assert isinstance(resp_obj, dict)
-            assert isinstance(dbg_obj, dict)
-            cas = LlmCassette(
-                template_sha=str(key_obj["template_sha"]),
-                model=str(key_obj["model"]),
-                prompt_hash=str(key_obj["prompt_hash"]),
-                text=str(resp_obj["text"]),
-                stop_reason=str(resp_obj.get("stop_reason", "stop")),
-                cost_usd=float(resp_obj.get("cost_usd", 0.0)),  # pyright: ignore[reportArgumentType]
-                cache_read_tokens=resp_obj.get("cache_read_tokens"),  # pyright: ignore[reportArgumentType]
-                cache_creation_tokens=resp_obj.get("cache_creation_tokens"),  # pyright: ignore[reportArgumentType]
-                prompt_preview=str(dbg_obj.get("prompt_preview", "")),
-                system_preview=str(dbg_obj.get("system_preview", "")),
-                tools_present=list(dbg_obj.get("tools_present", []) or []),  # pyright: ignore[reportArgumentType]
-                response_format_present=bool(dbg_obj.get("response_format_present", False)),
-            )
-        except (KeyError, AssertionError, ValueError, TypeError) as exc:
-            msg = f"cassette {path} is missing required fields: {exc}"
+            env = _LLM_ADAPTER.validate_python(raw)
+        except ValidationError as exc:
+            msg = f"cassette {path} failed schema validation: {exc}"
             raise CassetteFormatError(msg) from exc
+        cas = LlmCassette(
+            template_sha=env.key.template_sha,
+            model=env.key.model,
+            prompt_hash=env.key.prompt_hash,
+            text=env.response.text,
+            stop_reason=env.response.stop_reason,
+            cost_usd=env.response.cost_usd,
+            cache_read_tokens=env.response.cache_read_tokens,
+            cache_creation_tokens=env.response.cache_creation_tokens,
+            prompt_preview=env.request_debug.prompt_preview,
+            system_preview=env.request_debug.system_preview,
+            tools_present=env.request_debug.tools_present,
+            response_format_present=env.request_debug.response_format_present,
+        )
         key = (cas.template_sha, cas.model, cas.prompt_hash)
         if key in out:
             msg = f"duplicate cassette key {key!r} in {scope_dir}"
@@ -588,38 +777,36 @@ def load_embedding_cassettes(
     Mapping[tuple[str, str], list[float]],
     Mapping[tuple[str, str], tuple[list[int], list[float]]],
 ]:
-    """Load every `embed__*.json` under `scope_dir` and split by sparse/dense via `key.model`."""
+    """Load every `embed__*.json` under `scope_dir`; split sparse vs dense via response shape."""
     dense: dict[tuple[str, str], list[float]] = {}
     sparse: dict[tuple[str, str], tuple[list[int], list[float]]] = {}
     if not scope_dir.exists():
         return dense, sparse
     for path in sorted(scope_dir.glob("embed__*.json")):
-        env = _parse_envelope(path)
+        raw = _read_json_object(path)
+        _check_schema_version(raw.get("schema_version"), path=path)
         try:
-            key_obj = env["key"]
-            resp_obj = env["response"]
-            assert isinstance(key_obj, dict)
-            assert isinstance(resp_obj, dict)
-            model = str(key_obj["model"])
-            text_hash = str(key_obj["text_hash"])
-            if "indices" in resp_obj:
-                key_s = (model, text_hash)
-                if key_s in sparse:
-                    msg = f"duplicate sparse cassette key {key_s!r} in {scope_dir}"
-                    raise DuplicateCassetteError(msg)
-                sparse[key_s] = (
-                    list(resp_obj["indices"]),  # pyright: ignore[reportArgumentType]
-                    [float(v) for v in list(resp_obj["values"])],  # pyright: ignore[reportArgumentType]
-                )
-            else:
-                key_d = (model, text_hash)
-                if key_d in dense:
-                    msg = f"duplicate dense cassette key {key_d!r} in {scope_dir}"
-                    raise DuplicateCassetteError(msg)
-                dense[key_d] = [float(v) for v in list(resp_obj["vector"])]  # pyright: ignore[reportArgumentType]
-        except (KeyError, AssertionError, ValueError, TypeError) as exc:
-            msg = f"cassette {path} is missing required fields: {exc}"
+            env = _EMBED_ADAPTER.validate_python(raw)
+        except ValidationError as exc:
+            msg = f"cassette {path} failed schema validation: {exc}"
             raise CassetteFormatError(msg) from exc
+        model = env.key.model
+        text_hash = env.key.text_hash
+        if env.response.indices is not None and env.response.values is not None:
+            key_s = (model, text_hash)
+            if key_s in sparse:
+                msg = f"duplicate sparse cassette key {key_s!r} in {scope_dir}"
+                raise DuplicateCassetteError(msg)
+            sparse[key_s] = (env.response.indices, env.response.values)
+        elif env.response.vector is not None:
+            key_d = (model, text_hash)
+            if key_d in dense:
+                msg = f"duplicate dense cassette key {key_d!r} in {scope_dir}"
+                raise DuplicateCassetteError(msg)
+            dense[key_d] = env.response.vector
+        else:
+            msg = f"embed cassette {path} response has neither vector nor (indices, values)"
+            raise CassetteFormatError(msg)
     return dense, sparse
 ```
 
@@ -684,11 +871,11 @@ Expected: FAIL — `FakeLLMClient.canned` is currently typed `Mapping[tuple[str,
 Modify `slopmortem/llm/fake.py`:
 
 - Change the `canned` field type to `Mapping[tuple[str, str, str], FakeResponse | CompletionResult]`.
-- After deriving `eff_model` and `template_sha`, also derive `prompt_hash`: read `extra_body["prompt_hash"]` if present; otherwise compute it inline using `slopmortem.evals.cassettes.llm_cassette_key(prompt=prompt, system=system, template_sha=template_sha, model=eff_model)[2]` (this avoids duplicating the hashing rule).
+- After deriving `eff_model` and `template_sha`, also derive `prompt_hash`: read `extra_body["prompt_hash"]` if present; otherwise compute it inline using `slopmortem.llm.cassettes.llm_cassette_key(prompt=prompt, system=system, template_sha=template_sha, model=eff_model)[2]` (this avoids duplicating the hashing rule).
 - Build `key = (template_sha, eff_model, prompt_hash)`. Strict lookup: if `key not in canned`, raise `NoCannedResponseError(f"no canned response for key={key!r}; recorded keys: {sorted(canned)}")`. **Do not fall back to a 2-tuple.**
 - Update `_Call.template_sha` siblings to also store `prompt_hash` for assertions in tests.
 - Update the class docstring to reflect the new 3-tuple key.
-- Module-level note: add `from slopmortem.evals import cassettes as _cassettes` lazily inside `complete()` (avoid a top-level cycle since `slopmortem.evals` imports `slopmortem.llm.fake`).
+- Top-level import: `from slopmortem.llm.cassettes import llm_cassette_key`. **No lazy import** — `slopmortem.llm.cassettes` is a sibling module with no `evals` dependency (P17 fix), so the cycle the lazy import was guarding against does not exist.
 
 The full method body:
 
@@ -720,7 +907,6 @@ async def complete(
     if extra_body and "prompt_hash" in extra_body:
         prompt_hash = str(extra_body["prompt_hash"])
     else:
-        from slopmortem.evals.cassettes import llm_cassette_key  # noqa: PLC0415
         _, _, prompt_hash = llm_cassette_key(
             prompt=prompt, system=system, template_sha=template_sha, model=eff_model,
         )
@@ -769,7 +955,7 @@ Add to `tests/conftest.py` (verify it doesn't exist first; if a `conftest.py` ex
 ```python
 from __future__ import annotations
 
-from slopmortem.evals.cassettes import llm_cassette_key
+from slopmortem.llm.cassettes import llm_cassette_key
 from slopmortem.llm.prompts import prompt_template_sha
 
 
@@ -885,7 +1071,8 @@ import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from slopmortem.evals.cassettes import NoCannedEmbeddingError, embed_cassette_key
+from slopmortem.evals.cassettes import NoCannedEmbeddingError
+from slopmortem.llm.cassettes import embed_cassette_key
 from slopmortem.llm.embedding_client import EmbeddingResult
 from slopmortem.llm.openai_embeddings import EMBED_DIMS
 
@@ -960,8 +1147,6 @@ import pytest
 
 from slopmortem.evals.cassettes import (
     RecordingBudgetExceededError,
-    embed_cassette_key,
-    llm_cassette_key,
     load_embedding_cassettes,
     load_llm_cassettes,
 )
@@ -970,6 +1155,7 @@ from slopmortem.evals.recording import (
     RecordingLLMClient,
     RecordingSparseEncoder,
 )
+from slopmortem.llm.cassettes import embed_cassette_key, llm_cassette_key
 from slopmortem.llm.client import CompletionResult
 from slopmortem.llm.embedding_client import EmbeddingResult
 
@@ -1097,12 +1283,11 @@ from slopmortem.evals.cassettes import (
     LlmCassette,
     RecordingBudgetExceededError,
     SparseCassette,
-    embed_cassette_key,
-    llm_cassette_key,
     write_embedding_cassette,
     write_llm_cassette,
     write_sparse_cassette,
 )
+from slopmortem.llm.cassettes import embed_cassette_key, llm_cassette_key
 from slopmortem.llm.client import CompletionResult
 from slopmortem.llm.embedding_client import EmbeddingResult
 
@@ -2245,11 +2430,62 @@ if __name__ == "__main__":
 Owner: one subagent. Depends on Task 5 (operator must have committed fixtures + cassettes first).
 
 **Files:**
-- Modify: `slopmortem/evals/runner.py` (replace `_build_canned`/`_EvalCorpus`/`_run_deterministic`; add v2 baseline; per-row continuation)
+- Modify: `slopmortem/corpus/store.py` (extend `Corpus` Protocol with `lookup_sources` — P18 fix)
+- Modify: `slopmortem/corpus/qdrant_store.py` (implement `lookup_sources` on `QdrantCorpus`)
+- Modify: `slopmortem/evals/runner.py` (replace `_build_canned`/`_EvalCorpus`/`_run_deterministic`; rewrite `_allowed_hosts_for_candidate` to consume a pre-fetched sources map; add v2 baseline; per-row continuation)
 - Modify: `justfile:19` (correct the `# Default eval...` comment)
 - Create: `tests/evals/test_runner_replay.py`
 - Create: `tests/evals/test_fixtures/tiny_corpus.jsonl`
 - Create: `tests/evals/test_fixtures/cassettes/evals/<row_id>/*.json` (hand-built, ~3 LLM + ~3 dense + ~3 sparse)
+
+### 6Pre — Extend `Corpus` Protocol with `lookup_sources` (P18 fix)
+
+The previous deterministic-mode runner unioned a fixed host allowlist with each candidate's own `payload.sources`. The cassette runner needs the same data, but the `Report` object only carries `Synthesis` (no payloads). Rather than collapse to the fixed allowlist (P18 regression), extend the read-side Protocol so any `Corpus` implementation — `QdrantCorpus` in cassette and live mode, fakes in tests — can answer "what are the sources for this candidate id?" The same accessor lifts the live-mode strictness reduction too.
+
+- [ ] **Step 0a: Add `lookup_sources` to `Corpus` Protocol**
+
+Modify `slopmortem/corpus/store.py`:
+
+```python
+async def lookup_sources(self, canonical_id: str) -> list[str]:
+    """Return the persisted source URLs for *canonical_id*, or [] if unknown.
+
+    Used by eval scoring to compute per-candidate `allowed_hosts` (union
+    of fixed allowlist + the candidate's own sources). Implementations
+    that cannot look up payload should return [].
+    """
+    ...
+```
+
+- [ ] **Step 0b: Implement `lookup_sources` on `QdrantCorpus`**
+
+Modify `slopmortem/corpus/qdrant_store.py`. The Qdrant payload already carries `sources`; expose it. If the canonical id is not present, return `[]` (caller treats absent → use fixed allowlist only).
+
+```python
+async def lookup_sources(self, canonical_id: str) -> list[str]:
+    points = await self._client.retrieve(
+        collection_name=self._collection,
+        ids=[canonical_id],
+        with_payload=["sources"],
+        with_vectors=False,
+    )
+    if not points:
+        return []
+    raw = points[0].payload or {}
+    sources = raw.get("sources", [])
+    if not isinstance(sources, list):
+        return []
+    return [str(s) for s in sources]
+```
+
+- [ ] **Step 0c: Add a Protocol-conformance test**
+
+Add to `tests/evals/test_runner_replay.py`:
+
+```python
+def test_qdrant_corpus_lookup_sources_returns_payload_urls() -> None:
+    """Live + cassette modes both rely on this; protocol must expose it."""
+```
 
 ### 6A — Bump baseline schema to v2; round-trip metadata
 
@@ -2422,9 +2658,10 @@ async def _run_cassettes(
         sys.exit(2)
 
     from slopmortem.evals.cassettes import (  # noqa: PLC0415
-        NoCannedEmbeddingError, embed_cassette_key, load_embedding_cassettes, load_llm_cassettes,
+        NoCannedEmbeddingError, load_embedding_cassettes, load_llm_cassettes,
     )
     from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant  # noqa: PLC0415
+    from slopmortem.llm.cassettes import embed_cassette_key  # noqa: PLC0415
     from slopmortem.llm.fake import FakeLLMClient, NoCannedResponseError  # noqa: PLC0415
     from slopmortem.llm.fake_embeddings import FakeEmbeddingClient  # noqa: PLC0415
 
@@ -2468,18 +2705,25 @@ async def _run_cassettes(
                 print(f"FAIL {rid}: cassette miss — {exc}")
                 results[rid] = {"candidates_count": 0, "assertions": {}}
                 continue
-            results[rid] = _score_report(report, eval_corpus=None)
+            # P18: pre-fetch each synthesized candidate's payload.sources via the
+            # Corpus protocol so allowed_hosts unions the fixed allowlist with
+            # the candidate's own URLs (parity with the deleted deterministic mode).
+            sources_map = {
+                s.candidate_id: await corpus.lookup_sources(s.candidate_id)
+                for s in report.candidates
+            }
+            results[rid] = _score_report(report, sources_map=sources_map)
     return results
 ```
 
-`eval_corpus=None` because the canonical replay doesn't have payload-by-id lookup; allowed_hosts collapses to the fixed allowlist (matches `--live` mode behavior).
+The `sources_map` is built from `corpus.lookup_sources` — the Protocol method added in 6Pre. Same shape works for `--live` mode (Step 6Live below), so `all_sources_in_allowed_domains` retains its full strictness in both modes.
 
 In `main()`:
 - Replace the call to `_run_deterministic` with `_run_cassettes`, passing `scope`.
 - After `_run_cassettes`, compute `current_corpus_sha = compute_fixture_sha256(Path("tests/fixtures/corpus_fixture.jsonl"))`.
 - Pass it to `_diff_against_baseline(..., current_corpus_sha=current_corpus_sha)` and to `_serialize_results` on `--write-baseline`.
 
-- [ ] **Step 5: Remove the dead helpers**
+- [ ] **Step 5: Remove the dead helpers; rewrite `_allowed_hosts_for_candidate`**
 
 Delete from `slopmortem/evals/runner.py`:
 - `_facets`, `_payload`, `_candidate`, `_facet_extract_payload`, `_rerank_payload`, `_synthesis_payload`
@@ -2491,7 +2735,49 @@ Delete from `slopmortem/evals/runner.py`:
 - `_run_deterministic`
 - The `_RECORD_DEFERRED_MSG` constant (dead since Task 4)
 
-Update the module docstring's "Modes" block: replace the deterministic-mode bullet with a cassette-mode bullet that points at `tests/fixtures/cassettes/evals/`.
+Rewrite `_allowed_hosts_for_candidate` and `_score_report` to consume a `sources_map: Mapping[str, list[str]]` instead of an `_EvalCorpus | None` (P18 — preserves the union semantics across both modes):
+
+```python
+def _allowed_hosts_for_candidate(
+    candidate_id: str, sources_map: Mapping[str, list[str]]
+) -> set[str]:
+    hosts: set[str] = set(_FIXED_HOST_ALLOWLIST)
+    for url in sources_map.get(candidate_id, ()):
+        host = urlparse(url).hostname
+        if host is not None:
+            hosts.add(host)
+    return hosts
+
+
+def _score_synthesis(s: Synthesis, *, sources_map: Mapping[str, list[str]]) -> dict[str, bool]:
+    allowed = _allowed_hosts_for_candidate(s.candidate_id, sources_map)
+    return {
+        "where_diverged_nonempty": where_diverged_nonempty(s),
+        "all_sources_in_allowed_domains": all_sources_in_allowed_domains(s, allowed),
+        "lifespan_months_positive": lifespan_months_positive(s),
+    }
+
+
+def _score_report(
+    report: Report, *, sources_map: Mapping[str, list[str]]
+) -> dict[str, object]:
+    assertions: dict[str, dict[str, bool]] = {}
+    for s in report.candidates:
+        assertions[s.candidate_id] = _score_synthesis(s, sources_map=sources_map)
+    return {"candidates_count": len(report.candidates), "assertions": assertions}
+```
+
+Also update `_run_live` to build a `sources_map` from `corpus.lookup_sources` per candidate, lifting the previous live-mode strictness reduction:
+
+```python
+sources_map = {
+    s.candidate_id: await corpus.lookup_sources(s.candidate_id)
+    for s in report.candidates
+}
+results[rid] = _score_report(report, sources_map=sources_map)
+```
+
+Update the module docstring's "Modes" block: replace the deterministic-mode bullet with a cassette-mode bullet that points at `tests/fixtures/cassettes/evals/`. Remove the "Live-mode limitation" note about allowed_hosts collapsing — no longer applies (both modes use `lookup_sources`).
 
 - [ ] **Step 6: Fix the justfile comment on line 19**
 
@@ -2543,10 +2829,10 @@ async def test_full_pipeline_with_fake_clients() -> None:
     from slopmortem.evals.cassettes import (
         load_embedding_cassettes,
         load_llm_cassettes,
-        embed_cassette_key,
         NoCannedEmbeddingError,
     )
     from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant
+    from slopmortem.llm.cassettes import embed_cassette_key
     from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 
     scope = Path("tests/fixtures/cassettes/e2e/test_full_pipeline_with_fake_clients")
@@ -2645,8 +2931,22 @@ Expected: green.
 These greps assert the plan's invariants. All "MUST match" should resolve to expected hits; "MUST be empty" / "MUST not exist" should produce no output.
 
 ```bash
-# Cassette schema version is 1 in every write site
+# Cassette schema version is "1.0" (P12 forward-compat policy)
 grep -nE 'CASSETTE_SCHEMA_VERSION|schema_version' slopmortem/evals/recording.py slopmortem/evals/cassettes.py slopmortem/evals/recording_helper.py
+grep -nE '_SCHEMA_MAJOR = 1|_SCHEMA_MINOR = 0' slopmortem/evals/cassettes.py    # MUST match
+
+# Cassette key derivation lives under llm/, not evals/ (P17 fix)
+test -e slopmortem/llm/cassettes.py                                     # MUST exist
+grep -nE '^def (template_sha|llm_cassette_key|embed_cassette_key)' slopmortem/llm/cassettes.py    # MUST match
+grep -nE 'from slopmortem\.evals import cassettes|from slopmortem\.evals\.cassettes import .* (llm_cassette_key|embed_cassette_key|template_sha)' slopmortem/    # MUST be empty
+grep -nE '# noqa: PLC0415' slopmortem/llm/fake.py                       # MUST be empty (no lazy import)
+
+# Cassette loaders validate via Pydantic, not # pyright: ignore (P16 fix)
+grep -nE '# pyright: ignore\[reportArgumentType\]' slopmortem/evals/cassettes.py    # MUST be empty
+grep -nE 'TypeAdapter' slopmortem/evals/cassettes.py                    # MUST match
+
+# Corpus protocol exposes lookup_sources for eval scoring (P18 fix)
+grep -nE 'lookup_sources' slopmortem/corpus/store.py slopmortem/corpus/qdrant_store.py slopmortem/evals/runner.py    # MUST match (3+ hits)
 
 # Baseline schema version is 2 in the new write path
 grep -nE '"version": 2|_BASELINE_VERSION = 2' slopmortem/evals/runner.py
