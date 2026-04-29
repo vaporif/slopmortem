@@ -7,6 +7,11 @@ default:
 install:
     uv sync
 
+# Filter the bundled Crunchbase 2015 export to closed-only companies.
+# Output: data/crunchbase/companies-closed.csv (~6.2K rows, tracked in repo).
+crunchbase:
+    uv run python scripts/filter_crunchbase_closed.py
+
 test:
     uv run pytest -n auto
 

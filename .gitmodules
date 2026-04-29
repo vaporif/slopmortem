@@ -1,0 +1,3 @@
+[submodule "external/crunchbase-data"]
+	path = external/crunchbase-data
+	url = https://github.com/notpeter/crunchbase-data
