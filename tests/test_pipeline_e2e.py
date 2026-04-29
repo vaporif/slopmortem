@@ -10,8 +10,6 @@ in-memory implementation of :class:`slopmortem.corpus.store.Corpus`; no
 Qdrant required.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 from dataclasses import dataclass, field

@@ -1,7 +1,5 @@
 """Closed enum of span event names the tracer emits for security and health monitoring."""
 
-from __future__ import annotations
-
 from enum import StrEnum
 
 

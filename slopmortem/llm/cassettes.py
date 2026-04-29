@@ -9,8 +9,6 @@ The on-disk cassette format and the loaders/writers live in
 cycles.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from typing import TYPE_CHECKING

@@ -1,7 +1,5 @@
 """TavilyEnricher recovers article bodies via Tavily's /extract API."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 

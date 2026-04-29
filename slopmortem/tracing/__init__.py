@@ -1,7 +1,5 @@
 """Init guard for the laminar tracer. Refuses non-loopback endpoints by default."""
 
-from __future__ import annotations
-
 import ipaddress
 import socket
 from urllib.parse import urlparse

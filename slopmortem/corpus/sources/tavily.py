@@ -1,7 +1,5 @@
 """TavilyEnricher - recovers article bodies via Tavily /extract for empty raw_html."""
 
-from __future__ import annotations
-
 import logging
 import os
 from typing import TYPE_CHECKING, cast

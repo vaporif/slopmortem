@@ -1,7 +1,5 @@
 """CliRunner tests for the ``slopmortem embed-prefetch`` subcommand."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from typer.testing import CliRunner

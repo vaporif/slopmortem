@@ -10,8 +10,6 @@ happens here, so the throttle and robots checks don't apply. Mapping:
 * ``markdown_text = short_description`` (may be empty)
 """
 
-from __future__ import annotations
-
 import csv
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING

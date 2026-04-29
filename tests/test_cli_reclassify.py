@@ -1,7 +1,5 @@
 """--reclassify dispatches to slopmortem.corpus.reclassify.reclassify_quarantined."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 

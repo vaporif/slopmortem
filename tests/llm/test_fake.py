@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from slopmortem.llm.cassettes import llm_cassette_key

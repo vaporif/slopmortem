@@ -1,7 +1,5 @@
 """EmbeddingClient Protocol: minimum async embedding contract (batch in, vectors out)."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 

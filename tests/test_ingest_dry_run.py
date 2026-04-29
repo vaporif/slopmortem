@@ -1,7 +1,5 @@
 """--dry-run: count entries that would be ingested, write nothing."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 import pytest

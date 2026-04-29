@@ -1,7 +1,5 @@
 """CLI tests for ``slopmortem ingest``: wiring assembled, orchestrator dispatched."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 

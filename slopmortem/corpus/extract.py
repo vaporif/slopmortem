@@ -16,8 +16,6 @@ scripts, ``display:none``/``visibility:hidden``/``hidden`` nodes, and
 # worth it for this module alone. Module-wide suppression is local to the
 # sanitizer; the hostile-fixture test pins the actual surfaces.
 
-from __future__ import annotations
-
 import re
 from typing import Any, cast
 

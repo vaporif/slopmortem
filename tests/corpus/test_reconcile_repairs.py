@@ -1,7 +1,5 @@
 """Tests for the reconcile repair pass — one minimal test per drift class (a)..(f)."""
 
-from __future__ import annotations
-
 import hashlib
 from typing import TYPE_CHECKING
 

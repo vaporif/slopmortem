@@ -1,7 +1,5 @@
 """Round-trip tests for corpus_fixture dump/restore + SHA stability."""
 
-from __future__ import annotations
-
 import os
 import socket
 import uuid

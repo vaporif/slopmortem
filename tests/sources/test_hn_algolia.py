@@ -5,8 +5,6 @@ not ``/search`` (relevance-ranked) — see spec line 242 and plan §1901. The
 URL-prefix test guards against an accidental swap.
 """
 
-from __future__ import annotations
-
 import os
 from datetime import UTC, datetime
 from pathlib import Path

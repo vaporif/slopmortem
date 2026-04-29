@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 
 from slopmortem.llm.openrouter import gather_with_limit

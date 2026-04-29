@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import tiktoken
 
 from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION, Chunk, chunk_markdown

@@ -14,8 +14,6 @@ Failure model (spec §770-775):
   ``Report.candidates`` only carries successful Synthesis values.
 """
 
-from __future__ import annotations
-
 import time
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING

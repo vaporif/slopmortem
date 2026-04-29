@@ -11,8 +11,6 @@ additive). Pydantic models use `extra="ignore"` so unknown fields a future
 writer adds deserialize cleanly under older readers.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from typing import TYPE_CHECKING, cast

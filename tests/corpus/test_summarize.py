@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import tiktoken
 
 from conftest import llm_canned_key

@@ -5,8 +5,6 @@ atomic dir swap, and forces Tavily off. Test authors call this when they
 want a per-test cassette set without re-implementing the plumbing.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import time

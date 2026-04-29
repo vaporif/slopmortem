@@ -12,8 +12,6 @@ markdown-rendered prose that didn't pass through that filter (e.g.
 ``where_diverged`` text).
 """
 
-from __future__ import annotations
-
 import re
 from typing import TYPE_CHECKING
 

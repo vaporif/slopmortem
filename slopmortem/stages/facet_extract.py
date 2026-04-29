@@ -1,7 +1,5 @@
 """Facet-extract stage: one LLM call returning a strict-mode :class:`Facets` JSON object."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from lmnr import observe

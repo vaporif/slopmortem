@@ -1,7 +1,5 @@
 """Validated, traversal-safe path construction for raw, canonical, and quarantine docs."""
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from typing import Literal, cast

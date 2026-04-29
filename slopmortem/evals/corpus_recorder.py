@@ -1,7 +1,5 @@
 """CLI: regenerate `corpus_fixture.jsonl` by running real ingest then dumping."""
 
-from __future__ import annotations
-
 import argparse
 import sys
 

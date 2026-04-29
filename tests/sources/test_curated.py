@@ -6,8 +6,6 @@ drops rows whose registrable_domain is in ``platform_domains.yml``, and skips
 rows whose extracted text falls under the 500-char floor.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING

@@ -8,8 +8,6 @@ These are interface declarations consumed by concrete adapters (``curated.py``,
 adapters directly; the Protocols themselves carry no behavior.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:

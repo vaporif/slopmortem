@@ -1,7 +1,5 @@
 """Per-pipeline USD budget. Concurrent-safe reserve/settle bookkeeping."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from uuid import uuid4
 

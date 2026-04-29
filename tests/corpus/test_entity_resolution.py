@@ -1,7 +1,5 @@
 """Tests for entity resolution: tier-1 / tier-2 / tier-3, recycled domains, parent suffix, flips."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 import pytest

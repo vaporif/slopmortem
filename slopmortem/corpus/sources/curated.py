@@ -10,8 +10,6 @@ per-host token bucket plus ``robots.txt`` parser in
 :mod:`slopmortem.corpus.sources._throttle`.
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import UTC, datetime
 from pathlib import Path

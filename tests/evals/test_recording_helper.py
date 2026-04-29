@@ -1,7 +1,5 @@
 """Tests for record_cassettes_for_inputs(): atomic swap, tmp cleanup, Tavily forced off."""
 
-from __future__ import annotations
-
 import os
 from typing import TYPE_CHECKING
 

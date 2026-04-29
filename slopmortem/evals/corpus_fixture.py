@@ -8,8 +8,6 @@ the SDK-boundary pattern in ``slopmortem/corpus/qdrant_store.py``, since
 Qdrant's models surface ``Optional`` / ``Mapping`` everywhere.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from typing import TYPE_CHECKING, Any
