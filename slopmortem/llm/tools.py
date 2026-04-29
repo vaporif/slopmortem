@@ -1,8 +1,14 @@
-"""JSON-Schema helpers for tool definitions and OpenAI strict-mode response schemas."""
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
+"""JSON-Schema helpers for tool definitions and OpenAI strict-mode response schemas.
+
+`jsonref` ships no stubs, so calls into it surface as `Unknown`. We assert the
+shape we know we produced (a dict from `model_json_schema()`) and silence the
+`reportUnknown*` family at the file boundary.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import jsonref
 
@@ -18,14 +24,16 @@ __all__ = ["ToolSpec", "synthesis_tools", "to_openai_input_schema", "to_strict_r
 
 def to_openai_input_schema(
     args_model: type[BaseModel],
-) -> dict[str, Any]:  # type: ignore[explicit-any]  # JSON Schema is heterogeneous by spec
+) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Render *args_model* as an OpenAI ``parameters`` schema with ``$ref`` inlined."""
     schema = args_model.model_json_schema()
     inlined = jsonref.replace_refs(schema, proxies=False, lazy_load=False)
-    if isinstance(inlined, dict):
-        for k in ("$defs", "$schema", "$id"):
-            inlined.pop(k, None)
-    return dict(inlined)
+    if not isinstance(inlined, dict):
+        msg = f"expected dict from jsonref.replace_refs, got {type(inlined).__name__}"
+        raise TypeError(msg)
+    for k in ("$defs", "$schema", "$id"):
+        inlined.pop(k, None)
+    return cast("dict[str, Any]", dict(inlined))  # pyright: ignore[reportExplicitAny]
 
 
 def _force_required(node: object) -> None:
@@ -47,7 +55,7 @@ def _force_required(node: object) -> None:
 
 def to_strict_response_schema(
     model: type[BaseModel],
-) -> dict[str, Any]:  # type: ignore[explicit-any]  # JSON Schema is heterogeneous by spec
+) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Emit a ``response_format.json_schema.schema`` payload for OpenAI strict mode.
 
     Pydantic v2 omits any field with a default (incl. ``T | None = None``) from the
@@ -60,11 +68,13 @@ def to_strict_response_schema(
     """
     schema = model.model_json_schema()
     inlined = jsonref.replace_refs(schema, proxies=False, lazy_load=False)
-    if isinstance(inlined, dict):
-        for k in ("$defs", "$schema", "$id"):
-            inlined.pop(k, None)
+    if not isinstance(inlined, dict):
+        msg = f"expected dict from jsonref.replace_refs, got {type(inlined).__name__}"
+        raise TypeError(msg)
+    for k in ("$defs", "$schema", "$id"):
+        inlined.pop(k, None)
     _force_required(inlined)
-    return dict(inlined)
+    return cast("dict[str, Any]", dict(inlined))  # pyright: ignore[reportExplicitAny]
 
 
 def synthesis_tools(config: Config) -> list[ToolSpec]:

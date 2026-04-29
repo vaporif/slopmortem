@@ -1,4 +1,9 @@
-"""Async embedding client for OpenAI-compatible APIs with budget reserve/settle."""
+# pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
+"""Async embedding client for OpenAI-compatible APIs with budget reserve/settle.
+
+Vendor SDK responses are loosely typed; this file silences `reportAny` /
+`reportUnknown*` at the boundary while keeping `reportExplicitAny` per-site.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from slopmortem.llm.embedding_client import EmbeddingResult
-from slopmortem.llm.openrouter import _is_transient_http
+from slopmortem.llm.openrouter import is_transient_http
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -23,7 +28,7 @@ EMBED_DIMS: dict[str, int] = {
 }
 
 _PRICES_PATH = Path(__file__).resolve().parent / "prices.yml"
-_PRICES: dict[str, Any] = yaml.safe_load(_PRICES_PATH.read_text())  # type: ignore[explicit-any]  # heterogeneous YAML
+_PRICES: dict[str, Any] = yaml.safe_load(_PRICES_PATH.read_text())  # pyright: ignore[reportExplicitAny]
 
 
 def _input_rate_per_million(model: str) -> float:
@@ -84,15 +89,15 @@ class OpenAIEmbeddingClient:
             await self._budget.settle(rid, cost_usd)
         return EmbeddingResult(vectors=vectors, n_tokens=n_tokens, cost_usd=cost_usd)
 
-    async def _call_with_retry(self, **kw: Any) -> Any:  # type: ignore[explicit-any]  # SDK passthrough
-        sdk: Any = self._sdk  # type: ignore[explicit-any]  # vendor SDK has no public type
+    async def _call_with_retry(self, **kw: Any) -> Any:  # pyright: ignore[reportExplicitAny]
+        sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
         attempt = 0
         last_exc: BaseException | None = None
         while attempt <= self._max_retries:
             try:
                 return await sdk.embeddings.create(**kw)
             except Exception as exc:
-                if not _is_transient_http(exc):
+                if not is_transient_http(exc):
                     raise
                 last_exc = exc
                 if attempt >= self._max_retries:

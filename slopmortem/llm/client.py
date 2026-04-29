@@ -26,16 +26,16 @@ class LLMClient(Protocol):
     """The async chat-completion contract every LLM backend (real or fake) implements."""
 
     # ``Any`` here is intentional: tools/response_format/extra_body are SDK passthroughs.
-    async def complete(  # type: ignore[explicit-any]  # noqa: PLR0913 — mirrors OpenAI chat.create
+    async def complete(  # noqa: PLR0913 — mirrors OpenAI chat.create
         self,
         prompt: str,
         *,
         system: str | None = None,
-        tools: list[Any] | None = None,
+        tools: list[Any] | None = None,  # pyright: ignore[reportExplicitAny]
         model: str | None = None,
         cache: bool = False,
-        response_format: dict[str, Any] | None = None,
-        extra_body: dict[str, Any] | None = None,
+        response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> CompletionResult:
         """Run a completion; the implementation may handle tool calls and retries internally."""
         ...

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -43,10 +44,10 @@ class _Call:
     model: str
     template_sha: str | None
     system: str | None
-    tools: list[Any] | None  # type: ignore[explicit-any]  # mirrors LLMClient.complete
+    tools: list[Any] | None  # pyright: ignore[reportExplicitAny]
     cache: bool
-    response_format: dict[str, Any] | None  # type: ignore[explicit-any]  # mirrors LLMClient.complete
-    extra_body: dict[str, Any] | None  # type: ignore[explicit-any]  # mirrors LLMClient.complete
+    response_format: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
+    extra_body: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
 
 
 @dataclass
@@ -58,7 +59,7 @@ class FakeLLMClient:
     so a prompt-text drift forces the fixture key to drift in lockstep.
     """
 
-    canned: dict[tuple[str, str], FakeResponse | CompletionResult]
+    canned: Mapping[tuple[str, str], FakeResponse | CompletionResult]
     default_model: str
     calls: list[_Call] = field(default_factory=list)
 
@@ -67,17 +68,17 @@ class FakeLLMClient:
         prompt: str,
         *,
         system: str | None = None,
-        tools: list[Any] | None = None,  # type: ignore[explicit-any]  # mirrors LLMClient.complete
+        tools: list[Any] | None = None,  # pyright: ignore[reportExplicitAny]
         model: str | None = None,
         cache: bool = False,
-        response_format: dict[str, Any] | None = None,  # type: ignore[explicit-any]
-        extra_body: dict[str, Any] | None = None,  # type: ignore[explicit-any]
+        response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> CompletionResult:
         """Look up a canned response keyed by ``(prompt_template_sha, model)``."""
         eff_model = model or self.default_model
         template_sha: str | None = None
         if extra_body and "prompt_template_sha" in extra_body:
-            template_sha = str(extra_body["prompt_template_sha"])
+            template_sha = str(extra_body["prompt_template_sha"])  # pyright: ignore[reportAny]
         self.calls.append(
             _Call(
                 prompt=prompt,

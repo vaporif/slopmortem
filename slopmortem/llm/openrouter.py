@@ -1,4 +1,11 @@
-"""Async OpenRouter / OpenAI-compatible chat client with retry, tool loop, and cache control."""
+# pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
+"""Async OpenRouter / OpenAI-compatible chat client with retry, tool loop, and cache control.
+
+The vendor SDK is loosely typed (`object` / `Any` payloads with duck-typed
+attributes), so this file silences `reportAny`/`reportUnknown*` at the
+boundary. Explicit `Any` in annotations is still gated per-site via
+`reportExplicitAny` ignores.
+"""
 
 from __future__ import annotations
 
@@ -51,7 +58,7 @@ T = TypeVar("T")
 
 
 async def gather_with_limit(
-    coros: Iterable[Coroutine[Any, Any, T]],  # type: ignore[explicit-any]  # asyncio.gather propagates Any
+    coros: Iterable[Coroutine[Any, Any, T]],  # pyright: ignore[reportExplicitAny]
     limit: int,
 ) -> list[T | BaseException]:
     """Run *coros* concurrently with at most *limit* in flight.
@@ -63,7 +70,7 @@ async def gather_with_limit(
     """
     limiter = anyio.CapacityLimiter(limit)
 
-    async def _run(coro: Coroutine[Any, Any, T]) -> T:  # type: ignore[explicit-any]  # asyncio gather signature
+    async def _run(coro: Coroutine[Any, Any, T]) -> T:  # pyright: ignore[reportExplicitAny]
         async with limiter:
             return await coro
 
@@ -101,8 +108,8 @@ class OpenRouterClient:
         tools: list[ToolSpec] | None = None,
         model: str | None = None,
         cache: bool = False,
-        response_format: dict[str, Any] | None = None,  # type: ignore[explicit-any]  # SDK passthrough
-        extra_body: dict[str, Any] | None = None,  # type: ignore[explicit-any]  # SDK passthrough
+        response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> CompletionResult:
         """Run a chat completion, handling tool calls, cache re-warming, and retries."""
         messages = self._build_messages(system, prompt, cache=cache)
@@ -197,9 +204,9 @@ class OpenRouterClient:
     def _is_transient(exc: BaseException) -> bool:
         if isinstance(exc, MidStreamError):
             return exc.code in _TRANSIENT_MIDSTREAM_CODES
-        return _is_transient_http(exc)
+        return is_transient_http(exc)
 
-    async def _call_with_retry(self, **kw: Any) -> Any:  # type: ignore[explicit-any]  # SDK passthrough
+    async def _call_with_retry(self, **kw: Any) -> Any:  # pyright: ignore[reportExplicitAny]
         """Call SDK with retry/backoff on transient errors.
 
         Treats a finish_reason='error' chunk with error.code='overloaded_error'
@@ -207,7 +214,7 @@ class OpenRouterClient:
         Auth (401/403), 402 (insufficient credits), 503 (no provider), and
         non-overloaded mid-stream errors are fatal — re-raised immediately.
         """
-        sdk: Any = self._sdk  # type: ignore[explicit-any]  # vendor SDK has no public type
+        sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
         attempt = 0
         last_exc: BaseException | None = None
         while attempt <= self._max_retries:
@@ -242,20 +249,20 @@ class OpenRouterClient:
 
     def _build_messages(
         self, system: str | None, prompt: str, *, cache: bool
-    ) -> list[dict[str, Any]]:  # type: ignore[explicit-any]  # heterogeneous SDK payload
-        msgs: list[dict[str, Any]] = []  # type: ignore[explicit-any]
+    ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
+        msgs: list[dict[str, Any]] = []  # pyright: ignore[reportExplicitAny]
         if system:
-            sys_block: dict[str, Any] = {"type": "text", "text": system}  # type: ignore[explicit-any]
+            sys_block: dict[str, Any] = {"type": "text", "text": system}  # pyright: ignore[reportExplicitAny]
             if cache:
                 sys_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
             msgs.append({"role": "system", "content": [sys_block]})
-        user_block: dict[str, Any] = {"type": "text", "text": prompt}  # type: ignore[explicit-any]
+        user_block: dict[str, Any] = {"type": "text", "text": prompt}  # pyright: ignore[reportExplicitAny]
         if cache:
             user_block["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
         msgs.append({"role": "user", "content": [user_block]})
         return msgs
 
-    def _build_tools(self, tools: list[ToolSpec] | None) -> list[dict[str, Any]] | None:  # type: ignore[explicit-any]  # SDK payload
+    def _build_tools(self, tools: list[ToolSpec] | None) -> list[dict[str, Any]] | None:  # pyright: ignore[reportExplicitAny]
         if not tools:
             return None
         from slopmortem.llm.tools import (  # noqa: PLC0415 — break import cycle
@@ -276,7 +283,7 @@ class OpenRouterClient:
 
     def _assert_tool_allowlist(
         self,
-        tcs: Iterable[Any],  # type: ignore[explicit-any]  # SDK tool-call objects
+        tcs: Iterable[Any],  # pyright: ignore[reportExplicitAny]
         registered: dict[str, ToolSpec],
     ) -> None:
         for tc in tcs:
@@ -294,22 +301,22 @@ class OpenRouterClient:
 def _tc_name(tc: object) -> str:
     if isinstance(tc, dict):
         return str(tc["function"]["name"])
-    return str(tc.function.name)  # type: ignore[attr-defined]
+    return str(tc.function.name)  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def _tc_arguments(tc: object) -> str:
     if isinstance(tc, dict):
         return str(tc["function"]["arguments"])
-    return str(tc.function.arguments)  # type: ignore[attr-defined]
+    return str(tc.function.arguments)  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def _tc_id(tc: object) -> str:
     if isinstance(tc, dict):
         return str(tc["id"])
-    return str(tc.id)  # type: ignore[attr-defined]
+    return str(tc.id)  # pyright: ignore[reportAttributeAccessIssue]
 
 
-def _assistant_with_tools(message: object) -> dict[str, Any]:  # type: ignore[explicit-any]
+def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Render the assistant turn that requested tool calls.
 
     Builds the payload the next API call can replay so the model can see its own
@@ -333,7 +340,7 @@ def _assistant_with_tools(message: object) -> dict[str, Any]:  # type: ignore[ex
     }
 
 
-def _is_transient_http(exc: BaseException) -> bool:
+def is_transient_http(exc: BaseException) -> bool:
     """Best-effort transient-vs-fatal classification on openai SDK exceptions.
 
     We check duck-typed attributes so this works for the openai SDK's typed

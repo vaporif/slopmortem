@@ -32,4 +32,4 @@ def test_safe_path_rejects_bad_text_id(tmp_path: Path):
 
 def test_safe_path_rejects_unknown_kind(tmp_path: Path):
     with pytest.raises(ValueError, match="unknown kind"):
-        safe_path(tmp_path, kind="other", text_id="0123456789abcdef")
+        safe_path(tmp_path, kind="other", text_id="0123456789abcdef")  # pyright: ignore[reportArgumentType]  # deliberate invalid Kind to assert validation

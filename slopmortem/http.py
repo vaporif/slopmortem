@@ -87,9 +87,9 @@ async def safe_get(
 
     # The httpx resolver hook keeps a static, pre-validated address tuple so
     # subsequent connect() can never round-trip back through DNS (SSRF rebinding).
-    async def _resolver(
-        *_args: Any,  # type: ignore[explicit-any]  # httpx resolver signature is untyped
-        **_kwargs: Any,  # type: ignore[explicit-any]
+    async def _resolver(  # pyright: ignore[reportUnusedFunction]
+        *_args: Any,  # pyright: ignore[reportExplicitAny, reportAny]  # httpx resolver signature is untyped
+        **_kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
     ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
         return [
             (

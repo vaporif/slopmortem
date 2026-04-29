@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing_extensions import override  # `typing.override` is 3.12+; project targets 3.11
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import (
@@ -13,7 +14,7 @@ from pydantic_settings import (
 )
 
 
-class Config(BaseSettings):  # type: ignore[explicit-any]  # BaseSettings inherits Any-typed fields
+class Config(BaseSettings):
     """All knobs slopmortem reads at startup — TOML overrides env, env overrides defaults."""
 
     model_config = SettingsConfigDict(
@@ -63,6 +64,7 @@ class Config(BaseSettings):  # type: ignore[explicit-any]  # BaseSettings inheri
         return self
 
     @classmethod
+    @override
     def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
