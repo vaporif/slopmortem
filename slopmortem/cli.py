@@ -17,8 +17,9 @@ The ``ingest`` command assembles real :class:`Source` / :class:`Enricher`
 :class:`EmbeddingClient` / :class:`SlopClassifier` instances from
 :class:`Config` and env vars and dispatches to
 :func:`slopmortem.ingest.ingest`. The ``--reconcile``, ``--reclassify``,
-``--list-review``, and ``--tavily-enrich`` flags are deferred to a
-follow-up plan and currently exit non-zero with a clear message.
+and ``--list-review`` flags are deferred to a follow-up plan and currently
+exit non-zero with a clear message; ``--tavily-enrich`` appends a
+:class:`TavilyEnricher` to the enrichers list.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from slopmortem.corpus.qdrant_store import QdrantCorpus
 from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource
 from slopmortem.corpus.sources.curated import CuratedSource
 from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
+from slopmortem.corpus.sources.tavily import TavilyEnricher
 from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.corpus.tools_impl import _set_corpus
 from slopmortem.ingest import ingest
@@ -160,13 +162,6 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     post_mortems_root: Path,
 ) -> None:
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
-    if tavily_enrich:
-        msg = (
-            "--tavily-enrich is deferred to a follow-up plan; "
-            "TavilyEnricher is not implemented in this iteration."
-        )
-        typer.echo(msg, err=True)
-        raise typer.Exit(code=1)
     if reconcile or reclassify or list_review:
         flag_name = "reconcile" if reconcile else "reclassify" if reclassify else "list-review"
         msg = (
@@ -195,6 +190,8 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     enrichers: list[Enricher] = []
     if enrich_wayback:
         enrichers.append(WaybackEnricher())
+    if tavily_enrich:
+        enrichers.append(TavilyEnricher())
 
     result = await ingest(
         sources=sources,

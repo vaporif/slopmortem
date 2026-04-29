@@ -79,9 +79,9 @@ The synthesis-time Tavily tools from Plan #1 Task A are designed to be called *b
 
 ### Step-by-step
 
-- [ ] **Step A.1: Read spec lines 245, 1014, and look at `slopmortem/corpus/sources/wayback.py` end-to-end** as the reference Enricher implementation.
+- [x] **Step A.1: Read spec lines 245, 1014, and look at `slopmortem/corpus/sources/wayback.py` end-to-end** as the reference Enricher implementation.
 
-- [ ] **Step A.2: Write failing tests for `TavilyEnricher`.**
+- [x] **Step A.2: Write failing tests for `TavilyEnricher`.**
 
 `tests/sources/test_tavily_enricher.py`:
 
@@ -191,7 +191,7 @@ async def test_returns_entry_unchanged_when_api_key_missing(monkeypatch):
 
 **Why "return unchanged on missing API key" rather than raise:** the Enricher contract is best-effort. Wayback handles its failures the same way (returns the entry unchanged on robots block, fetch failure, or empty payload). Raising at ingest start would be surprising; logging once and skipping every entry afterwards is the consistent choice.
 
-- [ ] **Step A.3: Run the tests; confirm they fail.**
+- [x] **Step A.3: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/sources/test_tavily_enricher.py -v
@@ -199,7 +199,7 @@ async def test_returns_entry_unchanged_when_api_key_missing(monkeypatch):
 
 Expected: 5 tests fail with `ModuleNotFoundError: slopmortem.corpus.sources.tavily`.
 
-- [ ] **Step A.4: Implement `TavilyEnricher`.**
+- [x] **Step A.4: Implement `TavilyEnricher`.**
 
 `slopmortem/corpus/sources/tavily.py`:
 
@@ -277,7 +277,7 @@ class TavilyEnricher:
         return entry.model_copy(update={"raw_html": raw_content, "markdown_text": markdown_text})
 ```
 
-- [ ] **Step A.5: Run the tests; confirm they pass.**
+- [x] **Step A.5: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/sources/test_tavily_enricher.py -v
@@ -285,7 +285,7 @@ class TavilyEnricher:
 
 Expected: 5 passed.
 
-- [ ] **Step A.6: Wire `--tavily-enrich` in the CLI.**
+- [x] **Step A.6: Wire `--tavily-enrich` in the CLI.**
 
 In `slopmortem/cli.py:_run_ingest`, find the block Plan #1 Task C added:
 
@@ -315,7 +315,7 @@ if tavily_enrich:
     enrichers.append(TavilyEnricher())
 ```
 
-- [ ] **Step A.7: Update the test from Plan #1 Task C that asserted `--tavily-enrich` rejected.**
+- [x] **Step A.7: Update the test from Plan #1 Task C that asserted `--tavily-enrich` rejected.**
 
 `tests/test_cli_ingest.py:test_ingest_tavily_enrich_rejected` — invert it to `test_ingest_tavily_enrich_appends_enricher`. Capture the enrichers passed to the orchestrator and assert `TavilyEnricher` appears:
 
@@ -344,7 +344,7 @@ def test_ingest_tavily_enrich_appends_enricher(monkeypatch, tmp_path):
     assert "TavilyEnricher" in enricher_classnames
 ```
 
-- [ ] **Step A.8: Run the full sweep.**
+- [x] **Step A.8: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q

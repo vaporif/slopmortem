@@ -46,17 +46,28 @@ def test_ingest_dry_run_dispatches_to_orchestrator(
     assert kwargs["post_mortems_root"] == tmp_path
 
 
-def test_ingest_tavily_enrich_rejected(tmp_path: Path) -> None:
-    """--tavily-enrich is deferred; CLI must error out cleanly, not silently no-op."""
+def test_ingest_tavily_enrich_appends_enricher(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """--tavily-enrich now wires a real TavilyEnricher into the enrichers list."""
+    captured: dict[str, object] = {}
+
+    async def fake_ingest(**kwargs: object) -> object:
+        captured["enrichers"] = kwargs["enrichers"]
+        return MagicMock(dry_run=True, processed=0)
+
+    monkeypatch.setattr("slopmortem.cli.ingest", fake_ingest)
+    monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["ingest", "--tavily-enrich", "--post-mortems-root", str(tmp_path)],
+        ["ingest", "--dry-run", "--tavily-enrich", "--post-mortems-root", str(tmp_path)],
     )
-    assert result.exit_code != 0
-    combined = result.output + (result.stderr or "")
-    assert "Tavily" in combined
-    assert "deferred" in combined
+    assert result.exit_code == 0, result.output
+    enrichers = captured["enrichers"]
+    assert isinstance(enrichers, list)
+    enricher_classnames = [type(e).__name__ for e in enrichers]
+    assert "TavilyEnricher" in enricher_classnames
 
 
 @pytest.mark.parametrize("flag", ["--reconcile", "--reclassify", "--list-review"])
