@@ -56,9 +56,7 @@ class _Pending:
     body: str
 
 
-def _row_to_pending(
-    row: dict[str, object], post_mortems_root: Path
-) -> _Pending | None:
+def _row_to_pending(row: dict[str, object], post_mortems_root: Path) -> _Pending | None:
     """Validate one ``quarantine_journal`` row and read its body; ``None`` on any failure."""
     # ``fetch_quarantined`` returns sqlite-Row-shaped dicts at the journal
     # boundary; assert ``str`` on each key cell at this use site.
@@ -103,9 +101,7 @@ async def _score_all(
         scores.append(await slop_classifier.score(pending[0].body))
     except Exception as exc:  # noqa: BLE001 — defensive: per-row isolation.
         scores.append(exc)
-    scores.extend(
-        await gather_resilient(*(slop_classifier.score(p.body) for p in pending[1:]))
-    )
+    scores.extend(await gather_resilient(*(slop_classifier.score(p.body) for p in pending[1:])))
     return scores
 
 
