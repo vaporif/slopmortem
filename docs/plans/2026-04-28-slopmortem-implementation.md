@@ -2218,7 +2218,7 @@ Expected: green.
 
 ### Step-by-step
 
-- [ ] **Step 7.1: Failing test for retrieve**
+- [x] **Step 7.1: Failing test for retrieve**
 
 ```python
 @pytest.mark.requires_qdrant
@@ -2244,11 +2244,11 @@ async def test_other_facet_does_not_boost(qdrant_client):
     ...
 ```
 
-- [ ] **Step 7.2: Implement `retrieve`**
+- [x] **Step 7.2: Implement `retrieve`**
 
 Build the `Prefetch + FormulaQuery` query exactly as spec lines 605–679. Iterate `query_facets.items()` and skip values equal to `"other"`. The FormulaQuery requires `qdrant-client>=1.14`. Use `SumExpression`, `MultExpression`, `FilterCondition` from `qdrant_client.models`. Collapse hits to parents (one per `canonical_id`) in Python, dedupe by alias-graph component, return `list[Candidate]` of length `K_retrieve`.
 
-- [ ] **Step 7.3: Failing test for `llm_rerank`**
+- [x] **Step 7.3: Failing test for `llm_rerank`**
 
 ```python
 async def test_llm_rerank_returns_n_synthesize(fake_llm):
@@ -2264,7 +2264,7 @@ async def test_llm_rerank_uses_summary_not_body(fake_llm, candidates_with_huge_b
     ...
 ```
 
-- [ ] **Step 7.4: Implement `llm_rerank`**
+- [x] **Step 7.4: Implement `llm_rerank`**
 
 Add `class RerankLengthError(RuntimeError): ...` to `slopmortem/errors.py`. Then:
 
@@ -2303,7 +2303,7 @@ async def llm_rerank(candidates, pitch, facets, llm, config, *, model=None) -> L
 
 Add a fake-LLM test that returns `len(ranked) != N_synthesize` and asserts `RerankLengthError` is raised.
 
-- [ ] **Step 7.5: Verify**
+- [x] **Step 7.5: Verify**
 
 Run: `uv run pytest tests/stages/test_retrieve.py tests/stages/test_llm_rerank.py -v`
 Expected: all green.
