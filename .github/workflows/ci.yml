@@ -40,3 +40,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync
       - run: uv run pytest -n auto
+
+  nix-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - run: nix build .#default --print-build-logs

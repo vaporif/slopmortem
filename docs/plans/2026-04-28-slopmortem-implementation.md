@@ -2404,7 +2404,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 9.1: Failing test — tools call real corpus**
+- [x] **Step 9.1: Failing test — tools call real corpus**
 
 ```python
 async def test_get_post_mortem_reads_canonical(fixture_corpus):
@@ -2418,11 +2418,11 @@ async def test_search_corpus_returns_hits(fixture_corpus):
     assert len(hits) > 0
 ```
 
-- [ ] **Step 9.2: Implement against `Corpus` Protocol**
+- [x] **Step 9.2: Implement against `Corpus` Protocol**
 
 The implementations need a `Corpus` instance. Use a module-level `_set_corpus(c: Corpus)` initialization function called at CLI startup (Task #10), so tools can be plain `async def` matching the signature contract from Task #1.
 
-- [ ] **Step 9.3: Signature contract test**
+- [x] **Step 9.3: Signature contract test**
 
 ```python
 def test_tool_signatures_round_trip():
@@ -2448,7 +2448,7 @@ def test_no_subprocess_imports_in_tools():
         assert banned not in src, f"banned import: {banned}"
 ```
 
-- [ ] **Step 9.4: Verify**
+- [x] **Step 9.4: Verify**
 
 Run: `uv run pytest tests/test_synthesis_tools.py tests/test_tool_signature_contract.py -v`
 Expected: all green.
