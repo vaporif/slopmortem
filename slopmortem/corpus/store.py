@@ -18,11 +18,22 @@ class Corpus(Protocol):
         dense: list[float],
         sparse: dict[int, float],
         facets: Facets,
-        years_filter: int | None,
+        cutoff_iso: str | None,
         strict_deaths: bool,
         k_retrieve: int,
     ) -> list[Candidate]:
-        """Hybrid retrieve the top-K candidates by dense and sparse vectors, filtered by facets."""
+        """Hybrid retrieve the top-K candidates by dense and sparse vectors, filtered by facets.
+
+        Args:
+            dense: Dense query vector.
+            sparse: Sparse query vector as ``{token_id: weight}``.
+            facets: Soft-boost facets; ``"other"`` values must be skipped.
+            cutoff_iso: ISO-8601 lower bound for the recency filter, or
+                ``None`` to disable the filter entirely.
+            strict_deaths: When ``True``, only retrieve docs with a known
+                ``failure_date >= cutoff_iso``.
+            k_retrieve: Final number of parent candidates to return.
+        """
         ...
 
     async def get_post_mortem(self, canonical_id: str) -> str:

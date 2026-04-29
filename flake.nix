@@ -77,8 +77,6 @@
           if [ -f pyproject.toml ]; then
             uv sync --frozen 2>/dev/null || uv sync
           fi
-
-          echo "slopmortem dev shell ready — python $(${python}/bin/python3.14 --version)"
         '';
       };
     });
