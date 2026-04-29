@@ -1141,17 +1141,17 @@ The counter is shared between `tavily_search` and `tavily_extract` because the s
 
 ### Step-by-step
 
-- [ ] **Step E.1: Read spec line 1005.** Confirm "≤2 per synthesis" is the right cap and that both Tavily tools share the budget.
+- [x] **Step E.1: Read spec line 1005.** Confirm "≤2 per synthesis" is the right cap and that both Tavily tools share the budget.
 
-- [ ] **Step E.2: Verify the current `synthesis_tools` factory at `slopmortem/llm/tools.py:80`.** Read it end-to-end before modifying.
+- [x] **Step E.2: Verify the current `synthesis_tools` factory at `slopmortem/llm/tools.py:80`.** Read it end-to-end before modifying.
 
-- [ ] **Step E.3: Add `tavily_calls_per_synthesis: int = 2` to `slopmortem/config.py`.**
+- [x] **Step E.3: Add `tavily_calls_per_synthesis: int = 2` to `slopmortem/config.py`.**
 
 ```python
 tavily_calls_per_synthesis: int = 2  # spec line 1005
 ```
 
-- [ ] **Step E.4: Write failing tests.**
+- [x] **Step E.4: Write failing tests.**
 
 Append to `tests/test_synthesis_tools.py` (or create the file if it does not exist; check first):
 
@@ -1265,7 +1265,7 @@ def test_tavily_disabled_means_no_tavily_tools_in_factory():
     assert "tavily_extract" not in names
 ```
 
-- [ ] **Step E.5: Run the tests; confirm they fail.**
+- [x] **Step E.5: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_synthesis_tools.py -v -k "tavily"
@@ -1273,11 +1273,11 @@ def test_tavily_disabled_means_no_tavily_tools_in_factory():
 
 Expected: 4 of the 5 tests fail (the disabled-case test may pass already if the factory short-circuits). The cap-enforcement tests fail because no gate is in place.
 
-- [ ] **Step E.6: Implement the wrapper in `synthesis_tools`.**
+- [x] **Step E.6: Implement the wrapper in `synthesis_tools`.**
 
 Apply the closure-based pattern shown in the "Why a per-synthesis counter" section above. Keep `get_post_mortem` and `search_corpus` un-wrapped; only the two Tavily tools get the counter. The counter dict (`{"used": 0}`) is captured by the inner closure of each Tavily wrapper, and both wrappers share the same dict instance.
 
-- [ ] **Step E.7: Run the tests; confirm they pass.**
+- [x] **Step E.7: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_synthesis_tools.py -v

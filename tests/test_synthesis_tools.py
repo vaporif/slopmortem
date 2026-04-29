@@ -98,3 +98,109 @@ async def test_get_post_mortem_reads_canonical(fixture_corpus):
 async def test_search_corpus_returns_hits(fixture_corpus):
     hits = await _search_corpus("scrap metal", facets={"sector": "logistics_supply_chain"})
     assert len(hits) > 0
+
+
+# Per-synthesis Tavily budget gate (spec line 1005).
+from slopmortem.config import Config  # noqa: E402
+from slopmortem.llm.tools import synthesis_tools  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_tavily_calls_under_cap_pass_through(monkeypatch):
+    """First two Tavily calls in one synthesis flow through to the real tool fn."""
+    cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=2)
+
+    calls: list[tuple[str, int]] = []
+
+    async def fake_real(q: str, limit: int = 5) -> str:
+        calls.append((q, limit))
+        return f"hit:{q}"
+
+    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_real)
+    # Re-fetch tools so the new patched fn is the inner of the bounded wrapper.
+    tools = synthesis_tools(cfg)
+    tavily = next(t for t in tools if t.name == "tavily_search")
+
+    out1 = await tavily.fn(q="acme", limit=5)
+    out2 = await tavily.fn(q="beta", limit=5)
+    assert "hit:acme" in out1
+    assert "hit:beta" in out2
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_third_tavily_call_returns_budget_message(monkeypatch):
+    """The third Tavily call in one synthesis returns a budget-exceeded string, not an exception."""
+    cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=2)
+    real_calls: list[str] = []
+
+    async def fake_real(q: str, limit: int = 5) -> str:
+        real_calls.append(q)
+        return "ok"
+
+    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_real)
+    tools = synthesis_tools(cfg)
+    tavily = next(t for t in tools if t.name == "tavily_search")
+
+    await tavily.fn(q="a", limit=5)
+    await tavily.fn(q="b", limit=5)
+    out3 = await tavily.fn(q="c", limit=5)
+    assert "budget exceeded" in out3
+    assert real_calls == ["a", "b"]  # third call did NOT reach the real fn
+
+
+@pytest.mark.asyncio
+async def test_tavily_search_and_extract_share_budget(monkeypatch):
+    """The cap covers tavily_search + tavily_extract combined, not each independently."""
+    cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=2)
+
+    async def fake_search(q: str, limit: int = 5) -> str:
+        return "search-hit"
+
+    async def fake_extract(url: str) -> str:
+        return "extract-hit"
+
+    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_search)
+    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_extract", fake_extract)
+    tools = synthesis_tools(cfg)
+    search = next(t for t in tools if t.name == "tavily_search")
+    extract = next(t for t in tools if t.name == "tavily_extract")
+
+    await search.fn(q="a", limit=1)
+    await extract.fn(url="https://example.com/x")
+    out3 = await search.fn(q="b", limit=1)  # third call across the two tools
+    assert "budget exceeded" in out3
+
+
+@pytest.mark.asyncio
+async def test_each_synthesis_gets_a_fresh_budget(monkeypatch):
+    """Two separate calls to synthesis_tools(config) -> two independent counters."""
+    cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=1)
+
+    async def fake_search(q: str, limit: int = 5) -> str:
+        return "ok"
+
+    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_search)
+
+    # Synthesis #1: exhausts the budget after one call.
+    tools_a = synthesis_tools(cfg)
+    search_a = next(t for t in tools_a if t.name == "tavily_search")
+    out_a1 = await search_a.fn(q="a", limit=1)
+    out_a2 = await search_a.fn(q="b", limit=1)
+    assert "ok" in out_a1
+    assert "budget exceeded" in out_a2
+
+    # Synthesis #2: fresh tools, fresh budget.
+    tools_b = synthesis_tools(cfg)
+    search_b = next(t for t in tools_b if t.name == "tavily_search")
+    out_b1 = await search_b.fn(q="x", limit=1)
+    assert "ok" in out_b1
+
+
+def test_tavily_disabled_means_no_tavily_tools_in_factory():
+    """When enable_tavily_synthesis=False, the factory does not return Tavily tools."""
+    cfg = Config(enable_tavily_synthesis=False)
+    tools = synthesis_tools(cfg)
+    names = {t.name for t in tools}
+    assert "tavily_search" not in names
+    assert "tavily_extract" not in names
