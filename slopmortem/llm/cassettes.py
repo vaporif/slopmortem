@@ -1,10 +1,10 @@
 """Cassette key derivation: structural hashes that identify an LLM call.
 
 Lives under `slopmortem/llm/` (not `slopmortem/evals/`) because cassette
-keys are a property of the LLM contract — they identify a unique
+keys are a property of the LLM contract: they identify a unique
 `(template, tools, response_format, model, prompt, system)` invocation.
 The on-disk cassette format and the loaders/writers live in
-`slopmortem.evals.cassettes`; this module is import-free of `evals` so
+`slopmortem.evals.cassettes`. This module does not import `evals`, so
 `FakeLLMClient` and `RecordingLLMClient` can both depend on it without
 cycles.
 """

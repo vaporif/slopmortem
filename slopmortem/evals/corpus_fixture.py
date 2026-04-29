@@ -1,10 +1,10 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportExplicitAny=false, reportAttributeAccessIssue=false
 """JSONL dump/restore + SHA for the eval corpus fixture.
 
-The fixture is a regenerable artifact (run ``just eval-record-corpus``); this
-module's job is to bridge between a populated Qdrant collection and a
-human-diffable JSONL file. Per-file ``reportAny`` / ``reportUnknown*`` silences
-match the SDK-boundary pattern in ``slopmortem/corpus/qdrant_store.py`` —
+The fixture is a regenerable artifact (run ``just eval-record-corpus``).
+This module bridges a populated Qdrant collection and a human-diffable
+JSONL file. The per-file ``reportAny`` / ``reportUnknown*`` silences match
+the SDK-boundary pattern in ``slopmortem/corpus/qdrant_store.py``, since
 Qdrant's models surface ``Optional`` / ``Mapping`` everywhere.
 """
 

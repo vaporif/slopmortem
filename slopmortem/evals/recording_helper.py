@@ -1,9 +1,8 @@
-"""Layer-2 reusable helper: record cassettes for a set of inputs end-to-end.
+"""Record cassettes for a set of inputs end to end.
 
-Owns the ephemeral-Qdrant lifecycle, the recording wrappers, the
-two-step atomic dir swap, and the Tavily-off override. Test authors call
-this when they want a per-test cassette set without re-implementing the
-plumbing.
+Handles the ephemeral Qdrant lifecycle, the recording wrappers, the two-step
+atomic dir swap, and forces Tavily off. Test authors call this when they
+want a per-test cassette set without re-implementing the plumbing.
 """
 
 from __future__ import annotations

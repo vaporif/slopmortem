@@ -1,8 +1,7 @@
 # Cassettes
 
 Cassettes are committed JSON files that replay LLM, embedding, and BM25 calls
-deterministically so `just eval` can run without network or API keys. This
-guide covers how to record, replay, and troubleshoot them.
+deterministically so `just eval` can run without network or API keys.
 
 ## Quick start (replay)
 
@@ -15,9 +14,9 @@ reachable on `localhost:6333`.
 just eval
 ```
 
-Under the hood the runner wires `FakeLLMClient` + `FakeEmbeddingClient`
-against `tests/fixtures/cassettes/evals/<row_id>/` and seeds a throwaway
-Qdrant collection from the corpus fixture. The collection is dropped on exit.
+The runner wires `FakeLLMClient` + `FakeEmbeddingClient` against
+`tests/fixtures/cassettes/evals/<row_id>/` and seeds a throwaway Qdrant
+collection from the corpus fixture. The collection is dropped on exit.
 
 ## Recording for the canonical eval
 
@@ -69,9 +68,9 @@ Tavily is forced off during recording to keep cassettes deterministic.
 
 ## Cassette schema reference
 
-The Pydantic envelope models live in `slopmortem/evals/cassettes.py`. That
-module is the single source of truth for both writers and readers; record
-and replay can never disagree on disk shape.
+The Pydantic envelope models live in `slopmortem/evals/cassettes.py`. Both
+writers and readers import from there, so record and replay can't disagree
+on disk shape.
 
 Per-row directory layout under `tests/fixtures/cassettes/evals/<row_id>/`:
 

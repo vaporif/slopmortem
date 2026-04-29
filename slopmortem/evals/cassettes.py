@@ -1,16 +1,14 @@
 """Cassette loaders, writers, slugifier, error types, and schema-version policy.
 
-Key derivation lives in `slopmortem.llm.cassettes` (see G14/P17). This
-module is the single source of truth for how cassette files are *written*
-and *read*; both the recording wrappers and the replay loaders import
-from here so record/replay can never disagree on disk shape.
+Key derivation lives in `slopmortem.llm.cassettes` (see G14/P17). The
+recording wrappers and the replay loaders both import from here so record
+and replay can't disagree on disk shape.
 
 Forward-compat policy (P12): `schema_version` is `"<major>.<minor>"`. The
-reader hard-fails on **major** mismatch (breaking change: renamed/removed
-fields, semantic shifts) and accepts any **minor** at the same major
-(minor bumps are purely additive). Pydantic models are configured with
-`extra="ignore"` so unknown fields a future writer adds are tolerated by
-older readers without re-recording.
+reader hard-fails on a major mismatch (renamed or removed fields, semantic
+shifts) and accepts any minor at the same major (minor bumps are purely
+additive). Pydantic models use `extra="ignore"` so unknown fields a future
+writer adds deserialize cleanly under older readers.
 """
 
 from __future__ import annotations
@@ -134,8 +132,8 @@ class SparseCassette(BaseModel):
 
 
 # Read-side envelope models mirror the on-disk JSON. `extra="ignore"` is the
-# P12 lenient-versioning hook: a future writer adding `logprobs` or
-# `trace_id` deserializes cleanly under the current reader.
+# P12 forward-compat hook: a future writer adding `logprobs` or `trace_id`
+# deserializes cleanly under the current reader.
 
 
 class _LlmKey(BaseModel):
