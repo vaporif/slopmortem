@@ -34,14 +34,14 @@ class Chunk(BaseModel):
 
 def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[int]:
     """Return token indices where a ``#`` heading line starts."""
-    # Decode in modest slabs and search for newline-prefixed '#' to keep this
-    # O(N) without re-encoding the whole doc per offset.
+    # Decode once and search for newline-prefixed '#'. Keeps things O(N)
+    # instead of re-encoding the whole doc once per offset.
     offsets: list[int] = []
     text = enc.decode(tokens)
     cur = 0
-    # Build a token-prefix-length lookup so a character offset can be mapped
-    # back to a token offset cheaply. tiktoken doesn't expose a per-token char
-    # offset directly, so re-encode prefix-by-prefix using a coarse stride.
+    # Build a coarse char-offset → token-index lookup so we can map heading
+    # positions back to token indices cheaply. tiktoken has no per-token char
+    # offset, so re-encode prefix-by-prefix using a fixed stride.
     stride = 32
     prefix_lens: list[tuple[int, int]] = [(0, 0)]
     for i in range(stride, len(tokens) + stride, stride):
@@ -53,8 +53,8 @@ def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[in
     char_to_token.sort()
 
     def char_to_token_idx(char_idx: int) -> int:
-        # Find the largest prefix length <= char_idx. Linear scan is fine
-        # because the list is small (len/32 entries).
+        # Largest prefix length <= char_idx. Linear scan is fine; the list
+        # has len/32 entries.
         chosen = 0
         for cl, ti in char_to_token:
             if cl <= char_idx:
