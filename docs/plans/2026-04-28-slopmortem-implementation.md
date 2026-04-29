@@ -2382,11 +2382,11 @@ def test_render_strips_autolinks_and_images(syrupy_snapshot):
     syrupy_snapshot.assert_match(structural_keys(md))
 ```
 
-- [ ] **Step 8.7: Implement `render`**
+- [x] **Step 8.7: Implement `render`**
 
 Pure function. One section per candidate: heading, similarity scores table, why-similar prose, where-diverged prose, failure causes, lessons, sources (plain text, no markdown links). Footer block with `pipeline_meta` (cost, latency, trace_id). Strip clickable autolinks: bare `http(s)://...` URLs render as plain text; `[...](...)` and `![...](...)` patterns are escaped.
 
-- [ ] **Step 8.8: Verify**
+- [x] **Step 8.8: Verify**
 
 Run: `uv run pytest tests/stages/test_synthesize.py tests/stages/test_synthesize_url_filter.py tests/stages/test_synthesize_injection_defense.py tests/stages/test_render.py -v`
 Expected: all green.
