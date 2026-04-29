@@ -16,23 +16,13 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _fake_deps(*_args: object, **_kwargs: object) -> tuple[object, ...]:
-    return (
-        MagicMock(name="llm"),
-        MagicMock(name="embed"),
-        MagicMock(name="corpus"),
-        MagicMock(name="budget"),
-        MagicMock(name="journal"),
-        MagicMock(name="classifier"),
-    )
-
-
 def test_cli_reclassify_dispatches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """--reclassify wires journal+classifier into reclassify_quarantined and prints the report."""
     fake_report = ReclassifyReport(total=3, declassified=1, still_slop=2, errors=0)
     fake_reclassify = AsyncMock(return_value=fake_report)
     monkeypatch.setattr("slopmortem.cli.reclassify_quarantined", fake_reclassify)
-    monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
+    monkeypatch.setattr("slopmortem.cli._build_journal", lambda *_a, **_k: MagicMock())
+    monkeypatch.setattr("slopmortem.cli._build_slop_classifier", lambda *_a, **_k: MagicMock())
 
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", "--reclassify", "--post-mortems-root", str(tmp_path)])

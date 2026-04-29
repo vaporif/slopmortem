@@ -27,8 +27,10 @@ adapter and running entity resolution from scratch.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from slopmortem.concurrency import gather_resilient
 from slopmortem.corpus.paths import safe_path
 from slopmortem.models import ReclassifyReport
 
@@ -41,6 +43,70 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _TEXT_ID_LEN = 16
+
+
+@dataclass
+class _Pending:
+    """A quarantine row whose body has been read and is ready to score."""
+
+    sha: str
+    source: str
+    source_id: str
+    quarantine_path: Path
+    body: str
+
+
+def _row_to_pending(
+    row: dict[str, object], post_mortems_root: Path
+) -> _Pending | None:
+    """Validate one ``quarantine_journal`` row and read its body; ``None`` on any failure."""
+    # ``fetch_quarantined`` returns sqlite-Row-shaped dicts at the journal
+    # boundary; assert ``str`` on each key cell at this use site.
+    sha = row["content_sha256"]
+    source = row["source"]
+    source_id = row["source_id"]
+    if not (isinstance(sha, str) and isinstance(source, str) and isinstance(source_id, str)):
+        logger.warning("reclassify: non-string key in quarantine row: %r", row)
+        return None
+    try:
+        quarantine_path = safe_path(post_mortems_root, kind="quarantine", content_sha256=sha)
+    except ValueError:
+        logger.warning("reclassify: invalid quarantine sha %s", sha)
+        return None
+    try:
+        body = quarantine_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.warning("reclassify: missing quarantine file for %s", sha)
+        return None
+    return _Pending(
+        sha=sha,
+        source=source,
+        source_id=source_id,
+        quarantine_path=quarantine_path,
+        body=body,
+    )
+
+
+async def _score_all(
+    pending: list[_Pending], slop_classifier: SlopClassifier
+) -> list[float | BaseException]:
+    """Score every pending body. Warm up the lazy-loaded model on the first call alone.
+
+    ``BinocularsSlopClassifier`` lazy-loads its ~150MB model on the first
+    :meth:`score` call; concurrent first-callers would each load. The first
+    body is awaited in isolation so the rest can fan out safely.
+    """
+    if not pending:
+        return []
+    scores: list[float | BaseException] = []
+    try:
+        scores.append(await slop_classifier.score(pending[0].body))
+    except Exception as exc:  # noqa: BLE001 — defensive: per-row isolation.
+        scores.append(exc)
+    scores.extend(
+        await gather_resilient(*(slop_classifier.score(p.body) for p in pending[1:]))
+    )
+    return scores
 
 
 async def reclassify_quarantined(
@@ -74,51 +140,43 @@ async def reclassify_quarantined(
         ``still_slop``, and ``errors`` counts.
     """
     rows = await journal.fetch_quarantined()
-    total = 0
+    total = len(rows)
+    pending: list[_Pending] = []
+    for row in rows:
+        p = _row_to_pending(row, post_mortems_root)
+        if p is not None:
+            pending.append(p)
+    errors = total - len(pending)
+
+    scores = await _score_all(pending, slop_classifier)
+
     declassified = 0
     still_slop = 0
-    errors = 0
-    for row in rows:
-        total += 1
-        # ``fetch_quarantined`` returns ``list[dict[str, Any]]`` (sqlite Row →
-        # dict at the journal boundary). Narrow each cell to ``object`` for
-        # strict-mode typing, then assert ``str`` at the use sites.
-        sha = cast("object", row["content_sha256"])
-        source = cast("object", row["source"])
-        source_id = cast("object", row["source_id"])
-        if not (isinstance(sha, str) and isinstance(source, str) and isinstance(source_id, str)):
+    for p, score in zip(pending, scores, strict=True):
+        if isinstance(score, BaseException):
             errors += 1
-            logger.warning("reclassify: non-string key in quarantine row: %r", row)
+            logger.warning("reclassify: classifier failed for %s: %s", p.sha, score)
             continue
-        try:
-            quarantine_path = safe_path(post_mortems_root, kind="quarantine", content_sha256=sha)
-        except ValueError:
-            errors += 1
-            logger.warning("reclassify: invalid quarantine sha %s", sha)
-            continue
-        try:
-            body = quarantine_path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            errors += 1
-            logger.warning("reclassify: missing quarantine file for %s", sha)
-            continue
-        new_score = await slop_classifier.score(body)
-        if new_score >= slop_threshold:
+        if score >= slop_threshold:
             still_slop += 1
             continue
         # Declassify: derive a text_id from the content_sha256 and move the
         # file under raw/<source>/<text_id>.md. The 16-char shape matches
         # what ``slopmortem.ingest._text_id_for`` produces.
-        text_id = sha[:_TEXT_ID_LEN]
+        text_id = p.sha[:_TEXT_ID_LEN]
         try:
-            raw_path = safe_path(post_mortems_root, kind="raw", text_id=text_id, source=source)
+            raw_path = safe_path(post_mortems_root, kind="raw", text_id=text_id, source=p.source)
         except ValueError:
             errors += 1
-            logger.warning("reclassify: cannot build raw path for sha=%s source=%s", sha, source)
+            logger.warning(
+                "reclassify: cannot build raw path for sha=%s source=%s", p.sha, p.source
+            )
             continue
         raw_path.parent.mkdir(parents=True, exist_ok=True)
-        quarantine_path.rename(raw_path)
-        await journal.drop_quarantine_row(content_sha256=sha, source=source, source_id=source_id)
+        p.quarantine_path.rename(raw_path)
+        await journal.drop_quarantine_row(
+            content_sha256=p.sha, source=p.source, source_id=p.source_id
+        )
         declassified += 1
     return ReclassifyReport(
         total=total,

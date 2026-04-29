@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 from typer.testing import CliRunner
@@ -16,16 +16,10 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
-    """Return six MagicMock placeholders matching ``_build_ingest_deps``'s tuple shape."""
-    return (
-        MagicMock(name="llm"),
-        MagicMock(name="embed"),
-        MagicMock(name="corpus"),
-        MagicMock(name="budget"),
-        MagicMock(name="journal"),
-        MagicMock(name="slop"),
-    )
+def _patch_narrow_deps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass the journal + corpus builders so the reconcile path needs no env vars."""
+    monkeypatch.setattr("slopmortem.cli._build_journal", lambda *_a, **_k: MagicMock())
+    monkeypatch.setattr("slopmortem.cli._build_ingest_corpus", lambda *_a, **_k: MagicMock())
 
 
 def test_cli_reconcile_dispatches_with_repair_true(
@@ -35,7 +29,7 @@ def test_cli_reconcile_dispatches_with_repair_true(
     fake_report = ReconcileReport(rows=[], applied=[])
     fake_reconcile = AsyncMock(return_value=fake_report)
     monkeypatch.setattr("slopmortem.cli.reconcile", fake_reconcile)
-    monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
+    _patch_narrow_deps(monkeypatch)
 
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", "--reconcile", "--post-mortems-root", str(tmp_path)])
@@ -74,7 +68,7 @@ def test_cli_reconcile_prints_drift_findings(
         applied=["a:canonical/abc.md", "e:canonical/abc.md.tmp"],
     )
     monkeypatch.setattr("slopmortem.cli.reconcile", AsyncMock(return_value=fake_report))
-    monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
+    _patch_narrow_deps(monkeypatch)
 
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", "--reconcile", "--post-mortems-root", str(tmp_path)])

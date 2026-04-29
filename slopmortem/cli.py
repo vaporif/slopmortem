@@ -169,12 +169,25 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
     config = load_config()
     _maybe_init_tracing(config)
-    llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
-        config, post_mortems_root
-    )
+
+    # Read-only short-circuits are wired before the full LLM/embedder build so
+    # they don't require ``OPENROUTER_API_KEY`` / ``OPENAI_API_KEY``.
+    if list_review:
+        journal = _build_journal(post_mortems_root)
+        rows = await journal.list_pending_review()
+        if not rows:
+            typer.echo("(no pending_review rows)")
+        for r in rows:
+            score = r.similarity_score
+            decision = r.haiku_decision
+            rationale = r.haiku_rationale
+            typer.echo(f"{r.pair_key}\tscore={score}\tdecision={decision}\trationale={rationale}")
+        return
 
     # Spec: §Quarantine and reclassify line 252.
     if reclassify:
+        journal = _build_journal(post_mortems_root)
+        classifier = _build_slop_classifier()
         report = await reclassify_quarantined(
             journal=journal,
             slop_classifier=classifier,
@@ -188,6 +201,8 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
 
     # Spec: §Atomicity / six drift classes (a-f).
     if reconcile_flag:
+        journal = _build_journal(post_mortems_root)
+        corpus = _build_ingest_corpus(config, post_mortems_root)
         report = await reconcile(
             journal=journal,
             corpus=corpus,
@@ -199,17 +214,9 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
             typer.echo(f"  drift_class={r.drift_class}\t{r.path}\t{r.detail}")
         return
 
-    if list_review:
-        rows = await journal.list_pending_review()
-        if not rows:
-            typer.echo("(no pending_review rows)")
-        for r in rows:
-            score = r.similarity_score
-            decision = r.haiku_decision
-            rationale = r.haiku_rationale
-            typer.echo(f"{r.pair_key}\tscore={score}\tdecision={decision}\trationale={rationale}")
-        return
-
+    llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
+        config, post_mortems_root
+    )
     # The ingest-side Corpus Protocol is wider than the query-side one used by
     # ``_set_corpus``; the underlying ``QdrantCorpus`` instance satisfies both.
     _set_corpus(cast("Corpus", corpus))
@@ -372,21 +379,54 @@ def _build_deps(
     return llm, embedder, corpus, budget
 
 
+def _build_journal(post_mortems_root: Path) -> MergeJournal:
+    """Construct only the merge journal; no LLM/embedder/Qdrant env vars required."""
+    from slopmortem.corpus.merge import MergeJournal  # noqa: PLC0415
+
+    journal_path = Path(
+        os.environ.get("MERGE_JOURNAL_PATH", str(post_mortems_root.parent / "journal.sqlite"))
+    )
+    return MergeJournal(journal_path)
+
+
+def _build_slop_classifier() -> SlopClassifier:
+    """Construct the production :class:`BinocularsSlopClassifier`."""
+    from slopmortem.ingest import BinocularsSlopClassifier  # noqa: PLC0415
+
+    return BinocularsSlopClassifier()
+
+
+def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
+    """Construct only the Qdrant-backed ingest corpus; no LLM/embedder env vars required."""
+    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
+
+    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
+    qdrant_port = int(os.environ.get("QDRANT_PORT", "6333"))
+    qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
+    corpus = QdrantCorpus(
+        client=qdrant_client,
+        collection=os.environ.get("QDRANT_COLLECTION", "slopmortem"),
+        post_mortems_root=post_mortems_root,
+        facet_boost=config.facet_boost,
+        rrf_k=config.rrf_k,
+    )
+    # ``QdrantCorpus`` ships ``upsert_chunk`` but not yet ``has_chunks`` /
+    # ``delete_chunks_for_canonical`` (production gap tracked separately);
+    # cast at this boundary so the CLI surface compiles against the strict
+    # ingest-side ``Corpus`` Protocol declared in :mod:`slopmortem.ingest`.
+    return cast("IngestCorpus", corpus)
+
+
 def _build_ingest_deps(
     config: Config,
     post_mortems_root: Path,
 ) -> tuple[LLMClient, EmbeddingClient, IngestCorpus, Budget, MergeJournal, SlopClassifier]:
-    """Construct the ingest-side wiring: LLM / embed / corpus / budget / journal / classifier.
+    """Construct the full ingest-side wiring: LLM / embed / corpus / budget / journal / classifier.
 
     Mirrors :func:`_build_deps` but uses ``max_cost_usd_per_ingest`` for the
     budget cap and additionally constructs a :class:`MergeJournal` and the
     production :class:`BinocularsSlopClassifier`.
     """
-    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
-
-    from slopmortem.corpus.merge import MergeJournal  # noqa: PLC0415
-    from slopmortem.ingest import BinocularsSlopClassifier  # noqa: PLC0415
-
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
 
     openrouter_sdk = AsyncOpenAI(
@@ -406,30 +446,10 @@ def _build_ingest_deps(
         model=config.embed_model_id,
     )
 
-    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
-    qdrant_port = int(os.environ.get("QDRANT_PORT", "6333"))
-    qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
-    corpus = QdrantCorpus(
-        client=qdrant_client,
-        collection=os.environ.get("QDRANT_COLLECTION", "slopmortem"),
-        post_mortems_root=post_mortems_root,
-        facet_boost=config.facet_boost,
-        rrf_k=config.rrf_k,
-    )
-
-    journal_path = Path(
-        os.environ.get("MERGE_JOURNAL_PATH", str(post_mortems_root.parent / "journal.sqlite"))
-    )
-    journal = MergeJournal(journal_path)
-
-    classifier = BinocularsSlopClassifier()
-
-    # ``QdrantCorpus`` ships ``upsert_chunk`` but not yet ``has_chunks`` /
-    # ``delete_chunks_for_canonical`` (production gap tracked separately);
-    # cast at this boundary so the CLI surface compiles against the strict
-    # ingest-side ``Corpus`` Protocol declared in :mod:`slopmortem.ingest`.
-    ingest_corpus = cast("IngestCorpus", corpus)
-    return llm, embedder, ingest_corpus, budget, journal, classifier
+    corpus = _build_ingest_corpus(config, post_mortems_root)
+    journal = _build_journal(post_mortems_root)
+    classifier = _build_slop_classifier()
+    return llm, embedder, corpus, budget, journal, classifier
 
 
 def _make_progress() -> Callable[[str], None] | None:

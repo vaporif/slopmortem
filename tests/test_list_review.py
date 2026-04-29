@@ -74,17 +74,7 @@ def test_cli_list_review_prints_queue(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
     fake_journal.list_pending_review = _afake
 
-    def _fake_deps(*_args: object, **_kwargs: object) -> tuple[object, ...]:
-        return (
-            MagicMock(),
-            MagicMock(),
-            MagicMock(),
-            MagicMock(),
-            fake_journal,
-            MagicMock(),
-        )
-
-    monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
+    monkeypatch.setattr("slopmortem.cli._build_journal", lambda *_a, **_k: fake_journal)
 
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", "--list-review", "--post-mortems-root", str(tmp_path)])
