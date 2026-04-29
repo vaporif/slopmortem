@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Filter the bundled Crunchbase 2015 export to status=='closed' rows.
 
-Reads:  external/crunchbase-data/companies.csv
-Writes: external/crunchbase-data/companies-closed.csv
+Reads:  external/crunchbase-data/companies.csv  (git submodule)
+Writes: data/crunchbase/companies-closed.csv    (tracked in this repo)
 """
 
 import csv
@@ -10,10 +10,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "external/crunchbase-data/companies.csv"
-DST = ROOT / "external/crunchbase-data/companies-closed.csv"
+DST = ROOT / "data/crunchbase/companies-closed.csv"
 
 
 def main() -> None:
+    """Write rows whose ``status`` column equals ``closed`` to ``DST``."""
+    DST.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with SRC.open() as i, DST.open("w") as o:
         reader = csv.DictReader(i)
