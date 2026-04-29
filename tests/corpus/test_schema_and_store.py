@@ -21,7 +21,7 @@ def test_schema_reexports_resolve_to_models():
 
 def test_corpus_protocol_accepts_full_implementation():
     class _Impl:
-        async def query(
+        async def query(  # noqa: PLR0913 — mirrors the Corpus Protocol's kwargs-only surface
             self,
             *,
             dense,
@@ -44,7 +44,7 @@ def test_corpus_protocol_accepts_full_implementation():
 
 def test_corpus_protocol_rejects_partial_implementation():
     class _Partial:
-        async def query(
+        async def query(  # noqa: PLR0913 — mirrors the Corpus Protocol's kwargs-only surface
             self,
             *,
             dense,
