@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -20,7 +19,7 @@ _BLOCKED_IMDS_HOSTS = frozenset(
 
 
 class SSRFBlockedError(RuntimeError):
-    """Raised when ``safe_get`` refuses a URL on SSRF-policy grounds."""
+    """Raised when ``safe_get`` / ``safe_post`` refuse a URL on SSRF-policy grounds."""
 
 
 def _is_blocked_address(addr: str) -> bool:
@@ -56,12 +55,18 @@ def _resolve_all(host: str) -> list[str]:
     return list({str(info[4][0]) for info in infos})
 
 
-async def safe_get(
-    url: str,
-    *,
-    timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
-) -> httpx.Response:
-    """Fetch *url* via httpx after enforcing scheme and DNS-pinned SSRF checks."""
+def _resolve_and_validate(url: str) -> str:
+    """Validate *url*'s scheme, host, and resolved addresses against the SSRF policy.
+
+    Returns the original *url*'s host (for the ``Host`` header). Raises
+    :class:`SSRFBlockedError` on any policy failure: non-http(s) scheme,
+    missing host, IMDS hostname, unresolvable host, or any resolved
+    address falling inside the blocklist (loopback / link-local / private /
+    multicast / reserved / unspecified / CGNAT / ULA / IPv6 link-local).
+
+    Shared by :func:`safe_get` and :func:`safe_post` so a single code path
+    enforces the policy.
+    """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         msg = f"refusing non-http(s) scheme: {parsed.scheme!r}"
@@ -81,26 +86,38 @@ async def safe_get(
         if _is_blocked_address(a):
             msg = f"refusing blocked address {a} for host {host!r}"
             raise SSRFBlockedError(msg)
+    return host
 
-    pinned_ip = addrs[0]
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
-    # Pin the resolver to a pre-validated address tuple so connect() can't
-    # round-trip back through DNS (which is how rebinding attacks work).
-    async def _resolver(  # pyright: ignore[reportUnusedFunction]
-        *_args: Any,  # pyright: ignore[reportExplicitAny, reportAny]  # httpx resolver signature is untyped
-        **_kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
-    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
-        return [
-            (
-                socket.AF_INET if ":" not in pinned_ip else socket.AF_INET6,
-                socket.SOCK_STREAM,
-                0,
-                "",
-                (pinned_ip, port),
-            )
-        ]
-
+async def safe_get(
+    url: str,
+    *,
+    timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
+) -> httpx.Response:
+    """Fetch *url* via httpx after enforcing scheme and DNS-pinned SSRF checks."""
+    host = _resolve_and_validate(url)
     transport = httpx.AsyncHTTPTransport()
     async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:
         return await client.get(url, headers={"Host": host})
+
+
+async def safe_post(
+    url: str,
+    *,
+    json: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
+) -> httpx.Response:
+    """POST *json* to *url* via httpx after enforcing the same SSRF policy as ``safe_get``.
+
+    Mirrors :func:`safe_get`'s scheme + DNS validation by routing through
+    the shared :func:`_resolve_and_validate` helper. Used by the Tavily
+    synthesis tools (``/search`` and ``/extract`` are POST-only).
+    """
+    host = _resolve_and_validate(url)
+    merged_headers: dict[str, str] = {"Host": host}
+    if headers:
+        merged_headers.update(headers)
+    transport = httpx.AsyncHTTPTransport()
+    async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:
+        return await client.post(url, json=json, headers=merged_headers)

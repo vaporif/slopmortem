@@ -79,9 +79,9 @@ Do NOT run `git add` / `git commit` from inside an implementer subagent. The par
 
 ### Step-by-step
 
-- [ ] **Step A.1: Read the spec sections listed above.** No code yet.
+- [x] **Step A.1: Read the spec sections listed above.** No code yet.
 
-- [ ] **Step A.2: Write `safe_post` failing tests.**
+- [x] **Step A.2: Write `safe_post` failing tests.**
 
 Add `tests/test_safe_post.py`. Mirror the existing `tests/test_ssrf.py` pattern (which exercises `safe_get`'s scheme + DNS pinning). Cover at least:
 
@@ -107,13 +107,13 @@ async def test_safe_post_passes_json_body_through(httpx_mock):
     assert resp.json() == {"ok": True}
 ```
 
-- [ ] **Step A.3: Run the tests; confirm they fail with "safe_post not defined".**
+- [x] **Step A.3: Run the tests; confirm they fail with "safe_post not defined".**
 
 ```
 ./.venv/bin/pytest tests/test_safe_post.py -v
 ```
 
-- [ ] **Step A.4: Implement `safe_post` in `slopmortem/http.py`.**
+- [x] **Step A.4: Implement `safe_post` in `slopmortem/http.py`.**
 
 Lift the SSRF-pinning machinery from `safe_get` into a private `_resolve_and_validate(url) -> str` helper, then have both `safe_get` and `safe_post` call it. New public function:
 
@@ -133,11 +133,11 @@ async def safe_post(
 
 Refactor `safe_get` to call `_resolve_and_validate` so the two helpers share one implementation of the DNS pin. Do not change `safe_get`'s public signature.
 
-- [ ] **Step A.5: Run `pytest tests/test_safe_post.py -v` + the existing `tests/test_ssrf.py` to confirm both helpers stay green.**
+- [x] **Step A.5: Run `pytest tests/test_safe_post.py -v` + the existing `tests/test_ssrf.py` to confirm both helpers stay green.**
 
 The existing `safe_get` tests must still pass after the refactor. If any test fails, the refactor introduced a regression. Fix it before moving on; do not paper over by skipping a test.
 
-- [ ] **Step A.6: Write the Tavily tool failing tests.**
+- [x] **Step A.6: Write the Tavily tool failing tests.**
 
 Add `tests/test_tavily_tools.py`. The Tavily tools currently raise `NotImplementedError`; the tests describe the post-implementation contract. At minimum:
 
@@ -200,7 +200,7 @@ async def test_tavily_extract_propagates_http_error(monkeypatch):
         await _tavily_extract("https://example.com/x")
 ```
 
-- [ ] **Step A.7: Run the tests; confirm they fail.**
+- [x] **Step A.7: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_tavily_tools.py -v
@@ -208,7 +208,7 @@ async def test_tavily_extract_propagates_http_error(monkeypatch):
 
 Expected: all four tests fail with `NotImplementedError` (or import errors if `safe_post` import in the impl breaks first).
 
-- [ ] **Step A.8: Implement `_tavily_search` and `_tavily_extract` in `slopmortem/corpus/tools_impl.py`.**
+- [x] **Step A.8: Implement `_tavily_search` and `_tavily_extract` in `slopmortem/corpus/tools_impl.py`.**
 
 ```python
 import os
@@ -259,7 +259,7 @@ async def _tavily_extract(url: str) -> str:
 
 The `api_key` is read from the env var rather than `Config` because the Tavily tools are passed bare to OpenRouter (not the full `Config`), and the existing `_set_corpus(corpus)` indirection would not extend cleanly to a `_set_config(config)` second binding. Reading from env at call time is the pattern `_get_post_mortem` / `_search_corpus` already break (those use a module-level `_corpus`); the env var read is acceptable here because `TAVILY_API_KEY` is the documented surface in the spec (line 207, line 1023). Document this in the function docstring.
 
-- [ ] **Step A.9: Run all the Tavily-tool tests; confirm they pass.**
+- [x] **Step A.9: Run all the Tavily-tool tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_tavily_tools.py -v
@@ -267,7 +267,7 @@ The `api_key` is read from the env var rather than `Config` because the Tavily t
 
 Expected: 4 passed.
 
-- [ ] **Step A.10: Run the full sweep.**
+- [x] **Step A.10: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
