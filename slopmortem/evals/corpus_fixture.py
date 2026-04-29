@@ -114,7 +114,7 @@ async def restore_jsonl_to_collection(
 
     points: list[PointStruct] = []
     with jsonl_path.open() as f:
-        for idx, raw_line in enumerate(f):
+        for point_id, raw_line in enumerate(f):
             line = raw_line.strip()
             if not line:
                 continue
@@ -124,7 +124,7 @@ async def restore_jsonl_to_collection(
                 values=list(data.get("sparse_values") or []),
             )
             point = PointStruct(
-                id=idx,
+                id=point_id,
                 vector={"dense": list(data["dense"]), "sparse": sparse},
                 payload=data.get("payload") or {},
             )

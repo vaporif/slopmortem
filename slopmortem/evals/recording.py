@@ -166,12 +166,16 @@ class RecordingSparseEncoder:
         """Run ``inner(text)`` and persist a sparse cassette before returning the result."""
         result = self._inner(text)
         _, text_hash = embed_cassette_key(text=text, model=self._model)
-        items = sorted(result.items())
+        if result:
+            indices_t, values_t = zip(*sorted(result.items()), strict=True)
+            indices, values = list(indices_t), list(values_t)
+        else:
+            indices, values = [], []
         cas = SparseCassette(
             model=self._model,
             text_hash=text_hash,
-            indices=[k for k, _ in items],
-            values=[v for _, v in items],
+            indices=indices,
+            values=values,
             text_preview=text[:_PREVIEW_CHARS_TEXT],
         )
         write_sparse_cassette(cas, self._out_dir)

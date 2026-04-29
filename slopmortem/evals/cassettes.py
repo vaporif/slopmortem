@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -158,7 +158,7 @@ class _LlmDebug(BaseModel):
     model_config = _IGNORE
     prompt_preview: str = ""
     system_preview: str = ""
-    tools_present: list[str] = []
+    tools_present: list[str] = Field(default_factory=list)
     response_format_present: bool = False
 
 
@@ -167,7 +167,7 @@ class _LlmEnvelope(BaseModel):
     schema_version: str
     key: _LlmKey
     response: _LlmResponse
-    request_debug: _LlmDebug = _LlmDebug()
+    request_debug: _LlmDebug = Field(default_factory=_LlmDebug)
 
 
 class _EmbedKey(BaseModel):
@@ -280,7 +280,6 @@ def write_sparse_cassette(cas: SparseCassette, out_dir: Path) -> Path:
 
 def _read_json_object(path: Path) -> dict[str, object]:
     try:
-        # `json.loads` returns `Any`; narrow to `dict[str, object]` via isinstance.
         raw: object = json.loads(path.read_text())  # pyright: ignore[reportAny]
     except json.JSONDecodeError as exc:
         msg = f"cassette {path} is not valid JSON: {exc}"
@@ -288,11 +287,8 @@ def _read_json_object(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         msg = f"cassette {path} top-level must be an object"
         raise CassetteFormatError(msg)
-    # Each key in a JSON object is always a `str`; values are arbitrary `object`.
-    items: dict[str, object] = {}
-    for k, v in raw.items():  # pyright: ignore[reportUnknownVariableType]
-        items[str(k)] = v  # pyright: ignore[reportUnknownArgumentType]
-    return items
+    # JSON object keys are always strings by spec; cast keeps the static type honest.
+    return cast("dict[str, object]", raw)
 
 
 def load_llm_cassettes(
