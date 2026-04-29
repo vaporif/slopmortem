@@ -161,7 +161,7 @@ InputContext → RecordingEmbeddingClient → real OpenAI → dense cassette fil
 | Path | Change |
 |------|--------|
 | `slopmortem/llm/fake.py` | Widen `canned` key to `(template_sha, model, prompt_hash)`. Strict lookup — no wildcard fallback. |
-| `slopmortem/llm/fake_embeddings.py` | Add optional `canned: Mapping[(text_hash, model), list[float]]`. When `canned is not None`, lookup is strict and raises `NoCannedEmbeddingError` on miss (no sha-derived fallthrough). When `canned is None`, today's sha-derived behavior is preserved. Symmetric with the LLM rule. |
+| `slopmortem/llm/fake_embeddings.py` | Add optional `canned: Mapping[(text_hash, model), list[float]]`. When `canned is not None`, lookup is strict and raises `NoCannedEmbeddingError` on miss (no sha-derived fallthrough). When `canned is None`, today's sha-derived behavior is preserved. Symmetric with the LLM rule. The cassette-backed path is provider-agnostic: the canned map's `model` field can be any string in `EMBED_DIMS` (default `nomic-ai/nomic-embed-text-v1.5`, opt-in `text-embedding-3-small` / `-large`). |
 | `slopmortem/pipeline.py` | `run_query` accepts an optional `sparse_encoder: SparseTextEncoder \| None` and forwards it to `retrieve()`. Default `None` keeps the existing fastembed lazy-load. Eval/recording paths inject a `RecordingSparseEncoder` (record) or a cassette-backed encoder (replay) so sparse vectors don't require live fastembed at replay time. |
 | `slopmortem/stages/retrieve.py` | Trivial — already accepts `sparse_encoder` parameter; this row is kept for visibility because the production lazy-load is no longer the only path. |
 | `slopmortem/evals/runner.py` | Replace `_build_canned()` and canned helpers with cassette loading. Replace `_EvalCorpus` with `setup_ephemeral_qdrant` context. Add `--scope` arg (applies to both record and replay). Wire `--record` to actually record. Add corpus fixture SHA mismatch warning. Bump `_BASELINE_VERSION = 2`; teach `_serialize_results`, `_diff_against_baseline`, and `--write-baseline` to round-trip `corpus_fixture_sha256` + `recording_metadata` without clobbering. Import `NoCannedResponseError`; pre-check cassette dir existence; wrap `run_query` per row in `try/except NoCannedResponseError` and record a sentinel result + emit `FAIL <row_id>: …`. |
@@ -290,14 +290,17 @@ One JSON object per line, schema described under Architecture overview. ~50KB pe
       "facet": "anthropic/claude-haiku-4-5",
       "rerank": "anthropic/claude-sonnet-4-6",
       "synthesize": "anthropic/claude-sonnet-4-6",
-      "embedding": "text-embedding-3-small"
+      "embedding": "nomic-ai/nomic-embed-text-v1.5",
+      "embedding_provider": "fastembed"
     }
   },
   "rows": { existing v1 row shape }
 }
 ```
 
-Loader supports both versions. Missing `corpus_fixture_sha256` (v1) skips the SHA mismatch warning silently — forward-compat.
+`embedding_provider` is captured alongside `embedding` so a baseline reader can tell whether the cassette set was recorded under the local fastembed default or against OpenAI. A provider/model mismatch between baseline and live config doesn't fail the eval on its own (cassette miss surfaces it loudly per-row), but it's recorded so reviewers see the intended setup at a glance.
+
+Loader supports both versions. Missing `corpus_fixture_sha256` (v1) skips the SHA mismatch warning silently — forward-compat. Missing `embedding_provider` in a v2 baseline is also tolerated (forward-compat with cassette sets recorded before this field was added).
 
 ### Cassette key derivation
 
@@ -328,14 +331,19 @@ def embed_cassette_key(text: str, model: str) -> tuple[str, str]:
 
 ### `just eval-record-corpus` (rare)
 
+**One-time precondition.** Run `slopmortem embed-prefetch` once per machine to warm the fastembed cache (~700 MB across the nomic dense + BM25 sparse models). Without this, the first `eval-record-corpus` invocation pauses on a cold-start HuggingFace download mid-run. The dev shell does not auto-prefetch.
+
 ```
 1. Read tests/fixtures/corpus_fixture_inputs.yml
 2. Spin ephemeral Qdrant collection slopmortem_corpus_record_<pid>_<uuid4>
 3. Run real slopmortem.ingest.run_ingest() against those inputs
+   (uses the configured embedding_provider — fastembed by default; opt in to
+   openai with embedding_provider="openai" + OPENAI_API_KEY if you want the
+   corpus fixture to carry OpenAI vectors)
 4. dump_collection_to_jsonl(client, collection, "corpus_fixture.jsonl.recording")
 5. os.replace("corpus_fixture.jsonl.recording", "corpus_fixture.jsonl") (atomic)
 6. Drop ephemeral collection (try/finally)
-7. Print SHA256 + point count + suggest "now run just eval-record"
+7. Print SHA256 + point count + active embedding_provider + model + suggest "now run just eval-record"
 ```
 
 ### `just eval-record [--scope <consumer>/<id>]` (frequent)
@@ -590,11 +598,23 @@ If non-determinism is found in a template, fix it (parameterize the value, freez
 
 **Future escalation path.** If manual cleanup ever becomes painful, skip pid-based sweep entirely (it can't beat reuse) and add time-based GC: at helper entry, drop `slopmortem_eval_*` / `slopmortem_corpus_record_*` collections whose creation timestamp is older than 24 h. No liveness signal required; the only invariant is "no run takes more than 24 h," which is trivially true. Until that escalation is justified, manual cleanup wins on simplicity.
 
-### Risk 5: fastembed BM25 model load cost and replay determinism
+### Risk 5: fastembed model load cost (dense + sparse) and replay determinism
 
-**The risk.** Sparse encoding currently uses `_no_op_sparse_encoder` in eval mode. The original sketch had eval-replay running real fastembed at query time. fastembed BM25 model is ~150 MB on disk (per `slopmortem/stages/retrieve.py:67` docstring) and takes seconds to load on first use. Two costs: (a) CI bandwidth + cold-start latency on every replay, (b) replay no longer offline-pure if fastembed touches the network for first download.
+**The risk.** Both the dense and sparse encoders are now local fastembed ONNX models under the default config:
 
-**Mitigation.** Treat sparse encoding as a recordable surface. `RecordingSparseEncoder` wraps the live BM25 encoder during `eval-record`, writing one sparse-embedding cassette per query text (key `(model="Qdrant/bm25", text_hash)`). `pipeline.run_query` accepts an optional `sparse_encoder` parameter — replay injects a `CassetteSparseEncoder` backed by the loaded cassettes; record injects the recording wrapper; production paths pass nothing and keep the existing fastembed lazy-load. Stored-document sparse vectors come precomputed in the JSONL fixture (same as today). Net effect: replay does zero fastembed work and zero network I/O; CI cost is only sparse cassette load (microseconds per row).
+- Dense: `nomic-ai/nomic-embed-text-v1.5` (~550 MB) via `FastEmbedEmbeddingClient` — the default per `slopmortem/config.py:43-44`.
+- Sparse: `Qdrant/bm25` (~150 MB) via `slopmortem/corpus/embed_sparse.py`.
+
+Without recording, every replay would (a) download ~700 MB total on cold-start CI runners, (b) load both models into memory each test session (~3–5 s combined), and (c) leak a HuggingFace network dependency into a "no API keys, no network" eval claim. fastembed inference is deterministic given the same model + text, but FP rounding can vary across CPUs / SIMD paths / fastembed versions, so replays on a different host can drift from the recorded vectors at the LSB.
+
+**Mitigation.** Treat both encoders as recordable surfaces, even though neither costs money:
+
+- Dense: `RecordingEmbeddingClient` wraps whichever `EmbeddingClient` the configured provider returns (`FastEmbedEmbeddingClient` by default, `OpenAIEmbeddingClient` if opted in) and writes one cassette per text keyed `(model, text_hash)`.
+- Sparse: `RecordingSparseEncoder` wraps the live BM25 encoder during `eval-record`, writing one sparse cassette per query text keyed `(model="Qdrant/bm25", text_hash)`.
+
+`pipeline.run_query` accepts an optional `sparse_encoder` parameter — replay injects a `CassetteSparseEncoder` backed by the loaded cassettes; record injects the recording wrapper; production paths pass nothing and keep the existing fastembed lazy-load. Stored-document sparse vectors come precomputed in the JSONL fixture (same as today). Net effect: replay does zero fastembed work, zero ONNX runtime startup, zero HuggingFace I/O, and is hardware-FP-independent. CI cost is only cassette load (microseconds per row).
+
+The cassette key already includes `model`, so flipping `embedding_provider` between fastembed and openai (or changing `embed_model_id`) automatically invalidates the dense cassettes (loud `NoCannedEmbeddingError`, not silent vector mismatch).
 
 ### Risk 6: Tavily live-web tools are unfixtured
 
@@ -613,9 +633,10 @@ For cassettes to remain valid:
 1. Prompt templates render deterministically given the same `InputContext` + `Config`.
 2. `Config` values that flow into prompts are stable across runs (eval pins them via baseline metadata).
 3. Tool-call result content from `get_post_mortem` / `search_corpus` is deterministic given a fixed corpus — already true, corpus is the JSONL fixture.
-4. fastembed BM25 sparse encoding is deterministic given the same input text — already true.
+4. fastembed BM25 sparse encoding is deterministic given the same input text + model file — already true.
+5. `Config.embedding_provider` and `Config.embed_model_id` match between record and replay. Drift produces 100 % embed-cassette miss (loud `NoCannedEmbeddingError`, not silent vector mismatch — the cassette key includes `model`). The recording metadata in `baseline.json` captures both fields so the intended setup is reviewable at a glance.
 
-Violating any invariant produces non-reproducible `prompt_hash` values → 100% cassette miss → operator sees `NoCannedResponseError` with the missing key in the error message.
+Violating any invariant produces non-reproducible cassette keys → cassette miss → operator sees `NoCannedResponseError` (LLM) or `NoCannedEmbeddingError` (dense / sparse) with the missing key in the error message.
 
 ## Migration sequence
 
@@ -653,12 +674,14 @@ One PR, eight commits with internal ordering. Each commit leaves `just test` and
 **Preconditions (one-time per machine):**
 - `git lfs install` (idempotent; the flake.nix change in commit 4 makes `git-lfs` available in the dev shell).
 - `.gitattributes` from commit 4 is in place so the JSONL is captured as LFS on first add.
+- `slopmortem embed-prefetch` (downloads the nomic dense + BM25 sparse fastembed models, ~700 MB combined; idempotent — re-runs are no-ops when the cache is warm). Without this, the first `eval-record-corpus` run pauses on a cold-start HuggingFace download mid-flow.
 
 **Operator runs:**
 ```bash
 docker compose up -d qdrant
-RUN_LIVE=1 just eval-record-corpus    # ~$3-5
-RUN_LIVE=1 just eval-record           # ~$0.50-$1, ceiling --max-cost-usd=2.0
+slopmortem embed-prefetch              # one-time fastembed cache warm
+RUN_LIVE=1 just eval-record-corpus    # ~$0.30-$1 under fastembed default; ~$3-5 if embedding_provider=openai
+RUN_LIVE=1 just eval-record           # ~$0.50-$1, ceiling --max-cost-usd=2.0 (LLM-side only)
 ```
 **Adds:** `tests/fixtures/corpus_fixture.jsonl` (~1.5MB, stored via LFS — `git diff` shows the LFS pointer, not the float arrays), `tests/fixtures/cassettes/evals/<row_id>/*.json` (10 dirs, ~70 files; regular git), updated `tests/evals/baseline.json` (v2).
 **Validation:** `git lfs ls-files` shows the JSONL is tracked by LFS; cassette files appear as regular git diffs; operator spot-checks ~5 random `request_debug.prompt_preview` fields.
@@ -667,7 +690,7 @@ RUN_LIVE=1 just eval-record           # ~$0.50-$1, ceiling --max-cost-usd=2.0
 **Modifies:** `slopmortem/evals/runner.py`:
 - Replace `_build_canned()` and helpers with cassette loading.
 - Replace `_EvalCorpus` with `setup_ephemeral_qdrant`.
-- Replace `FakeEmbeddingClient(model=...)` with canned-aware version (dense + sparse).
+- Replace `FakeEmbeddingClient(model=...)` with canned-aware version (dense + sparse). The dense model id reads from `Config.embed_model_id` rather than the removed `_DETERMINISTIC_EMBED_MODEL` literal — this keeps the runner aligned with whatever provider the operator recorded under (`nomic-ai/nomic-embed-text-v1.5` for fastembed default, `text-embedding-3-small` for the OpenAI opt-in).
 - Add SHA mismatch check (warn-only).
 - Bump `_BASELINE_VERSION` from `1` to `2`.
 - `_serialize_results(...)` now takes `corpus_fixture_sha256: str` and `recording_metadata: dict` and writes `{"version": 2, "corpus_fixture_sha256": ..., "recording_metadata": ..., "rows": ...}`.
@@ -676,7 +699,7 @@ RUN_LIVE=1 just eval-record           # ~$0.50-$1, ceiling --max-cost-usd=2.0
 - Import `NoCannedResponseError` (and `NoCannedEmbeddingError`); pre-check `cassette_dir.exists() and any(cassette_dir.iterdir())` per row, log `FAIL <row_id>: no cassettes` and continue if not; wrap `await run_query(...)` in `try/except (NoCannedResponseError, NoCannedEmbeddingError)`, log `FAIL <row_id>: cassette miss`, mark regression, continue. Both paths yield a sentinel result so `_diff_against_baseline` shows the row as failed in the per-row output.
 **Modifies:** `justfile` — update the comment on line 19 to accurately reflect cassette-default behavior (deferred from commit 4).
 **Removes:** `_build_canned`, `_facet_extract_payload`, `_rerank_payload`, `_synthesis_payload`, `_payload`, `_candidate`, `_facets`, `_DETERMINISTIC_*_MODEL`, `_EvalCorpus`, `_no_op_sparse_encoder`.
-**Adds:** `tests/evals/test_runner_replay.py`, `tests/evals/test_fixtures/`. Test list must cover: passes with recorded cassettes, fails on missing cassette dir, fails on key miss, warns on SHA mismatch, **v1 baseline upgrades cleanly to v2 on next `--write-baseline`**, **v2 round-trip preserves `corpus_fixture_sha256` + `recording_metadata`**, `--scope` filtering applies to row loop and to baseline merge, unknown scope fails loudly.
+**Adds:** `tests/evals/test_runner_replay.py`, `tests/evals/test_fixtures/`. Test list must cover: passes with recorded cassettes, fails on missing cassette dir, fails on key miss (LLM and embedding, dense and sparse), warns on SHA mismatch, **v1 baseline upgrades cleanly to v2 on next `--write-baseline`**, **v2 round-trip preserves `corpus_fixture_sha256` + `recording_metadata` (including `embedding_provider`)**, `--scope` filtering applies to row loop and to baseline merge, unknown scope fails loudly, switching `Config.embed_model_id` between record and replay produces a `NoCannedEmbeddingError` cassette miss (not a silent vector mismatch).
 **Validation:** `just test` green. `just eval` passes against committed cassettes from commit 5.
 
 ### Commit 7 — Migrate the e2e test
@@ -825,6 +848,12 @@ grep -nE '\.recording.*\{.*pid.*uuid' slopmortem/evals/recording_helper.py
 
 # Sparse cassette uses Qdrant/bm25 model id
 grep -nE '"Qdrant/bm25"' slopmortem/evals/recording.py slopmortem/evals/cassettes.py
+
+# baseline.json recording_metadata captures embedding_provider
+grep -nE '"embedding_provider"' slopmortem/evals/runner.py             # MUST match
+
+# runner reads dense embed model from Config, not a hardcoded literal
+grep -nE '_DETERMINISTIC_EMBED_MODEL' slopmortem/evals/runner.py       # MUST be empty
 ```
 
 All "MUST match" should resolve to expected hits; "MUST be empty" / "MUST not exist" should produce no output / nonzero exit.
