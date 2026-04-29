@@ -61,7 +61,7 @@ async def safe_get(
     *,
     timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
 ) -> httpx.Response:
-    """Fetch *url* via httpx after enforcing scheme + DNS-pinned SSRF checks."""
+    """Fetch *url* via httpx after enforcing scheme and DNS-pinned SSRF checks."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         msg = f"refusing non-http(s) scheme: {parsed.scheme!r}"
@@ -85,8 +85,8 @@ async def safe_get(
     pinned_ip = addrs[0]
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
-    # The httpx resolver hook keeps a static, pre-validated address tuple so
-    # subsequent connect() can never round-trip back through DNS (SSRF rebinding).
+    # Pin the resolver to a pre-validated address tuple so connect() can't
+    # round-trip back through DNS (which is how rebinding attacks work).
     async def _resolver(  # pyright: ignore[reportUnusedFunction]
         *_args: Any,  # pyright: ignore[reportExplicitAny, reportAny]  # httpx resolver signature is untyped
         **_kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
