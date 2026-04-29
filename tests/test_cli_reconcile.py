@@ -16,10 +16,18 @@ if TYPE_CHECKING:
     import pytest
 
 
+def _fake_journal(*_a: object, **_k: object) -> MagicMock:
+    return MagicMock()
+
+
+def _fake_corpus(*_a: object, **_k: object) -> MagicMock:
+    return MagicMock()
+
+
 def _patch_narrow_deps(monkeypatch: pytest.MonkeyPatch) -> None:
     """Bypass the journal + corpus builders so the reconcile path needs no env vars."""
-    monkeypatch.setattr("slopmortem.cli._build_journal", lambda *_a, **_k: MagicMock())
-    monkeypatch.setattr("slopmortem.cli._build_ingest_corpus", lambda *_a, **_k: MagicMock())
+    monkeypatch.setattr("slopmortem.cli._build_journal", _fake_journal)
+    monkeypatch.setattr("slopmortem.cli._build_ingest_corpus", _fake_corpus)
 
 
 def test_cli_reconcile_dispatches_with_repair_true(
