@@ -7,8 +7,9 @@ the design's failure-handling section is preserved.
 
 The OpenRouter client (``slopmortem/llm/openrouter.py``) drives the tool-call
 loop, wraps tool results in ``<untrusted_document>`` tags, and enforces the
-5-turn bound — this stage is one ``llm.complete(...)`` call. Tracing wiring
-lands in Task 4; the module-level ``_emit_event`` hook is a no-op until then.
+5-turn bound — this stage is one ``llm.complete(...)`` call. ``Laminar.init``
+wiring lands in Task 10 (per plan line 713); the module-level ``_emit_event``
+hook is a no-op stub until that orchestration ships.
 """
 
 from __future__ import annotations
@@ -38,12 +39,13 @@ _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 _INJECTION_MARKER = "prompt_injection_attempted"
 
 
-def _emit_event(event: SpanEvent) -> None:  # noqa: ARG001 — no-op until Task 4 tracing wiring.
+def _emit_event(event: SpanEvent) -> None:  # noqa: ARG001 — no-op until Task 10 wires Laminar.init.
     """Hook for span event emission.
 
-    Tests monkeypatch this to observe emissions. The real Laminar wiring is a
-    Task 4 carry-over; mirroring ``OpenRouterClient._emit`` keeps the seam
-    until then.
+    Tests monkeypatch this to observe emissions. The real Laminar wiring lands
+    in Task 10 (per plan line 713: ``Laminar.init`` is deferred until the rest
+    of the pipeline imports settle); mirroring ``OpenRouterClient._emit`` keeps
+    the seam until then.
     """
     return
 
