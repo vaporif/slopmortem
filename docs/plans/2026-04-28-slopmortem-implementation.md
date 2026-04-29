@@ -2365,11 +2365,11 @@ Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_i
 
 After parse: filter `Synthesis.sources` against `candidate.payload.sources` hosts ∪ `{news.ycombinator.com}` ∪ Tavily-returned hosts (if Tavily was called this turn). Drop off-allowlist URLs and emit span events.
 
-- [ ] **Step 8.5: Cache-warm pattern (called from `pipeline.py` in Task #10, but the per-candidate function lives here)**
+- [x] **Step 8.5: Cache-warm pattern (called from `pipeline.py` in Task #10, but the per-candidate function lives here)**
 
 `synthesize_all(candidates, ctx, llm)` warms with first call (asserting `cache_creation_tokens > 0`), then `asyncio.gather(*rest, return_exceptions=True)` (Blocker B2). Returns `list[Synthesis | Exception]`; the reporting path filters exceptions with logged candidate_id and notes the gap.
 
-- [ ] **Step 8.6: Render test**
+- [x] **Step 8.6: Render test**
 
 ```python
 def test_render_strips_autolinks_and_images(syrupy_snapshot):
