@@ -1,9 +1,10 @@
-# Platform-domain blocklist — CODEOWNERS-protected (per spec line 260).
+# Platform-domain blocklist. CODEOWNERS-protected (per spec line 260).
 #
 # Hosts in this list collapse multiple unrelated startup post-mortems onto a
-# single registrable_domain — e.g. every founder pulse post on linkedin.com/pulse
-# would resolve to one canonical_id. The curated source drops any row whose
-# registrable_domain matches; tier-1 entity resolution skips the same set.
+# single registrable_domain. For example, every founder pulse post on
+# linkedin.com/pulse would resolve to one canonical_id. The curated source
+# drops any row whose registrable_domain matches; tier-1 entity resolution
+# skips the same set.
 #
 # Note: tldextract returns the registrable domain, so `username.medium.com`
 # collapses to `medium.com` and is correctly blocklisted. Custom-domain

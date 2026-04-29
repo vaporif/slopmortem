@@ -2,8 +2,9 @@
 
 The corpus tools (``_get_post_mortem`` / ``_search_corpus``) delegate to a
 module-level :class:`Corpus` bound at CLI startup via :func:`_set_corpus`.
-This indirection keeps the tool functions plain ``async def`` so they match
-the :class:`ToolSpec` signature contract (no closures, no bound methods).
+The indirection keeps the tool functions as plain ``async def`` so they
+match the :class:`ToolSpec` signature contract (no closures, no bound
+methods).
 """
 
 from __future__ import annotations
@@ -32,13 +33,13 @@ __all__ = [
 
 
 class GetPostMortemArgs(BaseModel):
-    """Arguments for the ``get_post_mortem`` tool — canonical id of the candidate."""
+    """Arguments for ``get_post_mortem``: canonical id of the candidate."""
 
     canonical_id: str
 
 
 class SearchCorpusArgs(BaseModel):
-    """Arguments for the ``search_corpus`` tool — query string + optional facet filters."""
+    """Arguments for ``search_corpus``: query string + optional facet filters."""
 
     q: str
     facets: dict[str, str] | None = None
@@ -55,14 +56,14 @@ class SearchHit(BaseModel):
 
 
 class TavilySearchArgs(BaseModel):
-    """Arguments for the ``tavily_search`` tool — web search query string."""
+    """Arguments for ``tavily_search``: web search query string."""
 
     q: str
     limit: int = 5
 
 
 class TavilyExtractArgs(BaseModel):
-    """Arguments for the ``tavily_extract`` tool — URL to fetch and extract."""
+    """Arguments for ``tavily_extract``: URL to fetch and extract."""
 
     url: str
 
@@ -73,7 +74,7 @@ _corpus: Corpus | None = None
 def _set_corpus(c: Corpus) -> None:
     """Bind the module-level :class:`Corpus` used by ``_get_post_mortem`` / ``_search_corpus``.
 
-    Called once at CLI startup so tool functions can stay plain ``async def``.
+    Called once at CLI startup so tool functions stay plain ``async def``.
     Tests pass a fake here and reset to ``None`` in teardown.
     """
     global _corpus  # noqa: PLW0603 — the module-level binding is the public init surface
@@ -96,10 +97,10 @@ async def _search_corpus(
     raw = await _corpus.search_corpus(q, facets=facets)
     hits: list[SearchHit] = []
     for row in raw[:limit]:
-        # The Corpus.search_corpus protocol returns list[dict[str, Any]] —
-        # implementations vary (Qdrant payload shapes, fakes, future stores),
-        # so the per-row dict values are deliberately Any. We coerce each
-        # field to its expected scalar type at this boundary.
+        # Corpus.search_corpus returns list[dict[str, Any]]; impls vary
+        # (Qdrant payload shapes, fakes, future stores), so per-row dict
+        # values are deliberately Any. Coerce each field to its expected
+        # scalar type at this boundary.
         summary = row.get("summary") or row.get("body") or ""
         snippet = str(summary)[:500]
         hits.append(

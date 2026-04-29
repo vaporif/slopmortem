@@ -1,12 +1,11 @@
 """Union-find over alias edges to dedupe canonicals belonging to one lifecycle.
 
-The retrieve stage produces parent-collapsed candidates (one per ``canonical_id``).
-Two distinct canonicals can still describe the same lifecycle when an M&A,
-rebrand, or pivot generated separate corpus entries pre- and post-event. The
-``aliases`` SQLite table (see :mod:`slopmortem.corpus.merge`) records these
-lineage edges; this helper groups input candidates into connected components
-and returns the highest-scoring representative per component plus the other
-canonicals in that component.
+The retrieve stage emits parent-collapsed candidates (one per ``canonical_id``),
+but an M&A, rebrand, or pivot can leave two canonicals for what's really one
+lifecycle. The ``aliases`` SQLite table (see :mod:`slopmortem.corpus.merge`)
+records those lineage edges; this helper groups candidates into connected
+components and returns the top-scoring representative per component, with the
+other canonicals stashed on its ``alias_canonicals`` list.
 
 Pure-Python, no I/O. Callers fetch alias edges however they prefer (per-id
 calls to :meth:`MergeJournal.fetch_aliases` or a one-shot scan of the
@@ -66,9 +65,8 @@ def collapse_alias_components(
 
     for edge in edges:
         a, b = edge.canonical_id, edge.target_canonical_id
-        # Only union when both endpoints are in the result set; otherwise the
-        # edge points at a canonical that wasn't retrieved and there's nothing
-        # to dedupe.
+        # Only union when both endpoints are in the result set. An edge to a
+        # canonical that wasn't retrieved has nothing to dedupe against.
         if a in cand_ids and b in cand_ids:
             _union(parents, a, b)
 
@@ -79,7 +77,7 @@ def collapse_alias_components(
 
     out: list[Candidate] = []
     for group in by_root.values():
-        # Group is in input order, which is descending score. Pick head.
+        # Input order is descending score, so the head is the rep.
         rep = group[0]
         if len(group) == 1:
             out.append(rep)

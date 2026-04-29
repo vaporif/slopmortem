@@ -4,7 +4,7 @@
 
 **Goal:** Build the v1 `slopmortem` CLI: a Python tool that takes a startup pitch, retrieves similar dead startups from a local Qdrant corpus built by the same tool, and writes per-candidate post-mortems via a structured async LLM pipeline routed through OpenRouter.
 
-**Architecture:** Async Python pipeline of pure stage functions (`facet_extract → embed → retrieve → llm_rerank → synthesize → render`) under one `asyncio.run` at the CLI edge. All LLM traffic goes through an `LLMClient` Protocol implemented by `OpenRouterClient` (openai SDK pointed at `openrouter.ai/api/v1`). Corpus persistence is Qdrant (Docker service) for vectors + payload, on-disk markdown for raw and merged bodies, and a SQLite journal for merge state. Laminar wraps every stage and SDK call.
+**Architecture:** Async Python pipeline of pure stage functions (`facet_extract → embed → retrieve → llm_rerank → synthesize → render`) under one `asyncio.run` at the CLI edge. All LLM traffic goes through an `LLMClient` Protocol implemented by `OpenRouterClient` (openai SDK pointed at `openrouter.ai/api/v1`). Corpus persistence: Qdrant (Docker service) for vectors + payload, on-disk markdown for raw and merged bodies, and a SQLite journal for merge state. Laminar wraps every stage and SDK call.
 
 **Tech Stack:** Python 3.11+, async (`asyncio` + `anyio.CapacityLimiter`), `openai` SDK, `qdrant-client>=1.17.1`, `fastembed` (BM25 + cross-encoder), `pydantic-settings` v2 with TOML sources, `pydantic` v2 models, `lmnr-python`, `typer`, `trafilatura`, `tldextract`, `jsonref`, `pytest` + `pytest-recording` + `syrupy`. Dependencies pinned in `pyproject.toml`; tooling via `uv`.
 
@@ -14,7 +14,7 @@
 
 **Selected: Sequential execution (user override of the spec's parallel-subagents choice).**
 
-Tasks run one at a time in the order listed below. The two original contract gates (G1 foundation, G2 prompts + taxonomy) collapse into ordering constraints: G1 tasks come first, G2 second, then everything else in dependency order. No file-ownership conflicts can arise because only one task is in flight at a time.
+Tasks run one at a time in the order listed below. The two original contract gates (G1 foundation, G2 prompts + taxonomy) collapse into ordering constraints: G1 tasks first, G2 second, then everything else in dependency order. No file-ownership conflicts can arise because only one task is in flight at a time.
 
 Order of execution:
 
@@ -41,9 +41,9 @@ Implementation uses `superpowers:executing-plans`: read this plan, work the next
 
 ## Agent Assignments
 
-All code tasks use `python-development:python-pro` — the spec's earlier "general-purpose because Python isn't a listed specialty" was wrong; `python-pro` covers Python 3.14+, async, uv, ruff, Pydantic v2, exactly this stack. Task 4b stays user-owned manual work.
+All code tasks use `python-development:python-pro`. The spec's earlier "general-purpose because Python isn't a listed specialty" was wrong; `python-pro` covers Python 3.14+, async, uv, ruff, Pydantic v2, exactly this stack. Task 4b stays user-owned manual work.
 
-The Gate columns are kept as informational ordering markers (G1 = foundation, G2 = prompts) but no longer gate parallel runs — they describe *prerequisites*, not concurrency boundaries.
+The Gate columns are kept as informational ordering markers (G1 = foundation, G2 = prompts) but no longer gate parallel runs; they describe *prerequisites*, not concurrency boundaries.
 
 | # | Task | Gate | Agent type | Domain |
 |---|------|------|------------|--------|
@@ -71,7 +71,7 @@ Writing-plans may further split or merge these. Final structure decided in the p
 
 Each task block has: **Files** (create/modify/test paths), **Spec refs** (line ranges in the design spec the implementer must read before starting), **Pre-flight** (dependencies and environment setup), **TDD steps** (failing test → minimal impl → green), and **Verification** (commands and expected output).
 
-The design spec is the source of truth for code shape. This plan sequences the work, names tests, and pulls in the corrections from the companion docs. Implementers should:
+The design spec is the source of truth for code shape. This plan sequences the work, names tests, and pulls in the corrections from the companion docs. Implementers:
 
 1. Read this task block.
 2. Read the spec sections it references.
@@ -200,7 +200,7 @@ tests/fixtures/cassettes/*.live.yaml
 Run: `uv sync && uv run python -c 'import openai, qdrant_client, pydantic_settings; print("ok")'`
 Expected: `ok` printed; no import errors.
 
-- [x] **Step 5: Commit the bootstrap** — deferred (will commit after each major task per user's discretion)
+- [x] **Step 5: Commit the bootstrap.** Deferred (will commit after each major task per user's discretion)
 
 `git add pyproject.toml Makefile .gitignore slopmortem/__init__.py tests/__init__.py && git commit -m "bootstrap project deps"`
 
@@ -275,7 +275,7 @@ def test_safe_path_rejects_unknown_kind(tmp_path: Path):
         safe_path(tmp_path, kind="other", text_id="0123456789abcdef")
 ```
 
-- [x] **Step 1.2: Run — expect failure (module does not exist)**
+- [x] **Step 1.2: Run; expect failure (module does not exist)**
 
 Run: `uv run pytest tests/test_paths.py -v`
 Expected: `ImportError: No module named 'slopmortem.corpus.paths'`.
@@ -331,7 +331,7 @@ def safe_path(
     return resolved
 ```
 
-- [x] **Step 1.4: Run — expect green**
+- [x] **Step 1.4: Run; expect green**
 
 Run: `uv run pytest tests/test_paths.py -v`
 Expected: 6 passed.
@@ -459,7 +459,7 @@ class RawEntry(BaseModel):
     fetched_at: datetime
 ```
 
-- [x] **Step 1.7: Run — expect green**
+- [x] **Step 1.7: Run; expect green**
 
 Run: `uv run pytest tests/test_models.py -v`
 Expected: all green. If `dict[str, X]` slipped into `Synthesis.similarity`, B1 regressed; fix before moving on.
@@ -535,8 +535,8 @@ def to_strict_response_schema(model: type[BaseModel]) -> dict[str, Any]:
     strict-mode rules for models with Optional fields.
 
     Pydantic v2 omits any field with a default (incl. `T | None = None`) from the
-    `required` list, but OpenAI strict mode mandates every property be `required` —
-    nullability is expressed via `anyOf:[T,null]`, not by absence from `required`.
+    `required` list, but OpenAI strict mode mandates every property be `required`.
+    Nullability is expressed via `anyOf:[T,null]`, not by absence from `required`.
     This helper inlines `$ref`/`$defs`, strips draft metadata, and force-adds every
     top-level property (and every nested object's properties) to `required`. The
     `anyOf:[T,null]` shape is preserved verbatim. Idempotent: models with no
@@ -566,7 +566,7 @@ def to_strict_response_schema(model: type[BaseModel]) -> dict[str, Any]:
     return dict(inlined)
 
 def synthesis_tools(config) -> list[ToolSpec]:
-    """Factory — Tavily inclusion is config-driven and cannot be a constant."""
+    """Factory. Tavily inclusion is config-driven and cannot be a constant."""
     from slopmortem.corpus.tools_impl import get_post_mortem, search_corpus  # Task #9
     tools = [get_post_mortem, search_corpus]
     if getattr(config, "enable_tavily_synthesis", False):
@@ -789,7 +789,7 @@ def test_K_retrieve_must_gte_N_synthesize(tmp_path, monkeypatch):
 
 - [x] **Step 1.18: Implement `slopmortem/config.py`**
 
-Use `pydantic-settings` v2 with `TomlConfigSettingsSource` — see spec lines 427–457 for the full tunable list and source ordering. The file must declare every key listed there, including `slop_threshold`, `max_doc_tokens`, `tier3_calibration_band` (Blocker B8). Add a `model_validator(mode='after')` that raises if `K_retrieve < N_synthesize`.
+Use `pydantic-settings` v2 with `TomlConfigSettingsSource`; see spec lines 427–457 for the full tunable list and source ordering. The file must declare every key listed there, including `slop_threshold`, `max_doc_tokens`, `tier3_calibration_band` (Blocker B8). Add a `model_validator(mode='after')` that raises if `K_retrieve < N_synthesize`.
 
 Then commit the default `slopmortem.toml` at repo root mirroring the test fixture's defaults.
 
@@ -875,7 +875,7 @@ class Corpus(Protocol):
 
 - [x] **Step 1.21: Synthesis tool signatures (folded-in Task #9 contract)**
 
-`slopmortem/corpus/tools_impl.py` — declare the **signatures only** here so `synthesis_tools` factory can import. Implementations live in this file but for Task #1 the bodies can return placeholder values; Task #9's full impl replaces them.
+In `slopmortem/corpus/tools_impl.py`, declare the **signatures only** so the `synthesis_tools` factory can import. Implementations live in this file but for Task #1 the bodies can return placeholder values; Task #9's full impl replaces them.
 
 ```python
 from __future__ import annotations
@@ -958,7 +958,7 @@ grep -n 'slop_threshold\|max_doc_tokens\|tier3_calibration_band' slopmortem.toml
 
 Expected: first two grep zero matches; third one match; fourth zero matches; fifth all three present.
 
-**Gate-1 acceptance: every shape downstream tasks import is real, typed, and tested. Stop here if anything fails — Task #2 and beyond will not work.**
+**Gate-1 acceptance: every shape downstream tasks import is real, typed, and tested. Stop here if anything fails. Task #2 and beyond will not work.**
 
 ---
 
@@ -1051,7 +1051,7 @@ def test_synthesize_renders_inlined_body():
 
 Each prompt's structure:
 
-- **System block (cached):** rubric / framing / taxonomy enums / `<untrusted_document>` instruction. This block is what `cache_control={"type":"ephemeral","ttl":"1h"}` will mark in Task #2. Keep it stable.
+- **System block (cached):** rubric / framing / taxonomy enums / `<untrusted_document>` instruction. This block is what `cache_control={"type":"ephemeral","ttl":"1h"}` marks in Task #2. Keep it stable.
 - **User block (per-call):** the variable inputs (pitch, candidate body, etc).
 
 For `synthesize.j2`, wrap the candidate body as:
@@ -1112,7 +1112,7 @@ Expected: all green.
 **Spec refs:** §Architecture LLMClient (lines 201–211), §Failure handling (lines 757–760), §Tracing per-LLM-span (line 908), §Concurrency (lines 750–753), §Testing strategy cassettes (lines 1034–1036), all of `2026-04-28-openrouter-api-corrections.md` Issues 1, 2, 3, 4, 5, and the implementation-guidance note.
 
 **Corrections to apply (from `2026-04-28-openrouter-api-corrections.md`):**
-- Issue 1: cache-token names are `usage.prompt_tokens_details.cached_tokens` (read) and `usage.prompt_tokens_details.cache_write_tokens` (write); cost from `usage.cost`.
+- Issue 1: cache-token names are `usage.prompt_tokens_details.cached_tokens` (read) and `usage.prompt_tokens_details.cache_write_tokens` (write). Cost comes from `usage.cost`.
 - Issue 2: HTTP 529 is not surfaced; expect 502 pre-stream OR mid-stream SSE chunk at HTTP 200 with `finish_reason: "error"`.
 - Issue 3: `prices.yml` records pass-through Anthropic rates; PAYG 5.5% deposit fee modelled at budget-ceiling layer, not per-token.
 - Issue 4: schema-probe is opt-in (`OPENROUTER_PROBE_TOOL_SCHEMA=1`); fallback to type-array form is config-driven.
@@ -1331,7 +1331,7 @@ class OpenRouterClient:
             if fr == "error":
                 # Safety net: should be unreachable because _call_with_retry consumes the
                 # stream itself and raises MidStreamError before returning. Kept as a
-                # belt-and-braces guard in case the wrapper is bypassed in a future refactor.
+                # backup guard in case the wrapper is bypassed in a future refactor.
                 raise MidStreamError(getattr(choice, "error", {"code": "unknown"}))
         raise RuntimeError("tool-loop bound exceeded")
 
@@ -1394,7 +1394,7 @@ The retry path must distinguish:
 - fatal (401/403 auth, 402 insufficient credits, 503 no provider): raise immediately, no retry
 - structured-output schema mismatch: raise immediately (retrying won't change the schema we send)
 
-Stream every roundtrip — see corrections Issue 2: a mid-stream SSE error chunk arrives at HTTP 200 with `finish_reason: "error"` and is the only place `overloaded_error` shows up.
+Stream every roundtrip; see corrections Issue 2. A mid-stream SSE error chunk arrives at HTTP 200 with `finish_reason: "error"` and is the only place `overloaded_error` shows up.
 
 - [x] **Step 2.4: Run unit tests**
 
@@ -1493,7 +1493,7 @@ def test_secret_pattern_scrubs():
 
 - [x] **Step 2.8: Write `FakeLLMClient`**
 
-`slopmortem/llm/fake.py` — reads canned responses from a dict keyed by `(prompt_template_sha, model)`. Used by every stage test. Same interface as `LLMClient`.
+`slopmortem/llm/fake.py` reads canned responses from a dict keyed by `(prompt_template_sha, model)`. Used by every stage test. Same interface as `LLMClient`.
 
 - [x] **Step 2.9: Concurrency limiter test**
 
@@ -1536,7 +1536,7 @@ Expected: zero matches (Anthropic-native names must not leak into the OpenRouter
 
 **Spec refs:** §Architecture EmbeddingClient (lines 200, 213–214), §Cost ballpark embedding row (line 950).
 
-`slopmortem/llm/openai_embeddings.py` exports a single source of truth for vector dimensions so `ensure_collection` (Task 3) and the model config (`config.py`) cannot drift:
+`slopmortem/llm/openai_embeddings.py` exports the single source of truth for vector dimensions so `ensure_collection` (Task 3) and the model config (`config.py`) cannot drift:
 
 ```python
 EMBED_DIMS: dict[str, int] = {
@@ -1545,7 +1545,7 @@ EMBED_DIMS: dict[str, int] = {
 }
 ```
 
-`OpenAIEmbeddingClient.dim` returns `EMBED_DIMS[self.model]`; an unknown model id raises at construction time with a clear message ("add the model to EMBED_DIMS"). All consumers — collection setup, fake embeddings, dim assertions in tests — read this map; **no hardcoded `1536` anywhere else**.
+`OpenAIEmbeddingClient.dim` returns `EMBED_DIMS[self.model]`; an unknown model id raises at construction time with a clear message ("add the model to EMBED_DIMS"). All consumers (collection setup, fake embeddings, dim assertions in tests) read this map. **No hardcoded `1536` anywhere else.**
 
 ### Step-by-step
 
@@ -1572,9 +1572,9 @@ def test_unknown_model_raises():
         OpenAIEmbeddingClient(sdk=sdk, budget=Budget(0.01), model="text-embedding-3-xxl")
 ```
 
-- [x] **Step 2b.2: Implement** — call `sdk.embeddings.create(input=texts, model=model)`, retry on transient failures, accumulate cost from `usage.total_tokens / 1_000_000 × price_per_million` (prices in `prices.yml` are per 1M tokens — see header comment at the top of `prices.yml`), debit budget via `reserve/settle`.
+- [x] **Step 2b.2: Implement.** Call `sdk.embeddings.create(input=texts, model=model)`, retry on transient failures, accumulate cost from `usage.total_tokens / 1_000_000 × price_per_million` (prices in `prices.yml` are per 1M tokens; see header comment at the top of `prices.yml`), debit budget via `reserve/settle`.
 
-- [x] **Step 2b.3: `FakeEmbeddingClient`** — deterministic vectors derived from `hashlib.sha256(text)` so tests are stable.
+- [x] **Step 2b.3: `FakeEmbeddingClient`.** Deterministic vectors derived from `hashlib.sha256(text)` so tests are stable.
 
 - [x] **Step 2b.4: Verify**
 
@@ -1668,7 +1668,7 @@ async def ensure_collection(client, name: str, *, dim: int) -> None:
     )
 ```
 
-Callers pass `dim=EMBED_DIMS[settings.embed_model_id]` — the embedding model name in `config.py` is the single source of truth for the dimension.
+Callers pass `dim=EMBED_DIMS[settings.embed_model_id]`. The embedding model name in `config.py` is the single source of truth for the dimension.
 
 - [x] **Step 3.4: Run setup test**
 
@@ -1800,7 +1800,7 @@ CREATE TABLE founding_year_cache (
 | `upsert_resolver_flipped(canonical_id, source, source_id)` | 1 row in `merge_journal`, `merge_state='resolver_flipped'` |
 | `upsert_alias_blocked(canonical_id, source, source_id, alias_edge)` | 1 row in `merge_journal` (`alias_blocked`) **+** 1 row in `aliases`, in one SQLite transaction |
 
-Callers MUST use these methods instead of composing their own write sequences — they are the only sanctioned path to a non-`complete` `merge_state` and they encode the invariant that every row enters the journal in its terminal classification (closing the B6 race window). `mark_complete` is the one promotion path (`pending` → `complete`) and runs after all qdrant + disk writes succeed.
+Callers MUST use these methods instead of composing their own write sequences. They are the only sanctioned path to a non-`complete` `merge_state` and they encode the invariant that every row enters the journal in its terminal classification (closing the B6 race window). `mark_complete` is the one promotion path (`pending` → `complete`) and runs after all qdrant + disk writes succeed.
 
 - [x] **Step 3.7: Failing test for atomic disk writes**
 
@@ -1815,7 +1815,7 @@ async def test_atomic_canonical_write(tmp_path):
     assert not list((base / "canonical").glob("*.tmp"))
 ```
 
-- [x] **Step 3.8: Implement** — write to `<path>.tmp`, then `os.replace(<path>.tmp, <path>)`. Front-matter records `canonical_id`, `combined_hash`, `skip_key`, `merged_at`, `source_ids[]` (canonical) or `canonical_id`, `source`, `source_id`, `content_hash`, `facet_prompt_hash`, `embed_model_id`, `chunk_strategy_version`, `taxonomy_version` (raw).
+- [x] **Step 3.8: Implement.** Write to `<path>.tmp`, then `os.replace(<path>.tmp, <path>)`. Front-matter records `canonical_id`, `combined_hash`, `skip_key`, `merged_at`, `source_ids[]` (canonical) or `canonical_id`, `source`, `source_id`, `content_hash`, `facet_prompt_hash`, `embed_model_id`, `chunk_strategy_version`, `taxonomy_version` (raw).
 
 - [x] **Step 3.9: `chunk_markdown` test + impl**
 
@@ -1823,7 +1823,7 @@ async def test_atomic_canonical_write(tmp_path):
 
 - [x] **Step 3.10: `QdrantCorpus.query` skeleton (full impl in Task #7)**
 
-Implement collection-level read methods (`get_post_mortem`, `search_corpus`) for Task #9; the full `query()` with FormulaQuery lives in Task #7. Provide `upsert_chunk(point)` for ingest.
+Implement collection-level read methods (`get_post_mortem`, `search_corpus`) for Task #9. The full `query()` with FormulaQuery lives in Task #7. Provide `upsert_chunk(point)` for ingest.
 
 - [x] **Step 3.11: `slopmortem ingest --reconcile` skeleton**
 
@@ -1858,7 +1858,7 @@ Expected: all green (with Qdrant running for the integration tests).
 
 ### Step-by-step
 
-- [x] **Step 4a.1: `Source` and `Enricher` Protocols (in `base.py`)** — match spec lines 354–356 verbatim.
+- [x] **Step 4a.1: `Source` and `Enricher` Protocols (in `base.py`).** Match spec lines 354–356 verbatim.
 
 - [x] **Step 4a.2: HTML sanitization test** (the load-bearing security test):
 
@@ -1898,7 +1898,7 @@ async def test_per_host_throttle_caps_one_rps():
     ...
 ```
 
-- [x] **Step 4a.5: HN Algolia adapter** — endpoint pinned to `https://hn.algolia.com/api/v1/search_by_date` (chronological; `/search` is relevance-ranked and would re-surface the same long-tail threads on every ingest — see spec line 242). Use `safe_get` from `slopmortem/http.py`, identify UA as `slopmortem/<version> (+<repo>)`. Query params: `tags=story`, `query=<term>`, `numericFilters=created_at_i>=<since-epoch>` for incremental ingest (state stored on the source's last-run watermark), paginate via `page=` until `nbPages` exhausted. Map results into `RawEntry`. Add a unit test asserting the constructed URL begins with `https://hn.algolia.com/api/v1/search_by_date?` so an accidental swap to `/search` fails loudly.
+- [x] **Step 4a.5: HN Algolia adapter.** Endpoint pinned to `https://hn.algolia.com/api/v1/search_by_date` (chronological; `/search` is relevance-ranked and would re-surface the same long-tail threads on every ingest; see spec line 242). Use `safe_get` from `slopmortem/http.py`, identify UA as `slopmortem/<version> (+<repo>)`. Query params: `tags=story`, `query=<term>`, `numericFilters=created_at_i>=<since-epoch>` for incremental ingest (state stored on the source's last-run watermark), paginate via `page=` until `nbPages` exhausted. Map results into `RawEntry`. Add a unit test asserting the constructed URL begins with `https://hn.algolia.com/api/v1/search_by_date?` so an accidental swap to `/search` fails loudly.
 
 - [x] **Step 4a.6: Curated v0 YAML**
 
@@ -1984,7 +1984,7 @@ async def test_parent_subsidiary_suffix_demotes():
 
 When tier-1 hits an old domain but the new entry names a NEW canonical entity (founder blog says "we became X"), write an `acquired_by` or `rebranded_to` edge to the `aliases` table and BLOCK the merge (spec line 261).
 
-**Atomicity contract:** alias detection runs as a *precheck* before the journal `upsert_pending` write — the same shape as the resolver-flip precheck (spec.md:523–545). The journal row is written **once**, in its terminal classification (`pending` | `resolver_flipped` | `alias_blocked`); there is no two-step "write pending then update to alias_blocked". This closes the crash window between resolution and the alias-blocked promotion. The `aliases` row and the `merge_journal` row are written under one SQLite transaction (`BEGIN; INSERT INTO aliases ...; INSERT INTO merge_journal ... merge_state='alias_blocked'; COMMIT`) so a crash either rolls both back or commits both.
+**Atomicity contract:** alias detection runs as a *precheck* before the journal `upsert_pending` write, the same shape as the resolver-flip precheck (spec.md:523–545). The journal row is written **once**, in its terminal classification (`pending` | `resolver_flipped` | `alias_blocked`); there is no two-step "write pending then update to alias_blocked". This closes the crash window between resolution and the alias-blocked promotion. The `aliases` row and the `merge_journal` row are written under one SQLite transaction (`BEGIN; INSERT INTO aliases ...; INSERT INTO merge_journal ... merge_state='alias_blocked'; COMMIT`) so a crash either rolls both back or commits both.
 
 ```python
 async def test_alias_blocked_atomic_no_pending_residue(journal):
@@ -2073,7 +2073,7 @@ from slopmortem.llm.prompts import render_prompt
 async def summarize_for_rerank(text: str, llm: LLMClient, *, model: str | None = None) -> str:
     """Produce a ≤400-token summary used as `payload.summary` by `llm_rerank`.
 
-    Used at ingest time, between `facet_extract` and `embed_dense`, so the
+    Runs at ingest time, between `facet_extract` and `embed_dense`, so the
     rerank prompt receives a small fixed-cost summary instead of the full
     canonical body. The 400-token cap matches what `llm_rerank` budgets per
     candidate in its system prompt.
@@ -2107,7 +2107,7 @@ async def test_slop_classified_doc_routes_to_quarantine_journal(tmp_path):
     ...
 ```
 
-Use Binoculars (small open-source model, ~150 MB). Wrap classifier in `asyncio.to_thread` since it's CPU-bound. Add fastembed model load in startup.
+Use Binoculars (small open-source model, ~150 MB). Wrap classifier in `asyncio.to_thread` since it's CPU-bound. Load the fastembed model at startup.
 
 - [x] **Step 5b.3: `--dry-run` test**
 
@@ -2119,7 +2119,7 @@ async def test_dry_run_no_writes(tmp_path):
 
 - [x] **Step 5b.4: Per-host throttle + rate-limit backoff**
 
-`429` from any source backs off that source only; the rest of the run continues. Use `slopmortem/http.py:safe_get` per-host token bucket from Task #4a.
+A `429` from any source backs off that source only; the rest of the run continues. Use the `slopmortem/http.py:safe_get` per-host token bucket from Task #4a.
 
 - [x] **Step 5b.5: Bounded fan-out**
 
@@ -2131,7 +2131,7 @@ One serial `complete(...)` call with the shared system block + `cache=True` runs
 
 - [x] **Step 5b.7: Read-ratio probe on first 5 fan-out responses**
 
-Per spec line 205: log `cache_read / (cache_read + cache_creation)` for the first 5 responses. If < 0.80, emit a warning span event so the operator notices before spending the full ingest budget.
+Per spec line 205, log `cache_read / (cache_read + cache_creation)` for the first 5 responses. If < 0.80, emit a warning span event so the operator notices before spending the full ingest budget.
 
 - [x] **Step 5b.8: Verify**
 
@@ -2246,7 +2246,7 @@ async def test_other_facet_does_not_boost(qdrant_client):
 
 - [x] **Step 7.2: Implement `retrieve`**
 
-Build the `Prefetch + FormulaQuery` query exactly as spec lines 605–679. Iterate `query_facets.items()` and skip values equal to `"other"`. The FormulaQuery requires `qdrant-client>=1.14`. Use `SumExpression`, `MultExpression`, `FilterCondition` from `qdrant_client.models`. Collapse hits to parents (one per `canonical_id`) in Python, dedupe by alias-graph component, return `list[Candidate]` of length `K_retrieve`.
+Build the `Prefetch + FormulaQuery` query exactly as spec lines 605–679. Iterate `query_facets.items()` and skip values equal to `"other"`. The FormulaQuery requires `qdrant-client>=1.14`. Use `SumExpression`, `MultExpression`, `FilterCondition` from `qdrant_client.models`. Collapse hits to parents (one per `canonical_id`) in Python, dedupe by alias-graph component, and return a `list[Candidate]` of length `K_retrieve`.
 
 - [x] **Step 7.3: Failing test for `llm_rerank`**
 
@@ -2361,9 +2361,9 @@ async def test_synthesize_ignores_injected_instructions(fake_llm_replays_injecti
 
 - [x] **Step 8.4: Implement synthesize**
 
-Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_id}">…</untrusted_document>`; pass `tools=synthesis_tools(config)`; build the `response_format` schema via `to_strict_response_schema(Synthesis)` (idempotent for `Synthesis` — no Optional-default fields — but consistency keeps the call sites uniform and survives future schema changes); pass `extra_body={"provider": {"require_parameters": True}}` to `llm.complete(...)` (the `LLMClient.complete` Protocol exposes `extra_body` since Task 1 — Anthropic-via-OpenRouter requires this for structured output to validate; reference: `2026-04-28-openrouter-api-corrections.md` Issue 5). Tool-loop bound at 5 turns. Tavily ≤2 calls per synthesis (track per-call).
+Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_id}">…</untrusted_document>`; pass `tools=synthesis_tools(config)`; build the `response_format` schema via `to_strict_response_schema(Synthesis)` (idempotent for `Synthesis` since it has no Optional-default fields, but consistency keeps the call sites uniform and survives future schema changes); pass `extra_body={"provider": {"require_parameters": True}}` to `llm.complete(...)` (the `LLMClient.complete` Protocol exposes `extra_body` since Task 1; Anthropic-via-OpenRouter requires this for structured output to validate; reference: `2026-04-28-openrouter-api-corrections.md` Issue 5). Tool-loop bound at 5 turns. Tavily ≤2 calls per synthesis (track per-call).
 
-After parse: filter `Synthesis.sources` against `candidate.payload.sources` hosts ∪ `{news.ycombinator.com}` ∪ Tavily-returned hosts (if Tavily was called this turn). Drop off-allowlist URLs and emit span events.
+After parse, filter `Synthesis.sources` against `candidate.payload.sources` hosts ∪ `{news.ycombinator.com}` ∪ Tavily-returned hosts (if Tavily was called this turn). Drop off-allowlist URLs and emit span events.
 
 - [x] **Step 8.5: Cache-warm pattern (called from `pipeline.py` in Task #10, but the per-candidate function lives here)**
 
@@ -2404,7 +2404,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [x] **Step 9.1: Failing test — tools call real corpus**
+- [x] **Step 9.1: Failing test: tools call real corpus**
 
 ```python
 async def test_get_post_mortem_reads_canonical(fixture_corpus):
@@ -2420,7 +2420,7 @@ async def test_search_corpus_returns_hits(fixture_corpus):
 
 - [x] **Step 9.2: Implement against `Corpus` Protocol**
 
-The implementations need a `Corpus` instance. Use a module-level `_set_corpus(c: Corpus)` initialization function called at CLI startup (Task #10), so tools can be plain `async def` matching the signature contract from Task #1.
+The implementations need a `Corpus` instance. Use a module-level `_set_corpus(c: Corpus)` initialization function called at CLI startup (Task #10) so tools can be plain `async def` matching the signature contract from Task #1.
 
 - [x] **Step 9.3: Signature contract test**
 
@@ -2458,7 +2458,7 @@ Expected: all green.
 ## Task 10: CLI + `pipeline.py` orchestration
 
 **Files:**
-- Create: `slopmortem/cli.py` (typer app — `query` (default), `ingest`, `replay`)
+- Create: `slopmortem/cli.py` (typer app: `query` (default), `ingest`, `replay`)
 - Create: `slopmortem/pipeline.py` (async stage composition)
 - Modify: `slopmortem/corpus/tools_impl.py` (add `_set_corpus` init)
 - Test: `tests/test_pipeline_e2e.py`
@@ -2619,7 +2619,7 @@ Expected: all green.
 - Create: `tests/evals/datasets/seed.jsonl` (10 diverse `InputContext` JSON lines)
 - Create: `tests/evals/baseline.json`
 - Test: `tests/test_eval_assertions.py`
-- Modify: `Makefile` (add `eval` target — already done in Pre-flight Step 2)
+- Modify: `Makefile` (add `eval` target; already done in Pre-flight Step 2)
 
 **Spec refs:** §Tracing iteration loop (lines 916–921), §Testing strategy eval runner (line 1049).
 
@@ -2651,11 +2651,11 @@ def lifespan_months_positive(synthesis) -> bool:
 
 Loads dataset, runs `pipeline.run_query` per row, applies assertions, prints per-item results, exits non-zero if regression vs baseline (or any assertion fails on a row that previously passed).
 
-**LLM isolation:** the runner defaults to `FakeLLMClient` + `FakeEmbeddingClient` populated from cassettes under `tests/fixtures/cassettes/evals/`. Live API calls are gated behind a `--live` flag (or `RUN_LIVE=1` env var); both must be set explicitly to spend real budget. The `--record` flag (paired with `--live`) re-records cassettes; `make eval-record` is the recording entry point. Default `make eval` is deterministic and free.
+**LLM isolation:** the runner defaults to `FakeLLMClient` + `FakeEmbeddingClient` populated from cassettes under `tests/fixtures/cassettes/evals/`. Live API calls are gated behind a `--live` flag (or `RUN_LIVE=1` env var); both must be set explicitly to spend real budget. The `--record` flag (paired with `--live`) re-records cassettes. `make eval-record` is the recording entry point. Default `make eval` is deterministic and free.
 
 - [x] **Step 11.3: Seed dataset**
 
-Ten diverse `InputContext` lines covering different sectors / business models / years filters.
+Ten `InputContext` lines covering different sectors, business models, and years filters.
 
 - [x] **Step 11.4: Tests**
 
@@ -2695,7 +2695,7 @@ Expected: all green (Qdrant-required tests included).
 RUN_LIVE=1 uv run pytest tests/smoke -v
 ```
 
-This goes against the real OpenRouter API. Run weekly per spec line 151. Expect cost ≤ $0.50.
+Hits the real OpenRouter API. Run weekly per spec line 151. Expect cost ≤ $0.50.
 
 - [ ] **Lint and typecheck**
 
@@ -2729,19 +2729,19 @@ Expected: a markdown report on stdout with 5 candidate post-mortems, cost <= $0.
 
 - [ ] **Two-stage review per `superpowers:requesting-code-review`**
 
-Spawn one independent reviewer per dimension (security, architecture, testing). Address any high-confidence findings before merging.
+Spawn one independent reviewer per dimension (security, architecture, testing). Fix any high-confidence findings before merging.
 
 ---
 
 ## Out of scope (v1)
 
-These items are spec-described and tracked, but DO NOT implement in v1:
+These items are spec-described and tracked, but do NOT implement in v1:
 
-- `ClaudeCliClient` (subprocess-based LLMClient) — see spec lines 1058, 210–211.
-- MCP server wrapper around synthesis tools — spec line 1059.
-- Direct-Anthropic + Batches optimization — spec line 1057.
-- Single-call synthesis optimization — spec line 1060.
-- HyDE, real-only retrieval floor (`M_real`), Wayback ownership-discontinuity check, CNAME lookup, interactive `--review` queue, AgentDojo corpus, spotlighting — all in §Open questions / v2 hardening (spec lines 1063–1091).
-- `--ack-trifecta` flag, base64+entropy URL checks — v2 prompt-injection hardening.
+- `ClaudeCliClient` (subprocess-based LLMClient): see spec lines 1058, 210–211.
+- MCP server wrapper around synthesis tools: spec line 1059.
+- Direct-Anthropic + Batches optimization: spec line 1057.
+- Single-call synthesis optimization: spec line 1060.
+- HyDE, real-only retrieval floor (`M_real`), Wayback ownership-discontinuity check, CNAME lookup, interactive `--review` queue, AgentDojo corpus, spotlighting: all in §Open questions / v2 hardening (spec lines 1063–1091).
+- `--ack-trifecta` flag, base64+entropy URL checks: v2 prompt-injection hardening.
 
 Do not add scaffolding for these. If the v1 surface needs to support them later, add the extension point at that time, not now.

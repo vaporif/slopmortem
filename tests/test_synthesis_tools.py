@@ -2,14 +2,13 @@
 
 The corpus tool functions ``_get_post_mortem`` / ``_search_corpus`` delegate
 through the :class:`slopmortem.corpus.store.Corpus` protocol. These tests
-exercise the delegation wiring with a lightweight in-memory fake corpus —
-the live Qdrant integration shape is covered separately by
+hit the delegation wiring with a lightweight in-memory fake corpus. Live
+Qdrant integration shape is covered separately by
 ``tests/stages/test_retrieve.py`` (gated on ``requires_qdrant``).
 
-Using a fake here (vs. the live ``fixture_corpus`` from the retrieve tests)
-keeps Task 9 unit-testable without a Qdrant service: the contract under
-test is the tool function -> Corpus protocol delegation, not Qdrant
-behavior.
+A fake (vs. the live ``fixture_corpus`` from the retrieve tests) keeps
+Task 9 unit-testable without a Qdrant service. The contract under test is
+tool-function -> Corpus protocol delegation, not Qdrant behavior.
 """
 
 from __future__ import annotations
@@ -25,10 +24,10 @@ if TYPE_CHECKING:
 
 
 class _FakeCorpus:
-    """Minimal Corpus stand-in: only ``get_post_mortem`` / ``search_corpus`` are read by Task 9.
+    """Minimal Corpus stand-in: Task 9 only reads ``get_post_mortem`` / ``search_corpus``.
 
-    A no-op ``query`` is supplied so the structural :class:`Corpus` protocol
-    is satisfied for ``_set_corpus``'s signature.
+    A no-op ``query`` exists to satisfy the structural :class:`Corpus`
+    protocol for ``_set_corpus``'s signature.
     """
 
     def __init__(
@@ -68,7 +67,7 @@ class _FakeCorpus:
 
 @pytest.fixture
 def fixture_corpus():
-    """In-memory fake corpus pre-loaded with a single Acme post-mortem and one search hit."""
+    """In-memory fake corpus with one Acme post-mortem and one search hit."""
     corpus = _FakeCorpus(
         canonical={"acme.com": "# Acme\n\nAcme failed because of scrap-metal margins."},
         hits=[
@@ -85,7 +84,7 @@ def fixture_corpus():
     try:
         yield corpus
     finally:
-        # Reset module-level binding so other tests don't observe our fake.
+        # Reset module-level binding so other tests don't see our fake.
         import slopmortem.corpus.tools_impl as ti  # noqa: PLC0415
 
         ti._corpus = None

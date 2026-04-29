@@ -1,4 +1,4 @@
-# Curated post-mortem URLs — v0 scaffold (5/sector x 10 sectors = 50 rows).
+# Curated post-mortem URLs: v0 scaffold (5/sector x 10 sectors = 50 rows).
 #
 # This file ships the schema and a placeholder list. Task 4b (user-owned)
 # replaces every URL with a hand-vetted real post-mortem and computes the
@@ -14,7 +14,7 @@
 #   content_sha256_at_review  (required) sha256 of the page body at review time;
 #                             "PLACEHOLDER" until Task 4b populates real hashes.
 #
-# CODEOWNERS-protected (per spec line 260) — review on all changes.
+# CODEOWNERS-protected (per spec line 260); review on all changes.
 
 # === fintech (5) ===
 - url: https://example.com/fintech/postmortem-1

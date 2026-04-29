@@ -1,9 +1,8 @@
 """Smoke tests for corpus.schema (re-exports) and corpus.store (Corpus protocol).
 
-These modules are type-only surfaces — every caller imports them under
-``TYPE_CHECKING``, so they never execute at runtime and would otherwise show
-as 0% coverage. Tests here pin the public surface and exercise the runtime
-``isinstance`` behaviour of the Protocol.
+Both modules are type-only — callers import under ``TYPE_CHECKING``, so they
+never run and would show 0% coverage. These tests pin the public surface and
+exercise runtime ``isinstance`` against the Protocol.
 """
 
 from __future__ import annotations

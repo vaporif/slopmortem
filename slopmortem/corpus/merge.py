@@ -1,24 +1,24 @@
 # pyright: reportAny=false
 """SQLite-backed merge journal, quarantine table, and alias graph.
 
-The async surface dispatches every sqlite call through :func:`anyio.to_thread.run_sync`.
-One short-lived connection per call, no pool. WAL mode and
-``busy_timeout=5000`` are set on every connection.
+The async surface routes every sqlite call through
+:func:`anyio.to_thread.run_sync`. One short-lived connection per call, no
+pool. Every connection uses WAL and ``busy_timeout=5000``.
 
-Terminal-state writers (atomicity contract per spec line 538):
+Terminal-state writers (atomicity contract, spec line 538):
 
 - :meth:`MergeJournal.upsert_pending`
 - :meth:`MergeJournal.upsert_resolver_flipped`
 - :meth:`MergeJournal.upsert_alias_blocked`
 
-Each runs its inserts in one ``BEGIN; ... COMMIT;`` so a crash either
-commits all rows or none. ``mark_complete`` is the only promotion path
-from ``pending`` to ``complete``, and runs after the qdrant and disk
-writes succeed.
+Each runs its inserts inside one ``BEGIN; ... COMMIT;`` so a crash either
+commits everything or nothing. ``mark_complete`` is the only path from
+``pending`` to ``complete``, and runs after the qdrant and disk writes
+succeed.
 
 Quarantine rows live in their own table keyed on
-``(content_sha256, source, source_id)``. They have **no** ``canonical_id``
-or ``merge_state`` column; quarantined docs cannot live in the main journal.
+``(content_sha256, source, source_id)``. They have no ``canonical_id`` or
+``merge_state`` column; quarantined docs do not live in the main journal.
 """
 
 from __future__ import annotations
@@ -115,7 +115,7 @@ class MergeJournal:
         self._db = db_path
 
     async def init(self) -> None:
-        """Create tables and indexes if they don't already exist."""
+        """Create tables and indexes if missing."""
         await to_thread.run_sync(self._init_sync)
 
     def _init_sync(self) -> None:
@@ -158,7 +158,7 @@ class MergeJournal:
     ) -> None:
         """Atomically write a journal alias_blocked row and an alias graph edge.
 
-        Both inserts run inside one ``BEGIN; ... COMMIT;`` per spec line 538.
+        Both inserts run inside one ``BEGIN; ... COMMIT;`` (spec line 538).
         """
         await to_thread.run_sync(
             self._upsert_alias_blocked_sync,
@@ -174,11 +174,10 @@ class MergeJournal:
             try:
                 # Resolver flip: this (source, source_id) is now bound to a
                 # new canonical_id, and the UNIQUE reverse index would block
-                # the insert otherwise. Drop the prior row for this
-                # (source, source_id) FIRST when the new state is
-                # 'resolver_flipped'. The prior canonical's chunks, raw, and
-                # canonical files stay on disk; reconcile handles drift class
-                # (f) repair.
+                # the insert otherwise. Drop the prior row first when the
+                # new state is 'resolver_flipped'. Prior canonical's chunks,
+                # raw, and canonical files stay on disk; reconcile drift
+                # class (f) handles repair.
                 if state == "resolver_flipped":
                     conn.execute(
                         """

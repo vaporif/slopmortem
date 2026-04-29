@@ -5,8 +5,8 @@ Reviewed: 2026-04-28 by 5 parallel reviewers + 1 confirmer + 1 cross-cutting rev
 Plan under review: `docs/plans/2026-04-28-slopmortem-implementation.md`
 
 Severity scale:
-- **BLOCKER** — plan cannot be executed as written; will fail or contradict load-bearing spec.
-- **CRITICAL** — material rework, data corruption risk, missed acceptance criteria, broken contracts.
+- **BLOCKER**: plan cannot be executed as written; will fail or contradict load-bearing spec.
+- **CRITICAL**: material rework, data corruption risk, missed acceptance criteria, broken contracts.
 
 All issues below cleared a cross-check by an independent verification agent. Refuted and downgraded findings are recorded at the bottom for transparency.
 
@@ -35,7 +35,7 @@ All issues below cleared a cross-check by an independent verification agent. Ref
 
 ### A4 [CRITICAL] Render test uses `or` where `and` is required
 - **Where:** plan.md:2137
-- **Now:** `assert "[" not in md or "](" not in md` — passes for `[foo][1]` reference-style links.
+- **Now:** `assert "[" not in md or "](" not in md`, which passes for `[foo][1]` reference-style links.
 - **Fix:** Replace with regex check that catches both inline and reference-style:
   ```python
   import re
@@ -59,7 +59,7 @@ All issues below cleared a cross-check by an independent verification agent. Ref
 
 ### A8 [CRITICAL] `resp.usage` accessed as dict but `openai` SDK returns typed object
 - **Where:** plan.md:1226–1230
-- **Now:** `usage.get("cost", 0.0) if isinstance(usage, dict) else 0.0` — typed object falls through to `0.0`.
+- **Now:** `usage.get("cost", 0.0) if isinstance(usage, dict) else 0.0`; the typed object falls through to `0.0`.
 - **Fix:** Use attribute access on the typed object:
   ```python
   usage = resp.usage
@@ -82,25 +82,25 @@ All issues below cleared a cross-check by an independent verification agent. Ref
 ### A10 [CRITICAL] Bootstrap `pyproject.toml` missing required deps
 - **Where:** plan.md:96–142 (bootstrap pyproject.toml)
 - **Missing:** `tiktoken` (Step 3.9), `jinja2` (Task 0), `readability-lxml` (extraction fallback per spec line 244), `binoculars` (slop classifier per spec line 252).
-- **Note:** `anthropic>=0.40` (plan.md:106) is unused in v1 (only `openai` SDK pointed at OpenRouter is used) — remove to reduce confusion.
+- **Note:** `anthropic>=0.40` (plan.md:106) is unused in v1 (only `openai` SDK pointed at OpenRouter is used); remove to reduce confusion.
 - **Fix:** Add the four missing deps to bootstrap pyproject.toml. Remove `anthropic`. Verify package names with `uv add --dry-run` if uncertain.
 
-### A11 [CRITICAL] `budget_exceeded` field hardcoded `False` — never reflects real breach
+### A11 [CRITICAL] `budget_exceeded` field hardcoded `False`, never reflects real breach
 - **Where:** plan.md:2289–2291 (`PipelineMeta` construction in `run_query`)
 - **Now:** `BudgetExceeded` propagates out of `run_query`, so the only path reaching the return is no-exception, where the field is unconditionally `False`.
 - **Fix:** Wrap the pipeline body in `try/except BudgetExceeded` and on catch return a partial `Report` with `pipeline_meta.budget_exceeded=True` plus whatever stages completed. The renderer already shows the field in the footer (spec line 895).
 
-### A12 [BLOCKER] Eval runner has no LLM isolation — runs live on every `make eval`
+### A12 [BLOCKER] Eval runner has no LLM isolation; runs live on every `make eval`
 - **Where:** plan.md:2397–2399 (Step 11.2), plan.md:2419 (Step 11.5), plan.md:158–159 (Makefile target)
 - **Now:** Runner calls `pipeline.run_query` with no fake/cassette mechanism; baseline regression detection is non-deterministic + paid.
 - **Fix:** Default eval runner to `FakeLLMClient` + `FakeEmbeddingClient` populated from cassettes. Add `--live` flag (or `RUN_LIVE=1` env var) for explicit live runs. Bake cassette generation into a separate `make eval-record` target. Default `make eval` reads from cassettes.
 
-### A13 [CRITICAL] Task 9 (real tool impls) ordered after Task 8 (synthesize) — `NotImplementedError` at integration test
+### A13 [CRITICAL] Task 9 (real tool impls) ordered after Task 8 (synthesize); `NotImplementedError` at integration test
 - **Where:** plan.md:19–36 (execution order: Task 8 at position 13, Task 9 at position 14)
 - **Now:** `synthesis_tools(config)` returns specs wrapping `NotImplementedError` stubs from Task 1; Task 8's tool-use fixture invokes them.
 - **Fix:** Move Task 9 to run before Task 8 (swap positions 13 and 14 in the execution table). Update Gate references accordingly.
 
-### A14 [CRITICAL] `summarize.py` listed in spec but no task creates it
+### A14 [CRITICAL] `summarize.py` listed in spec, but no task creates it
 - **Where:** spec.md:369–374, spec.md:498, spec.md:948–950 (component listed); plan has zero matching deliverable.
 - **Now:** `payload.summary` is required by `llm_rerank` (plan.md:2033 test asserts it) but ingest never populates it.
 - **Fix:** Add a TDD substep to Task 5b (Ingest CLI + orchestration) that creates `slopmortem/corpus/summarize.py` with `summarize_for_rerank(text, llm) -> str` (≤400 tokens), wires it into the ingest data flow between `facet_extract` and `embed_dense`, and writes the result into `payload.summary`. Add a unit test using `FakeLLMClient`.
@@ -120,15 +120,15 @@ All issues below cleared a cross-check by an independent verification agent. Ref
 
 ## B. Needs human decision (do NOT auto-fix)
 
-### B1 [RESOLVED 2026-04-28] IP-pinning into `Laminar.init` URL — deferred to v2
+### B1 [RESOLVED 2026-04-28] IP-pinning into `Laminar.init` URL, deferred to v2
 - **Where:** plan.md:635–650 (Step 1.15) vs spec.md:904 vs review-issues.md appendix #6
-- **Decision (2026-04-28):** Deferred to v2. The Laminar SDK does not expose a `http_client` / `transport` parameter (verified against `lmnr-ai/lmnr-python` `src/lmnr/sdk/laminar.py`), so the `safe_get` resolver cannot be bound into the SDK's connection pool without upstream changes. Implementing it in v1 would require either upstreaming the parameter or replacing the OTLP exporter through OTel internals — out of scope.
+- **Decision (2026-04-28):** Deferred to v2. The Laminar SDK does not expose a `http_client` / `transport` parameter (verified against `lmnr-ai/lmnr-python` `src/lmnr/sdk/laminar.py`), so the `safe_get` resolver cannot be bound into the SDK's connection pool without upstream changes. Implementing it in v1 would require either upstreaming the parameter or replacing the OTLP exporter through OTel internals; out of scope.
 - **Residual risk accepted:** TOCTOU rebind window between resolve-and-validate at `init_tracing` and the SDK's first connect. On the loopback default the exposure is small; on `LMNR_ALLOW_REMOTE=1` it is real and accepted (deployment trusts its own DNS).
 - **Spec edits applied:** spec.md:904 and spec.md:1015 rewritten to drop the false TOCTOU-closed claim and document the v2 deferral + residual window. design-review-issues.md:289–292 already records this decision; plan.md Step 1.15 already matches (resolve-and-validate only, no pin).
 
-### B2 [RESOLVED 2026-04-28] HN Algolia endpoint — pinned to `search_by_date`
+### B2 [RESOLVED 2026-04-28] HN Algolia endpoint, pinned to `search_by_date`
 - **Where:** plan.md Step 4a.5 + spec.md line 242
-- **Decision (2026-04-28):** Endpoint pinned to `https://hn.algolia.com/api/v1/search_by_date` (chronological, newest-first). `/search` (relevance-ranked) is wrong for ongoing obituary coverage — it would re-surface the same long-tail popular threads on every ingest run, undermining incremental coverage of newly-failing companies.
+- **Decision (2026-04-28):** Endpoint pinned to `https://hn.algolia.com/api/v1/search_by_date` (chronological, newest-first). `/search` (relevance-ranked) is wrong for ongoing obituary coverage; it would re-surface the same long-tail popular threads on every ingest run, undermining incremental coverage of newly-failing companies.
 - **Spec edits applied:** spec.md:242 now pins the endpoint URL and documents query params (`tags=story`, `numericFilters=created_at_i>=<since-epoch>`, `page=`). plan.md Step 4a.5 mirrors the URL and adds a unit-test assertion that the constructed URL starts with `…/search_by_date?` so accidental swap to `/search` fails loudly.
 
 ### B3 [RESOLVED 2026-04-28] `FormulaQuery` facet keys aligned to singular
@@ -153,7 +153,7 @@ All issues below cleared a cross-check by an independent verification agent. Ref
 
 ### B5 [RESOLVED 2026-04-28] Qdrant collection dim hardcoded as `1536`
 - **Where:** plan.md Task 2b + Task 3 Step 3.3
-- **Decision:** Single source of truth — `EMBED_DIMS: dict[str, int]` map in `slopmortem/llm/openai_embeddings.py` keyed by embedding-model id. `EmbeddingClient.dim` reads it; `ensure_collection(client, name, *, dim)` accepts dim as a kwarg; callers pass `dim=EMBED_DIMS[settings.embed_model_id]`. `ensure_collection` raises `ValueError("dim mismatch …")` if an existing collection has a different dim — closes the silent-corruption footgun when `embed_model_id` is changed mid-development. (Reframed from "migration story": no live data, no migration — the real concern was two drift-prone hardcodes.)
+- **Decision:** Single source of truth: `EMBED_DIMS: dict[str, int]` map in `slopmortem/llm/openai_embeddings.py` keyed by embedding-model id. `EmbeddingClient.dim` reads it; `ensure_collection(client, name, *, dim)` accepts dim as a kwarg; callers pass `dim=EMBED_DIMS[settings.embed_model_id]`. `ensure_collection` raises `ValueError("dim mismatch …")` if an existing collection has a different dim, which closes the silent-corruption footgun when `embed_model_id` is changed mid-development. (Reframed from "migration story": no live data, no migration; the real concern was two drift-prone hardcodes.)
 - **Edits:**
   - plan.md Task 2b — `EMBED_DIMS` map declared in `slopmortem/llm/openai_embeddings.py`; `OpenAIEmbeddingClient` raises at construction on unknown model; new `test_unknown_model_raises`; existing dim assertion now reads `EMBED_DIMS[c.model]`.
   - plan.md Step 3.2 — added `test_collection_dim_mismatch_raises`; existing test threads `dim=EMBED_DIMS[...]`.
@@ -172,15 +172,15 @@ All issues below cleared a cross-check by an independent verification agent. Ref
 ### B7 [RESOLVED 2026-04-29] `MidStreamError` retry path
 - **Where:** plan.md:1256–1258 + plan.md:1296–1301
 - **Decision needed:** Specify explicitly that `_call_with_retry` (currently a `...` stub) is responsible for inspecting `finish_reason == "error"` chunks and raising `MidStreamError` *inside* the retry loop. The current ambiguity between caller-raise vs wrapper-raise leaves the retry behavior implementer-defined.
-- **Resolution (option a, wrapper-raises-inside-loop):** `_call_with_retry` now owns stream consumption: it calls `chat.completions.create(stream=True, **kw)`, drains the stream, and on `finish_reason == "error"` raises `MidStreamError` *before returning* — caught by its own retry loop. Retries apply only when `error.code == "overloaded_error"` (per corrections-doc Issue 2, the only place that code surfaces); other MidStreamError codes are fatal. Caller's `if fr == "error"` branch reduced to an unreachable safety net with a comment noting why it's kept. spec.md:770 was already aligned with this option; plan.md:1280–1286 updated with the explicit contract and retry/fatal taxonomy.
+- **Resolution (option a, wrapper-raises-inside-loop):** `_call_with_retry` now owns stream consumption: it calls `chat.completions.create(stream=True, **kw)`, drains the stream, and on `finish_reason == "error"` raises `MidStreamError` *before returning*, caught by its own retry loop. Retries apply only when `error.code == "overloaded_error"` (per corrections-doc Issue 2, the only place that code surfaces); other MidStreamError codes are fatal. Caller's `if fr == "error"` branch reduced to an unreachable safety net with a comment noting why it's kept. spec.md:770 was already aligned with this option; plan.md:1280–1286 updated with the explicit contract and retry/fatal taxonomy.
 
 ### B8 [RESOLVED 2026-04-29] `facet_extract` strict mode + Optional fields
-- **Where:** plan.md Task 6 (`extract_facets`) — `Facets` has 5 Optional-default fields (`sub_sector`, `product_type`, `price_point`, `founding_year`, `failure_year`) which Pydantic v2 omits from `required`, breaking OpenAI strict-mode contract.
+- **Where:** plan.md Task 6 (`extract_facets`). `Facets` has 5 Optional-default fields (`sub_sector`, `product_type`, `price_point`, `founding_year`, `failure_year`) which Pydantic v2 omits from `required`, breaking OpenAI strict-mode contract.
 - **Decision needed:** Apply the corrections-doc Issue 4 probe at startup, OR drop `strict: True` for prompts using Pydantic models with Optional fields, OR rewrite `Facets` to use sentinel values instead of `None`.
-- **Resolution (option d, force-required + nullable post-processor):** Added `to_strict_response_schema(model) -> dict` helper in `slopmortem/llm/tools.py` that inlines `$ref`/`$defs`, strips draft metadata, and force-adds every property to `required` while preserving `anyOf:[T,null]` verbatim (OpenAI's documented strict-mode pattern). All three structured-output call sites updated to use the helper (`extract_facets`, `llm_rerank`, `synthesize`); idempotent for `Synthesis` and `LlmRerankResult` (no Optional-default fields), load-bearing for `Facets`. None of the original three options taken — option (a) would only diagnose, (b) sacrifices grammar mode for a problem the schema can fix directly, (c) corrupts prompt semantics and forces the spec to abandon `*_date_unknown` payload booleans. Edits: plan.md Step 1.8 (+2 tests), Step 1.9 (helper added), Step 1.10 (4 passed), Step 6.2 (helper + extra_body), Step 7.4 (helper), Step 8.4 (helper); spec.md:225 (canonical strict-mode statement updated to use helper); spec.md Foundation row (helper added). Optional dev-time probe (Issue 4) preserved as-is — already in spec.md:202.
+- **Resolution (option d, force-required + nullable post-processor):** Added `to_strict_response_schema(model) -> dict` helper in `slopmortem/llm/tools.py` that inlines `$ref`/`$defs`, strips draft metadata, and force-adds every property to `required` while preserving `anyOf:[T,null]` verbatim (OpenAI's documented strict-mode pattern). All three structured-output call sites updated to use the helper (`extract_facets`, `llm_rerank`, `synthesize`); idempotent for `Synthesis` and `LlmRerankResult` (no Optional-default fields), load-bearing for `Facets`. None of the original three options taken: option (a) would only diagnose, (b) sacrifices grammar mode for a problem the schema can fix directly, (c) corrupts prompt semantics and forces the spec to abandon `*_date_unknown` payload booleans. Edits: plan.md Step 1.8 (+2 tests), Step 1.9 (helper added), Step 1.10 (4 passed), Step 6.2 (helper + extra_body), Step 7.4 (helper), Step 8.4 (helper); spec.md:225 (canonical strict-mode statement updated to use helper); spec.md Foundation row (helper added). Optional dev-time probe (Issue 4) preserved as-is, already in spec.md:202.
 
 ### B9 [CRITICAL] CODEOWNERS for curated YAML and `--reclassify` CLI flag
-- **Where:** spec.md:243, spec.md:252 — both listed as v1 acceptance criteria; no plan task implements them.
+- **Where:** spec.md:243, spec.md:252. Both listed as v1 acceptance criteria; no plan task implements them.
 - **Decision needed:** Either add tasks for these, or move them to "Out of scope (v1)" with explicit rationale.
 
 ---
@@ -224,4 +224,4 @@ Spec items not addressed by any plan task:
 5. `readability-lxml` extraction fallback — see A10
 6. `slopmortem ingest --reclassify` CLI flag — see B9
 7. `.github/CODEOWNERS` for curated YAML — see B9
-8. `embed_dense.py` module wrapper — Task 2b creates `openai_embeddings.py` (the client) but not the corpus-side wrapper; verify whether this is a true gap or a naming decision before adding a task.
+8. `embed_dense.py` module wrapper. Task 2b creates `openai_embeddings.py` (the client) but not the corpus-side wrapper; verify whether this is a true gap or a naming decision before adding a task.

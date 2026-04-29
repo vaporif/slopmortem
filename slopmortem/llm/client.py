@@ -1,4 +1,4 @@
-"""LLMClient Protocol: the chat-completion shape every backend (real, fake, cassette) honors."""
+"""LLMClient Protocol: chat-completion shape shared by real, fake, and cassette backends."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class CompletionResult:
 
 @runtime_checkable
 class LLMClient(Protocol):
-    """The async chat-completion contract every LLM backend (real or fake) implements."""
+    """Async chat-completion contract that real and fake LLM backends implement."""
 
     # ``Any`` here is intentional: tools/response_format/extra_body are SDK passthroughs.
     async def complete(  # noqa: PLR0913 — mirrors OpenAI chat.create

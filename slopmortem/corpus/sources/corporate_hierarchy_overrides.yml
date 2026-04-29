@@ -1,10 +1,10 @@
-# Corporate hierarchy overrides — CODEOWNERS-protected (per spec line 262).
+# Corporate hierarchy overrides. CODEOWNERS-protected (per spec line 262).
 #
 # Single-domain corporate hierarchies (JPMorgan/Chase, Alphabet/Google, etc.)
 # that the suffix-delta heuristic alone misses. Each override names a parent
 # canonical and a list of subsidiary canonicals; tier-1 entity resolution
 # treats the listed pair as a parent_subsidiary case and demotes to tier-2.
 #
-# Ships empty in v1 — populated as cases arise during ingest review.
+# Ships empty in v1; populated as cases arise during ingest review.
 version: "1"
 overrides: []

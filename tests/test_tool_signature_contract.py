@@ -3,12 +3,12 @@
 Two invariants:
 
 1. Pydantic args model -> OpenAI input schema -> back to args round-trips
-   without drift. The schema is what we ship to the LLM; the model is what
-   we validate the LLM's tool call against. They must agree.
+   without drift. The schema ships to the LLM; the model validates the
+   LLM's tool call. The two must agree.
 2. The tool implementation module imports nothing from ``subprocess``,
-   ``os.system``, ``shutil.rmtree``, or ``shutil.copy`` — corpus tools have
-   no business shelling out, and the synthesis path is sandboxed by the
-   :func:`safe_get` / :func:`safe_path` boundary.
+   ``os.system``, ``shutil.rmtree``, or ``shutil.copy``. Corpus tools have
+   no reason to shell out, and the synthesis path is sandboxed by
+   :func:`safe_get` / :func:`safe_path`.
 """
 
 from __future__ import annotations

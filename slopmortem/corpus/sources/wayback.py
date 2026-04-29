@@ -1,4 +1,4 @@
-"""Wayback enricher — recovers content for curated rows whose live URL is dead.
+"""Wayback enricher. Recovers content for curated rows whose live URL is dead.
 
 Per spec line 359 the v1 role is narrow: take a ``RawEntry`` whose ``raw_html``
 is empty, hit the Wayback availability API

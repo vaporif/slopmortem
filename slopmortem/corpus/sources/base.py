@@ -1,4 +1,4 @@
-"""Source / Enricher Protocols — verbatim from spec lines 354-356.
+"""Source / Enricher Protocols, verbatim from spec lines 354-356.
 
 * ``Source`` is a primary producer: ``fetch()`` -> ``AsyncIterable[RawEntry]``.
 * ``Enricher`` is a secondary that fills fields on an existing ``RawEntry``.
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 class Source(Protocol):
-    """Produces ``RawEntry`` records — the primary input to corpus ingest."""
+    """Produces ``RawEntry`` records. Primary input to corpus ingest."""
 
     def fetch(self) -> AsyncIterable[RawEntry]:
         """Yield raw entries asynchronously.
@@ -31,7 +31,7 @@ class Source(Protocol):
 
 
 class Enricher(Protocol):
-    """Fills missing fields on an existing ``RawEntry`` — secondary input."""
+    """Fills missing fields on an existing ``RawEntry``. Secondary input."""
 
     async def enrich(self, entry: RawEntry) -> RawEntry:
         """Return a (possibly) updated copy of *entry*.

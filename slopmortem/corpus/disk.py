@@ -1,8 +1,8 @@
 """Atomic markdown read/write for the raw and canonical post-mortem trees.
 
 Writes go to ``<path>.tmp`` then :meth:`Path.replace` (POSIX-atomic). Front
-matter is rendered as YAML between ``---`` delimiters. Path construction
-always goes through :func:`safe_path`: no concatenation, no traversal.
+matter is YAML between ``---`` delimiters. Paths always go through
+:func:`safe_path`: no concatenation, no traversal.
 """
 
 from __future__ import annotations
@@ -32,15 +32,15 @@ def _render(body: str, front_matter: FrontMatter) -> str:
 
 def _write_sync(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Unique tmp suffix per call so two concurrent writes to the same path
-    # don't share a tmp filename and clobber each other's rename.
+    # Unique tmp suffix per call: two concurrent writes to the same path
+    # mustn't share a tmp filename and clobber each other's rename.
     tmp = path.with_suffix(f"{path.suffix}.{secrets.token_hex(8)}.tmp")
     try:
         tmp.write_text(contents, encoding="utf-8")
         tmp.replace(path)
     finally:
-        # On success, replace already renamed the tmp file. On failure, clean
-        # it up so we don't leak a .tmp on disk.
+        # On success, replace already renamed tmp. On failure, clean up so we
+        # don't leak a .tmp.
         if tmp.exists():
             tmp.unlink()
 

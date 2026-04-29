@@ -30,7 +30,7 @@ class FakeResponse:
     cache_creation_tokens: int | None = None
 
     def to_completion(self) -> CompletionResult:
-        """Materialize this fixture into a real CompletionResult."""
+        """Convert this fixture into a CompletionResult."""
         return CompletionResult(
             text=self.text,
             stop_reason=self.stop_reason,

@@ -1,4 +1,4 @@
-"""Source adapters and enrichers — the producers of ``RawEntry`` for ingest."""
+"""Source adapters and enrichers. They produce ``RawEntry`` for ingest."""
 
 from slopmortem.corpus.sources.base import Enricher, Source
 

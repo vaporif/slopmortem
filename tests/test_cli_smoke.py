@@ -5,9 +5,8 @@ Covers Task 10 plan steps:
 - CLI smoke for ``query`` with ``run_query`` monkeypatched to return a fixture
   Report.
 
-The dependency-construction helper ``slopmortem.cli._build_deps`` is the
-designated monkeypatch seam so the smoke tests don't need real Qdrant /
-OpenRouter / OpenAI credentials.
+``slopmortem.cli._build_deps`` is the monkeypatch seam, so the smoke tests
+don't need real Qdrant / OpenRouter / OpenAI credentials.
 """
 
 from __future__ import annotations
@@ -72,9 +71,9 @@ def _fixture_report(*, name: str = "Foo") -> Report:
 
 
 def _build_fake_deps(_config: Config) -> tuple[object, object, object, Budget]:
-    """Stand-in for :func:`slopmortem.cli._build_deps` that returns inert objects."""
-    # Returning bare ``object()`` instances is fine: the smoke test patches
-    # ``run_query`` so these never get used in any method call.
+    """Stand-in for :func:`slopmortem.cli._build_deps`; returns inert objects."""
+    # Bare ``object()`` instances are fine here — the smoke test patches
+    # ``run_query``, so these are never called.
     return object(), object(), object(), Budget(cap_usd=0.0)
 
 
@@ -86,14 +85,14 @@ def _noop_set_corpus(_corpus: object) -> None:
 def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
     """``slopmortem query`` runs end-to-end with a fake ``run_query``.
 
-    Verifies typer wiring: arg parsing, dispatch through ``_query``, render
-    to stdout, and the dependency-construction helper is the seam.
+    Checks typer wiring: arg parsing, dispatch through ``_query``, render to
+    stdout, with ``_build_deps`` as the seam.
     """
 
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name)
 
-    # Replace the dep-construction so we don't need real OPENROUTER_API_KEY etc.
+    # Swap dep-construction so we don't need real OPENROUTER_API_KEY etc.
     monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
     monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
@@ -101,7 +100,7 @@ def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["query", "Some pitch text", "--name", "MyStartup"])
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
-    # The rendered report's title contains the input name.
+    # The rendered report's title should contain the input name.
     assert "MyStartup" in result.stdout
 
 
@@ -122,12 +121,12 @@ def test_query_smoke_default_unnamed(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_replay_missing_dataset_exits_with_code_2() -> None:
-    """``replay`` against a non-existent dataset exits cleanly with code 2."""
+    """``replay`` against a missing dataset exits cleanly with code 2."""
     runner = CliRunner()
     result = runner.invoke(app, ["replay", "does-not-exist"])
     assert result.exit_code == 2
-    # The error is on stderr; click's CliRunner merges streams unless
-    # ``mix_stderr=False`` is set on construction. Either way "no dataset"
-    # appears in the captured output.
+    # Error goes to stderr; click's CliRunner merges streams unless
+    # ``mix_stderr=False`` is set. Either way "no dataset" lands in the
+    # captured output.
     combined = (result.stdout or "") + (result.stderr or "")
     assert "no dataset" in combined

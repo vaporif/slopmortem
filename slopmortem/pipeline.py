@@ -1,15 +1,15 @@
 """Top-level orchestration: ``run_query`` wires every stage of the slopmortem pipeline.
 
-Pure library code. No I/O, no stderr, no path/file access, no outbound HTTP — every
+Pure library code. No I/O, no stderr, no path/file access, no outbound HTTP. Every
 side-effecting capability arrives via injected dependencies (LLM client, embedding
 client, Corpus, Budget, optional progress callback). The CLI in ``slopmortem.cli``
 constructs those dependencies and calls ``run_query``.
 
 Failure model (spec §770-775):
-- A :class:`BudgetExceededError` raised by any stage truncates the run; whatever
+- A :class:`BudgetExceededError` raised by any stage truncates the run. Whatever
   Synthesis values had already accumulated up to that point are still returned in
   the final :class:`Report` with ``budget_exceeded=True``.
-- Per-candidate synthesis failures do NOT abort the run: ``synthesize_all`` already
+- Per-candidate synthesis failures do NOT abort the run. ``synthesize_all`` already
   swallows them as exception entries, and we filter them out of the final list so
   ``Report.candidates`` only carries successful Synthesis values.
 """
@@ -46,7 +46,7 @@ _DAYS_PER_YEAR = 365
 def _cutoff_iso(years_filter: int | None) -> str | None:
     """Convert a years-back recency filter into an ISO-8601 date string.
 
-    Retrieve takes ISO-8601 dates (``YYYY-MM-DD``), not full timestamps; we floor
+    Retrieve takes ISO-8601 dates (``YYYY-MM-DD``), not full timestamps. Floor
     to ``date()`` here so the cutoff stays stable across the hour the query runs.
     """
     if years_filter is None:
@@ -62,7 +62,7 @@ def _join_to_candidates(
     The reranker returns :class:`ScoredCandidate` (id + perspective scores) but
     synthesize needs the full :class:`Candidate` (with ``payload.body``). We
     preserve the rerank order and silently drop any ranked id missing from the
-    retrieved set — defensive only, since the reranker only sees retrieved ids.
+    retrieved set. Defensive only, since the reranker only sees retrieved ids.
     """
     id_to_candidate = {c.canonical_id: c for c in retrieved}
     out: list[Candidate] = []
@@ -99,7 +99,7 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
         llm: Async :class:`LLMClient` shared by every LLM-driven stage.
         embedding_client: Async dense embedder used inside ``retrieve``.
         corpus: Read-side :class:`Corpus` impl (Qdrant in production, fake in tests).
-        config: :class:`Config` — ``K_retrieve``, ``N_synthesize``, model ids,
+        config: :class:`Config`. ``K_retrieve``, ``N_synthesize``, model ids,
             ``strict_deaths``.
         budget: Shared per-run :class:`Budget` for cost bookkeeping. Stages
             book costs through their LLM/embedding clients; this function only

@@ -1,4 +1,4 @@
-"""Crunchbase CSV source — file-based ``RawEntry`` producer.
+"""Crunchbase CSV source. File-based ``RawEntry`` producer.
 
 Crunchbase exports their organization dataset as CSV; v1 takes the path at
 construction time (passed via ``--crunchbase-csv path`` at the CLI). No HTTP

@@ -31,10 +31,10 @@ HEADER_ALLOWLIST = {
 
 
 def _scrub_body(body: bytes | str) -> bytes:
-    """Pass body bytes/str through every SECRET_PATTERNS regex.
+    """Run body bytes/str through every SECRET_PATTERNS regex.
 
-    Public so tests can assert the regex set actually catches a representative
-    secret (see ``tests/llm/test_secrets_scrub.py``).
+    Public so tests can assert the regex set catches a representative secret
+    (see ``tests/llm/test_secrets_scrub.py``).
     """
     s = body.decode("utf-8", errors="replace") if isinstance(body, bytes) else body
     for pat, repl in SECRET_PATTERNS:

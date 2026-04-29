@@ -84,8 +84,8 @@ logger = logging.getLogger(__name__)
 _CACHE_READ_RATIO_THRESHOLD: Final[float] = 0.80
 _CACHE_READ_RATIO_PROBE_N: Final[int] = 5
 
-# Reliability rank for in-process classification; merge_text uses this to
-# order sections deterministically. Curated > HN > Wayback > everything else.
+# Reliability rank for in-process classification. merge_text orders sections
+# by this. Curated > HN > Wayback > everything else.
 _RELIABILITY_RANK: Final[dict[str, int]] = {
     "curated": 0,
     "hn": 1,
@@ -485,7 +485,7 @@ async def _facet_summarize_fanout(
 
     Returns one :class:`_FanoutResult` per entry, in order, or the exception
     that aborted that entry's pipeline. The limiter bounds LLM calls in
-    flight — facet and summarize for the same entry run sequentially so two
+    flight. Facet and summarize for the same entry run sequentially so two
     LLM calls never share one limiter slot.
     """
     limiter = anyio.CapacityLimiter(config.ingest_concurrency)
@@ -610,8 +610,7 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
     )
 
     # Step 7: chunks + embed + qdrant. Re-upsert path: delete then re-upsert
-    # all chunk points for this canonical_id so we don't accumulate orphans
-    # from a prior run.
+    # all chunk points for this canonical_id so prior-run orphans don't pile up.
     if existing:
         with contextlib.suppress(Exception):
             await corpus.delete_chunks_for_canonical(canonical_id)
@@ -677,7 +676,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         corpus: :class:`Corpus` write surface. Production is :class:`QdrantCorpus`.
         llm: LLM client for facet_extract + summarize_for_rerank.
         embed_client: Dense embedding client. Vector dim is read at the
-            embedding client's level; ingest never names dim numbers.
+            embedding client's level; ingest never hardcodes dim numbers.
         budget: Shared :class:`~slopmortem.budget.Budget`. The LLM and embedding
             clients reserve and settle internally.
         slop_classifier: Score-only classifier (Binoculars in production).
@@ -685,7 +684,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             model ids, taxonomy/reliability versions.
         post_mortems_root: Root for ``raw/``, ``canonical/``, ``quarantine/``.
         dry_run: When True, count entries that would be ingested but write
-            nothing — no journal rows, no disk, no qdrant.
+            nothing. No journal rows, no disk, no qdrant.
         force: When True, bypass the skip_key short-circuit and re-process
             every entry.
         sparse_encoder: Override the BM25 sparse encoder. ``None`` lazy-loads

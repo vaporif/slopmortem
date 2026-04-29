@@ -1,9 +1,9 @@
 """Heading-aware token-window chunker for canonical post-mortem markdown.
 
-Strategy: 768-token windows with 128-token overlap, tokenized via
-``tiktoken``'s ``cl100k_base`` encoding. When a ``#`` heading falls a few
-tokens past the window start, the boundary is nudged forward to land on it
-so synthesis sees a clean section start instead of a mid-paragraph cut.
+768-token windows, 128-token overlap, tokenized with ``tiktoken``'s
+``cl100k_base``. If a ``#`` heading falls within the next 96 tokens after
+the window start, the boundary jumps to it so chunks don't start
+mid-paragraph.
 """
 
 from __future__ import annotations
@@ -13,9 +13,8 @@ from typing import Final
 import tiktoken
 from pydantic import BaseModel
 
-#: Bumping any of (window, overlap, tokenizer) is a CHANGELOG entry. The
-#: skip_key tuple includes ``chunk_strategy_version``, so a bump invalidates
-#: cached chunks on the next ingest.
+#: Bump = CHANGELOG entry. ``chunk_strategy_version`` is part of the
+#: skip_key, so bumping invalidates cached chunks on the next ingest.
 CHUNK_STRATEGY_VERSION: Final[str] = "v1-768-128-cl100k"
 
 WINDOW_TOKENS: Final[int] = 768
@@ -34,14 +33,14 @@ class Chunk(BaseModel):
 
 def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[int]:
     """Return token indices where a ``#`` heading line starts."""
-    # Decode once and search for newline-prefixed '#'. Keeps things O(N)
-    # instead of re-encoding the whole doc once per offset.
+    # Decode once and find newline-prefixed '#'. O(N) instead of re-encoding
+    # the whole doc once per offset.
     offsets: list[int] = []
     text = enc.decode(tokens)
     cur = 0
-    # Build a coarse char-offset → token-index lookup so we can map heading
-    # positions back to token indices cheaply. tiktoken has no per-token char
-    # offset, so re-encode prefix-by-prefix using a fixed stride.
+    # tiktoken has no per-token char offset, so build a coarse
+    # char-offset → token-index lookup by re-encoding prefixes at a fixed
+    # stride.
     stride = 32
     prefix_lens: list[tuple[int, int]] = [(0, 0)]
     for i in range(stride, len(tokens) + stride, stride):
@@ -53,8 +52,7 @@ def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[in
     char_to_token.sort()
 
     def char_to_token_idx(char_idx: int) -> int:
-        # Largest prefix length <= char_idx. Linear scan is fine; the list
-        # has len/32 entries.
+        # Largest prefix length <= char_idx. Linear scan; len/32 entries.
         chosen = 0
         for cl, ti in char_to_token:
             if cl <= char_idx:
@@ -108,8 +106,8 @@ def chunk_markdown(text: str, *, parent_canonical_id: str) -> list[Chunk]:
     while start < len(tokens):
         end = min(start + WINDOW_TOKENS, len(tokens))
         # If a heading sits within HEADING_SEARCH_TOKENS after start, snap
-        # forward so the chunk begins at the heading. Skip on the first
-        # chunk (start == 0); we always want the doc's opening tokens.
+        # forward so the chunk begins at the heading. Skip on the first chunk
+        # (start == 0) — the doc's opening tokens always come first.
         if start > 0:
             for h in headings:
                 if start < h <= start + HEADING_SEARCH_TOKENS and h < end:
