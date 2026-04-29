@@ -1,6 +1,9 @@
+"""Pydantic-settings config — TOML + env + secrets, validated on load."""
+
 from __future__ import annotations
 
 from pathlib import Path
+from typing import override
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import (
@@ -12,6 +15,8 @@ from pydantic_settings import (
 
 
 class Config(BaseSettings):
+    """All knobs slopmortem reads at startup — TOML overrides env, env overrides defaults."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="forbid",
@@ -59,6 +64,7 @@ class Config(BaseSettings):
         return self
 
     @classmethod
+    @override
     def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
@@ -67,11 +73,12 @@ class Config(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        toml_files: list[Path] = []
-        for name in ("slopmortem.toml", "slopmortem.local.toml"):
-            p = Path.cwd() / name
-            if p.exists():
-                toml_files.append(p)
+        """Wire up TOML sources after env, before secrets — TOML wins over env at runtime."""
+        toml_files: list[Path] = [
+            p
+            for name in ("slopmortem.toml", "slopmortem.local.toml")
+            if (p := Path.cwd() / name).exists()
+        ]
         toml = TomlConfigSettingsSource(settings_cls, toml_file=toml_files or None)
         return (
             init_settings,
@@ -83,4 +90,5 @@ class Config(BaseSettings):
 
 
 def load_config() -> Config:
+    """Construct a fully-populated ``Config`` from the active TOML + env + dotenv state."""
     return Config()

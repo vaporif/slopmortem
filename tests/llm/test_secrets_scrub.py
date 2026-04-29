@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 import pytest
+from openai import APIConnectionError, AsyncOpenAI
 
 from conftest import _scrub_body
 
@@ -39,10 +40,11 @@ def test_scrubs_jwt():
 async def test_cassette_miss_loud(monkeypatch):
     if os.environ.get("RUN_LIVE"):
         pytest.skip("live mode")
-    from openai import AsyncOpenAI
 
     sdk = AsyncOpenAI(api_key="sk-or-v1-test", base_url="https://openrouter.ai/api/v1")
-    with pytest.raises(Exception) as ei:
+    # The SDK wraps the underlying VCR error as APIConnectionError; the test
+    # then walks __cause__/__context__ to verify the cassette-miss hint surfaces.
+    with pytest.raises(APIConnectionError) as ei:
         await sdk.chat.completions.create(
             model="anthropic/claude-haiku-4.5",
             messages=[{"role": "user", "content": "missing cassette"}],

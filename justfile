@@ -8,7 +8,7 @@ install:
     uv sync
 
 test:
-    uv run pytest
+    uv run pytest -n auto
 
 smoke-live:
     RUN_LIVE=1 uv run pytest tests/smoke -v
@@ -26,4 +26,4 @@ lint:
     uv run ruff format --check .
 
 typecheck:
-    uv run mypy slopmortem
+    uv run basedpyright

@@ -1,7 +1,7 @@
 [project]
 name = "slopmortem"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
   "openai>=1.50",
   "qdrant-client>=1.14",
@@ -31,10 +31,11 @@ dev = [
   "pytest>=8",
   "pytest-asyncio>=0.24",
   "pytest-recording>=0.13",
+  "pytest-xdist>=3.6",
   "syrupy>=4.6",
   "jsonschema>=4.23",
   "ruff>=0.6",
-  "mypy>=1.11",
+  "basedpyright>=1.20",
 ]
 
 [tool.pytest.ini_options]
@@ -43,7 +44,7 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -60,6 +61,10 @@ ignore = [
   "D213",  # conflicts with D212
   # Practically unenforceable
   "CPY001",  # missing copyright header on every file
+  # `Any` is used deliberately for SDK passthroughs and Jinja contexts;
+  # basedpyright's `reportAny` is the real gate (each site carries
+  # `# pyright: ignore[reportAny]` with rationale).
+  "ANN401",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -92,31 +97,26 @@ max-branches = 12
 max-returns = 6
 max-statements = 50
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-warn_unreachable = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_explicit = true
-disallow_any_unimported = true
-no_implicit_reexport = true
-extra_checks = true
+[tool.basedpyright]
+include = ["slopmortem", "tests"]
+extraPaths = ["."]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+reportAny = "error"
+reportExplicitAny = "error"
+reportImplicitOverride = "error"
+reportUnreachable = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportImplicitStringConcatenation = "error"
+reportMissingTypeStubs = false
 
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = [
-  "jsonref",
-  "yaml",
-  "trafilatura",
-  "readability.*",
-  "tldextract",
-  "binoculars",
-  "lmnr",
-  "fastembed",
-  "tavily.*",
-]
-ignore_missing_imports = true
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+reportMissingParameterType = false
+reportUnknownParameterType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportAny = false
+reportExplicitAny = false
+reportPrivateUsage = false  # tests poke private helpers; mirrors ruff's SLF001 exemption

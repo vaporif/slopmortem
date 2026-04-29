@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,6 +11,8 @@ from slopmortem.budget import Budget
 from slopmortem.llm.embedding_client import EmbeddingClient
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient
+
+_PRICES_PATH = Path(__file__).resolve().parents[2] / "slopmortem" / "llm" / "prices.yml"
 
 
 def _stub_embed_response(*, dim: int, n: int = 1, total_tokens: int = 10):
@@ -50,9 +53,7 @@ async def test_embed_returns_vectors_matching_dim(fake_sdk):
 
 
 async def test_cost_derived_from_prices_yml(fake_sdk, tmp_path):
-    from pathlib import Path
-
-    prices_path = Path(__file__).resolve().parents[2] / "slopmortem" / "llm" / "prices.yml"
+    prices_path = _PRICES_PATH
     prices = yaml.safe_load(prices_path.read_text())
     rate = prices["openai/text-embedding-3-small"]["input"]
 
@@ -100,11 +101,11 @@ async def test_transient_failure_retries(fake_sdk):
     model = "text-embedding-3-small"
     dim = EMBED_DIMS[model]
 
-    class _Transient(Exception):
+    class _TransientError(Exception):
         status_code = 429
 
     fake_sdk.embeddings.create.side_effect = [
-        _Transient("rate limited"),
+        _TransientError("rate limited"),
         _stub_embed_response(dim=dim, n=1),
     ]
     c = OpenAIEmbeddingClient(

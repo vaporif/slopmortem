@@ -1,7 +1,10 @@
+"""SSRF-aware HTTP fetch — refuses loopback, link-local, private, and IMDS targets."""
+
 from __future__ import annotations
 
 import ipaddress
 import socket
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -16,7 +19,8 @@ _BLOCKED_IMDS_HOSTS = frozenset(
 )
 
 
-class SSRFBlockedError(RuntimeError): ...
+class SSRFBlockedError(RuntimeError):
+    """Raised when ``safe_get`` refuses a URL on SSRF-policy grounds."""
 
 
 def _is_blocked_address(addr: str) -> bool:
@@ -24,21 +28,21 @@ def _is_blocked_address(addr: str) -> bool:
         ip = ipaddress.ip_address(addr)
     except ValueError:
         return True
-    if ip.is_loopback or ip.is_link_local or ip.is_private or ip.is_multicast:
-        return True
-    if ip.is_reserved or ip.is_unspecified:
+    if (
+        ip.is_loopback
+        or ip.is_link_local
+        or ip.is_private
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
         return True
     if isinstance(ip, ipaddress.IPv4Address):
-        if ip in ipaddress.ip_network("100.64.0.0/10"):
-            return True
-        if ip in ipaddress.ip_network("169.254.0.0/16"):
-            return True
-    if isinstance(ip, ipaddress.IPv6Address):
-        if ip in ipaddress.ip_network("fc00::/7"):
-            return True
-        if ip in ipaddress.ip_network("fe80::/10"):
-            return True
-    return False
+        return ip in ipaddress.ip_network("100.64.0.0/10") or ip in ipaddress.ip_network(
+            "169.254.0.0/16"
+        )
+    # ip_address() returns IPv4Address | IPv6Address, so this branch is exhaustive.
+    return ip in ipaddress.ip_network("fc00::/7") or ip in ipaddress.ip_network("fe80::/10")
 
 
 def _resolve_all(host: str) -> list[str]:
@@ -47,10 +51,17 @@ def _resolve_all(host: str) -> list[str]:
     except socket.gaierror as e:
         msg = f"cannot resolve host {host!r}: {e}"
         raise SSRFBlockedError(msg) from e
-    return list({info[4][0] for info in infos})
+    # getaddrinfo returns sockaddr tuples whose [0] element is a host string;
+    # cast keeps mypy from widening the set element type to ``str | int``.
+    return list({str(info[4][0]) for info in infos})
 
 
-async def safe_get(url: str, *, timeout: float = 30.0) -> httpx.Response:
+async def safe_get(
+    url: str,
+    *,
+    timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
+) -> httpx.Response:
+    """Fetch *url* via httpx after enforcing scheme + DNS-pinned SSRF checks."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         msg = f"refusing non-http(s) scheme: {parsed.scheme!r}"
@@ -74,7 +85,12 @@ async def safe_get(url: str, *, timeout: float = 30.0) -> httpx.Response:
     pinned_ip = addrs[0]
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
-    async def _resolver(*args, **kwargs):
+    # The httpx resolver hook keeps a static, pre-validated address tuple so
+    # subsequent connect() can never round-trip back through DNS (SSRF rebinding).
+    async def _resolver(  # pyright: ignore[reportUnusedFunction]
+        *_args: Any,  # pyright: ignore[reportExplicitAny, reportAny]  # httpx resolver signature is untyped
+        **_kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
         return [
             (
                 socket.AF_INET if ":" not in pinned_ip else socket.AF_INET6,

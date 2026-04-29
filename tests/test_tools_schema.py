@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import jsonschema
 from pydantic import BaseModel
 
-from slopmortem.llm.tools import to_openai_input_schema
+from slopmortem.llm.tools import to_openai_input_schema, to_strict_response_schema
 
 
 class Args(BaseModel):
@@ -29,16 +30,12 @@ def test_round_trip_pydantic_to_schema_to_pydantic():
     parsed = Args.model_validate(sample)
     assert parsed.q == sample["q"]
     # schema accepts the sample
-    import jsonschema
-
     jsonschema.validate(sample, schema)
 
 
 def test_to_strict_response_schema_force_requires_optional_defaults():
     # OpenAI strict mode: every property must be in `required`. Pydantic omits
     # fields with a default (incl. `T | None = None`) — the helper adds them back.
-    from slopmortem.llm.tools import to_strict_response_schema
-
     schema = to_strict_response_schema(Args)
     assert set(schema["required"]) == {"q", "limit", "facets"}
     assert schema["properties"]["limit"].get("anyOf") == [{"type": "integer"}, {"type": "null"}]
@@ -46,8 +43,6 @@ def test_to_strict_response_schema_force_requires_optional_defaults():
 
 
 def test_to_strict_response_schema_idempotent_when_no_optional_defaults():
-    from slopmortem.llm.tools import to_strict_response_schema
-
     class AllRequired(BaseModel):
         a: str
         b: int | None  # required (no default), nullable

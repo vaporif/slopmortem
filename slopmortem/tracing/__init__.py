@@ -1,12 +1,14 @@
+"""Init guard for the laminar tracer — refuses non-loopback endpoints by default."""
+
 from __future__ import annotations
 
 import ipaddress
 import socket
-import sys
 from urllib.parse import urlparse
 
 
-class TracingGuardError(RuntimeError): ...
+class TracingGuardError(RuntimeError):
+    """Raised when ``init_tracing`` refuses a tracer endpoint on policy grounds."""
 
 
 PRIVATE_HOST_ALLOWLIST: set[str] = set()
@@ -17,7 +19,7 @@ def _resolve_all(host: str) -> list[str]:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
         return []
-    return list({info[4][0] for info in infos})
+    return list({str(info[4][0]) for info in infos})
 
 
 def _all_loopback(addrs: list[str]) -> bool:
@@ -26,7 +28,8 @@ def _all_loopback(addrs: list[str]) -> bool:
     return all(ipaddress.ip_address(a).is_loopback for a in addrs)
 
 
-def init_tracing(base_url: str | None = None, allow_remote: bool = False) -> None:
+def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> None:
+    """Validate *base_url* before letting the tracer phone it home."""
     if not base_url:
         return
     host = urlparse(base_url).hostname

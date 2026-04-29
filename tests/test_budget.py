@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from slopmortem.budget import Budget, BudgetExceeded
+from slopmortem.budget import Budget, BudgetExceededError
 
 
 async def test_reserve_settle_under_gather():
@@ -24,5 +24,5 @@ async def test_reserve_settle_under_gather():
 async def test_exceeded_raises():
     b = Budget(cap_usd=0.10)
     await b.reserve(0.05)
-    with pytest.raises(BudgetExceeded):
+    with pytest.raises(BudgetExceededError):
         await b.reserve(0.10)

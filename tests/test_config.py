@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from slopmortem.config import load_config
 
@@ -38,14 +39,14 @@ def test_typo_in_toml_rejected(tmp_path, monkeypatch):
     (tmp_path / "slopmortem.toml").write_text("K_retreive = 30\n")  # typo
     monkeypatch.setenv("OPENROUTER_API_KEY", "x")
     monkeypatch.setenv("OPENAI_API_KEY", "x")
-    with pytest.raises(Exception):  # extra="forbid"
+    with pytest.raises(ValidationError, match="extra"):  # extra="forbid"
         load_config()
 
 
-def test_K_retrieve_must_gte_N_synthesize(tmp_path, monkeypatch):
+def test_k_retrieve_must_gte_n_synthesize(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "slopmortem.toml").write_text("K_retrieve = 3\nN_synthesize = 5\n")
     monkeypatch.setenv("OPENROUTER_API_KEY", "x")
     monkeypatch.setenv("OPENAI_API_KEY", "x")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError, match="K_retrieve"):
         load_config()

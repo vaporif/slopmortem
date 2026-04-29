@@ -1,3 +1,5 @@
+"""Corpus protocol — the read-side interface stored docs are queried through."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -8,7 +10,9 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Corpus(Protocol):
-    async def query(
+    """Read-side protocol over the persisted candidate corpus (Qdrant or fakes)."""
+
+    async def query(  # noqa: PLR0913 — Protocol method signature is the public contract
         self,
         *,
         dense: list[float],
@@ -17,10 +21,16 @@ class Corpus(Protocol):
         years_filter: int | None,
         strict_deaths: bool,
         k_retrieve: int,
-    ) -> list[Candidate]: ...
+    ) -> list[Candidate]:
+        """Hybrid retrieve top-K candidates by dense + sparse vectors with facet filters."""
+        ...
 
-    async def get_post_mortem(self, canonical_id: str) -> str: ...
+    async def get_post_mortem(self, canonical_id: str) -> str:
+        """Fetch the full canonical post-mortem text for *canonical_id*."""
+        ...
 
     async def search_corpus(
         self, q: str, facets: dict[str, str] | None = None
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]:  # type: ignore[explicit-any]  # Protocol — implementations vary
+        """Plain-text search the corpus for additional candidates with optional facet filters."""
+        ...
