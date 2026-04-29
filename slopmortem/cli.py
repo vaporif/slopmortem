@@ -173,10 +173,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
         config, post_mortems_root
     )
 
-    # ``--reclassify`` re-runs the slop classifier across every quarantine row
-    # and routes survivors out of the quarantine tree. Read-mostly path: it
-    # touches the journal + filesystem, but does not invoke sources, the LLM,
-    # or the embedder. Spec: §Quarantine and reclassify line 252.
+    # Spec: §Quarantine and reclassify line 252.
     if reclassify:
         report = await reclassify_quarantined(
             journal=journal,
@@ -189,9 +186,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
         typer.echo(f"reclassify: {counts} {tail}")
         return
 
-    # ``--reconcile`` runs the six-drift-class scan with ``repair=True`` and
-    # exits without touching the ingest orchestrator. Spec: §Atomicity / six
-    # drift classes (a-f); the reconcile pass is the dedicated repair path.
+    # Spec: §Atomicity / six drift classes (a-f).
     if reconcile_flag:
         report = await reconcile(
             journal=journal,
@@ -204,9 +199,6 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
             typer.echo(f"  drift_class={r.drift_class}\t{r.path}\t{r.detail}")
         return
 
-    # ``--list-review`` is a read-only path: query the journal, print the queue,
-    # and exit 0. It runs before the orchestrator dispatches so it does not
-    # touch the corpus, sources, or enrichers.
     if list_review:
         rows = await journal.list_pending_review()
         if not rows:

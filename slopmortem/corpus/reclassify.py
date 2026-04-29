@@ -96,11 +96,12 @@ async def reclassify_quarantined(
             errors += 1
             logger.warning("reclassify: invalid quarantine sha %s", sha)
             continue
-        if not quarantine_path.exists():
+        try:
+            body = quarantine_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
             errors += 1
             logger.warning("reclassify: missing quarantine file for %s", sha)
             continue
-        body = quarantine_path.read_text(encoding="utf-8")
         new_score = await slop_classifier.score(body)
         if new_score >= slop_threshold:
             still_slop += 1

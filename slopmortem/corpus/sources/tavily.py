@@ -9,14 +9,13 @@ from typing import TYPE_CHECKING, cast
 import httpx
 
 from slopmortem.corpus.extract import extract_clean
+from slopmortem.corpus.tools_impl import TAVILY_EXTRACT_URL
 from slopmortem.http import safe_post
 
 if TYPE_CHECKING:
     from slopmortem.models import RawEntry
 
 logger = logging.getLogger(__name__)
-
-_TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
 
 
 def _pick_raw_content(payload: object) -> str | None:
@@ -75,7 +74,7 @@ class TavilyEnricher:
         """Hit Tavily /extract and return the recovered article body or ``None``."""
         try:
             resp = await safe_post(
-                _TAVILY_EXTRACT_URL,
+                TAVILY_EXTRACT_URL,
                 json={"api_key": api_key, "urls": [url]},
             )
         except (httpx.HTTPError, ValueError) as exc:

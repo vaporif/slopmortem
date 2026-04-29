@@ -90,25 +90,25 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
     )
 
     tools = [get_post_mortem, search_corpus]
-    if getattr(config, "enable_tavily_synthesis", False):
-        # One counter, shared between tavily_search and tavily_extract.
-        # Each call to synthesis_tools(config) creates a fresh counter, so
-        # each synthesize() call in synthesize_all gets its own quota
-        # (spec line 1005: <=2 Tavily calls per synthesis).
-        counter = {"used": 0}
+    if config.enable_tavily_synthesis:
+        # Each synthesize() call gets its own quota (spec line 1005:
+        # <=2 Tavily calls per synthesis), shared across both tools.
+        used = 0
         cap = config.tavily_calls_per_synthesis
 
         async def _bounded_search(*, q: str, limit: int = 5) -> str:
-            if counter["used"] >= cap:
+            nonlocal used
+            if used >= cap:
                 return f"tavily call budget exceeded ({cap} per synthesis); refusing"
-            counter["used"] += 1
+            used += 1
             # Runtime attr lookup so tests can monkeypatch the impl.
             return await tools_impl._tavily_search(q, limit)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
         async def _bounded_extract(*, url: str) -> str:
-            if counter["used"] >= cap:
+            nonlocal used
+            if used >= cap:
                 return f"tavily call budget exceeded ({cap} per synthesis); refusing"
-            counter["used"] += 1
+            used += 1
             # Runtime attr lookup so tests can monkeypatch the impl.
             return await tools_impl._tavily_extract(url)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 

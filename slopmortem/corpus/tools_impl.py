@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from slopmortem.corpus.store import Corpus
 
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
-_TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
+TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
 _TAVILY_SNIPPET_CHARS = 500
 
 __all__ = [
@@ -169,7 +169,7 @@ async def _tavily_extract(url: str) -> str:
     returned no results.
     """
     resp = await safe_post(
-        _TAVILY_EXTRACT_URL,
+        TAVILY_EXTRACT_URL,
         json={"api_key": _tavily_api_key(), "urls": [url]},
     )
     resp.raise_for_status()
