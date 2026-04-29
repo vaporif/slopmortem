@@ -10,11 +10,13 @@ The eval runner today uses hand-written canned responses (`_facet_extract_payloa
 
 This spec closes that gap. After implementation:
 
-- `just eval` runs offline against committed cassette files containing actual past OpenRouter / OpenAI responses
-- `just eval-record` regenerates cassettes against live APIs (~$0.50–$1 per full record)
-- `just eval-record-corpus` regenerates the seed corpus fixture (~$3–5, run rarely)
+- `just eval` runs offline against committed cassette files containing actual past OpenRouter LLM responses and locally-recorded fastembed dense + sparse vectors
+- `just eval-record` regenerates cassettes against the live OpenRouter API + the local fastembed models (~$0.50–$1 per full record; LLM-side dollars only — embeddings are free under the default `embedding_provider="fastembed"`)
+- `just eval-record-corpus` regenerates the seed corpus fixture (~$0.30–$1 under fastembed default — LLM-side ingest stages only; ~$3–5 if `embedding_provider="openai"` is configured. Run rarely.)
 - The eval runs against a real Qdrant collection seeded from a JSONL fixture, exercising the actual retrieval path
 - The recording machinery is reusable: `record_cassettes_for_inputs()` is a public Python helper that any test can call to populate its own cassette directory under `tests/fixtures/cassettes/custom/`
+
+**Embedding-provider note.** As of [`local embeddings (#14)`](../../slopmortem/llm/fastembed_client.py), the default `embedding_provider="fastembed"` runs the dense embedder locally via `FastEmbedEmbeddingClient` (model `nomic-ai/nomic-embed-text-v1.5`, 768 dim, ~550 MB ONNX). The OpenAI provider (`text-embedding-3-small`, 1536 dim) is still supported via `embedding_provider="openai"`. Cassettes key on `(model, text_hash)`, so a cassette set is bound to one provider+model — switching providers (or `embed_model_id`) between record and replay produces a loud `NoCannedEmbeddingError` per row, not a silent vector mismatch. See Risk 5 for why we keep recording embedding cassettes even though the default provider is local and free.
 
 ## Execution Strategy
 
@@ -47,9 +49,9 @@ Seven structural pieces:
 
 3. **`RecordingLLMClient` / `RecordingEmbeddingClient` / `RecordingSparseEncoder`.** Wrap a real client (or, for sparse, the live fastembed BM25 encoder). Each `complete()`, `embed()`, or `encode()` call forwards to the inner; on success, writes one cassette JSON file *per text* (LLM and sparse are 1:1 calls; `embed()` accepts a list and is split). On inner error: do not write, propagate.
 
-   **Cost ceiling (`RecordingLLMClient` only).** Constructor takes `max_cost_usd: float | None = None`. When non-None, the wrapper accumulates each call's `response.cost_usd` and raises `RecordingBudgetExceededError(spent=..., limit=...)` *before* invoking the inner if the next call would push past the limit. On overrun the wrapper does not write the in-flight cassette; tmp_dir cleanup is the caller's responsibility (already handled per the recording flow). Default ceiling at the `just eval-record` call site is **`$2.00`** (≈2× the current full-record estimate of $0.50–$1) — runaway tool loops or model-upgrade surprises hit this before they hit OpenRouter's rate limits. Operator overrides via `--max-cost-usd <float>` if a re-record legitimately needs more. Sparse and embedding wrappers don't carry a ceiling because their cost is dominated by the LLM tool-loop side.
+   **Cost ceiling (`RecordingLLMClient` only).** Constructor takes `max_cost_usd: float | None = None`. When non-None, the wrapper accumulates each call's `response.cost_usd` and raises `RecordingBudgetExceededError(spent=..., limit=...)` *before* invoking the inner if the next call would push past the limit. On overrun the wrapper does not write the in-flight cassette; tmp_dir cleanup is the caller's responsibility (already handled per the recording flow). Default ceiling at the `just eval-record` call site is **`$2.00`** (≈2× the current full-record estimate of $0.50–$1) — runaway tool loops or model-upgrade surprises hit this before they hit OpenRouter's rate limits. Operator overrides via `--max-cost-usd <float>` if a re-record legitimately needs more. Sparse and embedding wrappers don't carry a ceiling: under the default `embedding_provider="fastembed"` both run locally with `cost_usd=0.0`; under `embedding_provider="openai"` the dense side has a real per-token cost but it's still dominated by the LLM tool-loop side. Either way the LLM ceiling is the meaningful guardrail.
 
-   **Embedding batch split.** `OpenAIEmbeddingsClient.embed(texts)` is N-in / N-out / one HTTP roundtrip / one `cost_usd` / one `n_tokens` ([slopmortem/llm/openai_embeddings.py:74-90](../../slopmortem/llm/openai_embeddings.py)). `RecordingEmbeddingClient.embed(texts)` iterates `zip(texts, response.vectors)` and writes one cassette per text keyed `(model, text_hash)`. Cost / token totals are **not** stored on cassettes — the OpenAI API doesn't return per-input token counts, and today's `FakeEmbeddingClient` already returns `cost_usd=0.0, n_tokens=0` ([slopmortem/llm/fake_embeddings.py:54](../../slopmortem/llm/fake_embeddings.py)). The eval doesn't assert on embedding cost. Recording's aggregate cost still flows to the budget tracker via the inner real client (its normal path).
+   **Embedding batch split.** Both `OpenAIEmbeddingClient.embed(texts)` and `FastEmbedEmbeddingClient.embed(texts)` are N-in / N-out and return a single `EmbeddingResult(vectors, n_tokens, cost_usd)` aggregate ([slopmortem/llm/openai_embeddings.py:85-120](../../slopmortem/llm/openai_embeddings.py), [slopmortem/llm/fastembed_client.py:83-100](../../slopmortem/llm/fastembed_client.py)). `RecordingEmbeddingClient` is provider-agnostic: it wraps an arbitrary `EmbeddingClient`, iterates `zip(texts, response.vectors)`, and writes one cassette per text keyed `(model, text_hash)`. Cost / token totals are **not** stored on cassettes — neither backend exposes per-input token counts, and today's `FakeEmbeddingClient` already returns `cost_usd=0.0, n_tokens=0`. The eval doesn't assert on embedding cost. Recording's aggregate cost still flows to the budget tracker via the inner real client (zero for fastembed, real $ for OpenAI).
 
    **Embedding batch reassembly.** On replay, `FakeEmbeddingClient.embed([t1, t2, ...])` performs N independent per-text cassette lookups, returning the vectors in input order with `cost_usd=0.0, n_tokens=0`. The same cassette is reused across batches (a text appearing in two different queries hits one file), which is the main reason for per-text granularity over a batch-shaped cassette.
 
@@ -61,7 +63,7 @@ Seven structural pieces:
 tests/fixtures/cassettes/
   evals/
     <row_id>/
-      embed__text-embedding-3-small__<text_hash>.json
+      embed__nomic-ai_nomic-embed-text-v1.5__<text_hash>.json
       embed__Qdrant_bm25__<text_hash>.json
       facet_extract__anthropic__claude-sonnet-4-6__<prompt_hash>.json
       llm_rerank__anthropic__claude-sonnet-4-6__<prompt_hash>.json
@@ -76,7 +78,9 @@ tests/fixtures/cassettes/
       ...
 ```
 
-Filenames use the full 16-char hash (no truncation) so collision risk is negligible. The repeated `embed__text-embedding-3-small__<hash>.json` per scope (same text re-embedded across scopes) is intentional duplication — keeping every cassette inside its scope is what makes the atomic-swap-per-scope guarantee work.
+Dense-embedding filenames reflect whichever model was active at record time: `nomic-ai_nomic-embed-text-v1.5` under the default `fastembed` provider, `text-embedding-3-small` (or `-large`) under `openai`. The slugifier (see "Model slug in filenames" below) handles all of `/`, `:`, `@` uniformly, so `nomic-ai/nomic-embed-text-v1.5` → `nomic-ai_nomic-embed-text-v1.5` falls out of the same rule that produces `Qdrant_bm25` and `anthropic_claude-sonnet-4-6_beta`.
+
+Filenames use the full 16-char hash (no truncation) so collision risk is negligible. The repeated `embed__<model>__<hash>.json` per scope (same text re-embedded across scopes) is intentional duplication — keeping every cassette inside its scope is what makes the atomic-swap-per-scope guarantee work.
 
 **Model slug in filenames.** OpenRouter model ids contain `/` (e.g. `anthropic/claude-sonnet-4-6`) and may carry suffixes like `:beta`, `:nitro`, `:free` — `:` is forbidden on Windows filesystems, `/` is interpreted as a path separator. Filenames replace any character not in `[A-Za-z0-9._-]` with `_` (single regex covers `/`, `:`, `@`, and any future surprises). The original unescaped model id stays in the JSON `key.model` field; the filename slug is purely a filesystem concern and is never parsed back. A single helper `_slugify_model(model: str) -> str` in `slopmortem/evals/cassettes.py` does the substitution; both recording wrappers and replay loaders import it.
 
@@ -96,8 +100,8 @@ Generated once by `just eval-record-corpus` running real ingest against the seed
 
 6. **Two recording commands, two cadences.**
 
-   - `just eval-record-corpus` — rare. Real ingest of seed docs → JSONL. Run when seed corpus needs to change. ~$3–5.
-   - `just eval-record [--scope evals/<row_id>]` — frequent. Replay queries with cassetting → cassette files + updated baseline. Run when prompts/models change. ~$0.50–$1 full, ~$0.05–$0.10 per scope.
+   - `just eval-record-corpus` — rare. Real ingest of seed docs → JSONL. Run when seed corpus needs to change. ~$0.30–$1 under the default `embedding_provider="fastembed"` (LLM-side ingest stages — summarize/extract/etc. — only); ~$3–5 if `embedding_provider="openai"` is configured because dense embeddings then go to the paid API. Either way, expect a one-time fastembed model download (nomic ~550 MB + BM25 ~150 MB ≈ ~700 MB) on the first run if `slopmortem embed-prefetch` hasn't been run.
+   - `just eval-record [--scope evals/<row_id>]` — frequent. Replay queries with cassetting → cassette files + updated baseline. Run when prompts/models change. ~$0.50–$1 full, ~$0.05–$0.10 per scope. Embedding side is free under the default fastembed provider; the dollar figure is OpenRouter LLM cost only.
 
 7. **Cassette miss is loud.** No silent fallback, no auto-record-on-miss. `FakeLLMClient` raises `NoCannedResponseError` with the missing key and the list of recorded keys (existing behavior). Recording is always explicit.
 
