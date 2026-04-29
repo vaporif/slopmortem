@@ -18,6 +18,8 @@ import asyncio
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from lmnr import Laminar
+
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
 from slopmortem.llm.tools import synthesis_tools, to_strict_response_schema
 from slopmortem.models import Synthesis
@@ -39,15 +41,18 @@ _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 _INJECTION_MARKER = "prompt_injection_attempted"
 
 
-def _emit_event(event: SpanEvent) -> None:  # noqa: ARG001 — no-op until Task 10 wires Laminar.init.
-    """Hook for span event emission.
+def _emit_event(event: SpanEvent) -> None:
+    """Emit *event* as a Laminar span event when tracing is initialized.
 
-    Tests monkeypatch this to observe emissions. The real Laminar wiring lands
-    in Task 10 (per plan line 713: ``Laminar.init`` is deferred until the rest
-    of the pipeline imports settle); mirroring ``OpenRouterClient._emit`` keeps
-    the seam until then.
+    Tests monkeypatch this to observe emissions; in production the body fires
+    ``Laminar.event(name=str(event))`` when ``Laminar.is_initialized()`` is
+    true. Short-circuits cleanly in test environments that don't initialize
+    Laminar — ``Laminar.event`` already guards on initialization itself, but
+    we check here to keep the seam explicit and avoid surprise traces from
+    misconfigured fixtures.
     """
-    return
+    if Laminar.is_initialized():
+        Laminar.event(name=str(event))
 
 
 async def synthesize(

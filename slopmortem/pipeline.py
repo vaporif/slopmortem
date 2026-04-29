@@ -1,0 +1,181 @@
+"""Top-level orchestration: ``run_query`` wires every stage of the slopmortem pipeline.
+
+Pure library code. No I/O, no stderr, no path/file access, no outbound HTTP — every
+side-effecting capability arrives via injected dependencies (LLM client, embedding
+client, Corpus, Budget, optional progress callback). The CLI in ``slopmortem.cli``
+constructs those dependencies and calls ``run_query``.
+
+Failure model (spec §770-775):
+- A :class:`BudgetExceededError` raised by any stage truncates the run; whatever
+  Synthesis values had already accumulated up to that point are still returned in
+  the final :class:`Report` with ``budget_exceeded=True``.
+- Per-candidate synthesis failures do NOT abort the run: ``synthesize_all`` already
+  swallows them as exception entries, and we filter them out of the final list so
+  ``Report.candidates`` only carries successful Synthesis values.
+"""
+
+from __future__ import annotations
+
+import time
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+
+from lmnr import Laminar
+
+from slopmortem.budget import BudgetExceededError
+from slopmortem.models import PipelineMeta, Report, Synthesis
+from slopmortem.stages.facet_extract import extract_facets
+from slopmortem.stages.llm_rerank import llm_rerank
+from slopmortem.stages.retrieve import retrieve
+from slopmortem.stages.synthesize import synthesize_all
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from slopmortem.budget import Budget
+    from slopmortem.config import Config
+    from slopmortem.corpus.store import Corpus
+    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.models import Candidate, InputContext, ScoredCandidate
+
+
+_DAYS_PER_YEAR = 365
+
+
+def _cutoff_iso(years_filter: int | None) -> str | None:
+    """Convert a years-back recency filter into an ISO-8601 date string.
+
+    Retrieve takes ISO-8601 dates (``YYYY-MM-DD``), not full timestamps; we floor
+    to ``date()`` here so the cutoff stays stable across the hour the query runs.
+    """
+    if years_filter is None:
+        return None
+    return (datetime.now(UTC) - timedelta(days=_DAYS_PER_YEAR * years_filter)).date().isoformat()
+
+
+def _join_to_candidates(
+    retrieved: list[Candidate], ranked: list[ScoredCandidate]
+) -> list[Candidate]:
+    """Re-attach :class:`Candidate` payloads to the rerank-ordered ids.
+
+    The reranker returns :class:`ScoredCandidate` (id + perspective scores) but
+    synthesize needs the full :class:`Candidate` (with ``payload.body``). We
+    preserve the rerank order and silently drop any ranked id missing from the
+    retrieved set — defensive only, since the reranker only sees retrieved ids.
+    """
+    id_to_candidate = {c.canonical_id: c for c in retrieved}
+    out: list[Candidate] = []
+    for s in ranked:
+        cand = id_to_candidate.get(s.candidate_id)
+        if cand is not None:
+            out.append(cand)
+    return out
+
+
+def _current_trace_id() -> str | None:
+    """Return the current Laminar trace id, or ``None`` when tracing is off."""
+    if not Laminar.is_initialized():
+        return None
+    tid = Laminar.get_trace_id()
+    return str(tid) if tid is not None else None
+
+
+async def run_query(  # noqa: PLR0913 — every dep is required wiring at the call site
+    input_ctx: InputContext,
+    *,
+    llm: LLMClient,
+    embedding_client: EmbeddingClient,
+    corpus: Corpus,
+    config: Config,
+    budget: Budget,
+    progress: Callable[[str], None] | None = None,
+) -> Report:
+    """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
+
+    Args:
+        input_ctx: The user's :class:`InputContext` (name, description, optional
+            recency filter).
+        llm: Async :class:`LLMClient` shared by every LLM-driven stage.
+        embedding_client: Async dense embedder used inside ``retrieve``.
+        corpus: Read-side :class:`Corpus` impl (Qdrant in production, fake in tests).
+        config: :class:`Config` — ``K_retrieve``, ``N_synthesize``, model ids,
+            ``strict_deaths``.
+        budget: Shared per-run :class:`Budget` for cost bookkeeping. Stages
+            book costs through their LLM/embedding clients; this function only
+            reads ``spent_usd``/``remaining`` at the end.
+        progress: Optional ``str -> None`` callback for stage progress (CLI uses
+            it to write to stderr). Pipeline never writes to stderr itself.
+
+    Returns:
+        A :class:`Report` carrying the input echo, generated_at, the synthesized
+        :class:`Synthesis` candidates (only successes; per-candidate exceptions
+        are dropped silently), and a :class:`PipelineMeta` with cost, latency,
+        trace id, and budget bookkeeping. ``budget_exceeded`` is ``True`` iff
+        a :class:`BudgetExceededError` truncated the run.
+    """
+    t0 = time.monotonic()
+    successes: list[Synthesis] = []
+    budget_exceeded = False
+
+    try:
+        if progress is not None:
+            progress("facet_extract")
+        facets = await extract_facets(input_ctx.description, llm, model=config.model_facet)
+
+        if progress is not None:
+            progress("retrieve")
+        cutoff_iso = _cutoff_iso(input_ctx.years_filter)
+        retrieved = await retrieve(
+            description=input_ctx.description,
+            facets=facets,
+            corpus=corpus,
+            embedding_client=embedding_client,
+            cutoff_iso=cutoff_iso,
+            strict_deaths=config.strict_deaths,
+            k_retrieve=config.K_retrieve,
+        )
+
+        if progress is not None:
+            progress("rerank")
+        reranked = await llm_rerank(
+            retrieved,
+            input_ctx.description,
+            facets,
+            llm,
+            config,
+            model=config.model_rerank,
+        )
+
+        top_n = _join_to_candidates(retrieved, reranked.ranked)[: config.N_synthesize]
+
+        if progress is not None:
+            progress(f"synthesize 0/{len(top_n)}")
+        synth_results = await synthesize_all(
+            top_n, input_ctx, llm, config, model=config.model_synthesize
+        )
+        successes = [s for s in synth_results if isinstance(s, Synthesis)]
+        if progress is not None:
+            progress(f"synthesize {len(successes)}/{len(top_n)}")
+    except BudgetExceededError:
+        budget_exceeded = True
+
+    return Report(
+        input=input_ctx,
+        generated_at=datetime.now(UTC),
+        candidates=successes,
+        pipeline_meta=PipelineMeta(
+            K_retrieve=config.K_retrieve,
+            N_synthesize=config.N_synthesize,
+            models={
+                "facet": config.model_facet,
+                "rerank": config.model_rerank,
+                "synthesize": config.model_synthesize,
+            },
+            cost_usd_total=budget.spent_usd,
+            latency_ms_total=int((time.monotonic() - t0) * 1000),
+            trace_id=_current_trace_id(),
+            budget_remaining_usd=budget.remaining,
+            budget_exceeded=budget_exceeded,
+        ),
+    )

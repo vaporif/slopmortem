@@ -30,6 +30,7 @@ slopmortem = "slopmortem.cli:app"
 dev = [
   "pytest>=9",
   "pytest-asyncio>=1.3",
+  "pytest-cov>=7.0",
   "pytest-recording>=0.13",
   "pytest-xdist>=3.8",
   "syrupy>=5.1",

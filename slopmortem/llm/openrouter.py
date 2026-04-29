@@ -291,8 +291,12 @@ class OpenRouterClient:
                 raise RuntimeError(msg)
 
     def _emit(self, _event: SpanEvent) -> None:
-        # Tracing wiring lands in Task 4. Until then this is a no-op hook the
-        # tests can patch to observe emissions.
+        # Mirrors ``slopmortem.stages.synthesize._emit_event``: a no-op hook
+        # by default so tests can patch it to observe emissions. Production
+        # wiring (Laminar initialized in ``slopmortem.cli._query``) is opt-in;
+        # if a future change wants this client to also emit, call
+        # ``Laminar.event(name=str(_event))`` here gated on
+        # ``Laminar.is_initialized()``.
         return
 
 

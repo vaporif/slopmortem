@@ -2468,7 +2468,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 10.1: Failing E2E test**
+- [x] **Step 10.1: Failing E2E test**
 
 ```python
 async def test_full_pipeline_with_fake_clients(fake_llm, fake_embed, fixture_corpus, syrupy_snapshot):
@@ -2486,7 +2486,7 @@ async def test_full_pipeline_with_fake_clients(fake_llm, fake_embed, fixture_cor
     syrupy_snapshot.assert_match(structural_skeleton(report))
 ```
 
-- [ ] **Step 10.2: Implement `pipeline.run_query`**
+- [x] **Step 10.2: Implement `pipeline.run_query`**
 
 ```python
 from __future__ import annotations
@@ -2545,7 +2545,7 @@ async def run_query(input_ctx: InputContext, *, llm, embedder, corpus, config, b
     )
 ```
 
-- [ ] **Step 10.3: `slopmortem/cli.py` with typer**
+- [x] **Step 10.3: `slopmortem/cli.py` with typer**
 
 ```python
 import asyncio
@@ -2580,11 +2580,11 @@ def replay(dataset: str):
     asyncio.run(_replay(dataset))
 ```
 
-- [ ] **Step 10.4: Single `asyncio.run`, fastembed in `to_thread`**
+- [x] **Step 10.4: Single `asyncio.run`, fastembed in `to_thread`**
 
 The CLI entry point makes exactly one `asyncio.run(...)` call. Sparse embedding (CPU-bound) goes through `asyncio.to_thread`. SDK calls use the async clients (one `AsyncOpenAI` for OpenRouter LLM, one for OpenAI embeddings).
 
-- [ ] **Step 10.5: Ctrl-C cancellation test**
+- [x] **Step 10.5: Ctrl-C cancellation test**
 
 ```python
 async def test_ctrl_c_cancels_in_flight(fake_slow_llm):
@@ -2595,15 +2595,15 @@ async def test_ctrl_c_cancels_in_flight(fake_slow_llm):
         await task
 ```
 
-- [ ] **Step 10.6: Stage progress to stderr, gated on isatty**
+- [x] **Step 10.6: Stage progress to stderr, gated on isatty**
 
 Per spec line 973. Report goes to stdout; progress goes to stderr; piping `slopmortem ... | jq` keeps stdout clean.
 
-- [ ] **Step 10.7: `slopmortem replay --dataset`**
+- [x] **Step 10.7: `slopmortem replay --dataset`**
 
 Reads `tests/evals/datasets/<name>.jsonl`, re-runs each `InputContext` through `run_query`, prints reports.
 
-- [ ] **Step 10.8: Verify**
+- [x] **Step 10.8: Verify**
 
 Run: `uv run pytest tests/test_pipeline_e2e.py tests/test_cli_smoke.py -v`
 Expected: all green.
