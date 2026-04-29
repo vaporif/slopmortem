@@ -13,6 +13,8 @@ from slopmortem.llm.openai_embeddings import EMBED_DIMS
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from fastembed import TextEmbedding
+
     from slopmortem.budget import Budget
 
 
@@ -33,21 +35,21 @@ class FastEmbedEmbeddingClient:
         self.model = model
         self._budget = budget
         self._cache_dir = cache_dir
-        self._te: object | None = None  # fastembed.TextEmbedding instance, lazy
+        self._te: TextEmbedding | None = None
 
     @property
     def dim(self) -> int:
         """Vector dimensionality for the configured embedding model."""
         return EMBED_DIMS[self.model]
 
-    async def _ensure_loaded(self) -> object:
+    async def _ensure_loaded(self) -> TextEmbedding:
         """Materialize the fastembed model on first use; idempotent."""
         if self._te is not None:
             return self._te
         self._te = await to_thread.run_sync(self._load_sync)
         return self._te
 
-    def _load_sync(self) -> object:
+    def _load_sync(self) -> TextEmbedding:
         from fastembed import TextEmbedding  # noqa: PLC0415 — heavy import, defer
 
         cache_dir = str(self._cache_dir) if self._cache_dir is not None else None
@@ -84,7 +86,7 @@ class FastEmbedEmbeddingClient:
         return EmbeddingResult(vectors=vectors, n_tokens=n_tokens, cost_usd=0.0)
 
     @staticmethod
-    def _embed_sync(te: object, texts: list[str]) -> tuple[list[list[float]], int]:
+    def _embed_sync(te: TextEmbedding, texts: list[str]) -> tuple[list[list[float]], int]:
         """Run fastembed inference + tokenizer count on a worker thread.
 
         Vectors are L2-normalized before return so cosine == dot in Qdrant.
@@ -92,13 +94,12 @@ class FastEmbedEmbeddingClient:
         ``PooledEmbedding`` (mean pooling without normalization), so we
         normalize here.
         """
-        gen = te.embed(texts)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
         vectors: list[list[float]] = []
-        for v in gen:  # pyright: ignore[reportUnknownVariableType]
+        for v in te.embed(texts):
             arr = np.asarray(v, dtype=np.float32)
             norm = float(np.linalg.norm(arr))
             if norm > 0.0:
                 arr = arr / norm
             vectors.append(arr.tolist())  # pyright: ignore[reportAny] — numpy ndarray.tolist() typed as Any
-        n_tokens = int(te.token_count(texts))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownArgumentType]
+        n_tokens = int(te.token_count(texts))
         return vectors, n_tokens
