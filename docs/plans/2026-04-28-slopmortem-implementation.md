@@ -6,7 +6,7 @@
 
 **Architecture:** Async Python pipeline of pure stage functions (`facet_extract → embed → retrieve → llm_rerank → synthesize → render`) under one `asyncio.run` at the CLI edge. All LLM traffic goes through an `LLMClient` Protocol implemented by `OpenRouterClient` (openai SDK pointed at `openrouter.ai/api/v1`). Corpus persistence is Qdrant (Docker service) for vectors + payload, on-disk markdown for raw and merged bodies, and a SQLite journal for merge state. Laminar wraps every stage and SDK call.
 
-**Tech Stack:** Python 3.11+, async (`asyncio` + `anyio.CapacityLimiter`), `openai` SDK, `qdrant-client>=1.14`, `fastembed` (BM25 + cross-encoder), `pydantic-settings` v2 with TOML sources, `pydantic` v2 models, `lmnr-python`, `typer`, `trafilatura`, `tldextract`, `jsonref`, `pytest` + `pytest-recording` + `syrupy`. Dependencies pinned in `pyproject.toml`; tooling via `uv`.
+**Tech Stack:** Python 3.11+, async (`asyncio` + `anyio.CapacityLimiter`), `openai` SDK, `qdrant-client>=1.17.1`, `fastembed` (BM25 + cross-encoder), `pydantic-settings` v2 with TOML sources, `pydantic` v2 models, `lmnr-python`, `typer`, `trafilatura`, `tldextract`, `jsonref`, `pytest` + `pytest-recording` + `syrupy`. Dependencies pinned in `pyproject.toml`; tooling via `uv`.
 
 **Source spec:** [`docs/specs/2026-04-27-slopmortem-design.md`](../specs/2026-04-27-slopmortem-design.md) (read first; this plan does not duplicate every contract). Companion docs: [blockers](../specs/2026-04-28-design-spec-blockers.md), [openrouter corrections](../specs/2026-04-28-openrouter-api-corrections.md), [LIMITATIONS / review issues](../specs/2026-04-28-design-review-issues.md).
 
@@ -101,7 +101,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "openai>=1.50",
-  "qdrant-client>=1.14",
+  "qdrant-client>=1.17.1",
   "fastembed>=0.4",
   "pydantic>=2.7",
   "pydantic-settings>=2.4",
@@ -1600,7 +1600,7 @@ Expected: green.
 
 **Spec refs:** §Architecture Qdrant decisions (lines 229–238), §Components & file layout merge journal (lines 393–411), §Data flow Ingest atomicity (lines 534–590), §Failure handling (line 762).
 
-**Pre-flight:** Add `qdrant-client>=1.14` and `fastembed` if not already in pyproject.
+**Pre-flight:** Add `qdrant-client>=1.17.1` and `fastembed` if not already in pyproject.
 
 ### Step-by-step
 
@@ -1609,7 +1609,7 @@ Expected: green.
 ```yaml
 services:
   qdrant:
-    image: qdrant/qdrant:v1.14.0
+    image: qdrant/qdrant:v1.17.1
     ports: ["6333:6333"]
     volumes:
       - ./data/qdrant:/qdrant/storage
