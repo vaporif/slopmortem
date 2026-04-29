@@ -5,9 +5,37 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Any, Literal
+from functools import cache
+from pathlib import Path
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel
+import yaml
+from pydantic import BaseModel, model_validator
+
+# Closed-enum facet fields whose values MUST appear in ``taxonomy.yml``.
+# Free-form fields (sub_sector, product_type, price_point, founding_year,
+# failure_year) deliberately stay open and are not enum-validated.
+_CLOSED_FACET_FIELDS: tuple[str, ...] = (
+    "sector",
+    "business_model",
+    "customer_type",
+    "geography",
+    "monetization",
+)
+
+_TAXONOMY_PATH = Path(__file__).resolve().parent / "corpus" / "taxonomy.yml"
+
+
+@cache
+def _load_taxonomy() -> dict[str, frozenset[str]]:
+    """Load ``taxonomy.yml`` once, returning each closed-enum field as a frozenset."""
+    # yaml.safe_load is loosely typed; we narrow at the dict boundary, same as
+    # slopmortem.corpus.sources.curated.
+    raw = cast(
+        "dict[str, list[Any]]",  # pyright: ignore[reportExplicitAny]
+        yaml.safe_load(_TAXONOMY_PATH.read_text()),
+    )
+    return {field: frozenset(raw[field]) for field in _CLOSED_FACET_FIELDS}
 
 
 class PerspectiveScore(BaseModel):
@@ -39,6 +67,31 @@ class Facets(BaseModel):
     price_point: str | None = None
     founding_year: int | None = None
     failure_year: int | None = None
+
+    @model_validator(mode="after")
+    def _enforce_closed_taxonomy(self) -> Facets:
+        """Reject closed-enum values not present in ``taxonomy.yml``.
+
+        Defense-in-depth against an LLM that ignores the strict-mode JSON
+        schema and invents enum values. ``"other"`` lives in every closed
+        enum so the model never has to lie. Free-form fields are not
+        checked here.
+        """
+        taxonomy = _load_taxonomy()
+        # All five closed-enum fields are typed `str` on the model itself, so
+        # the dict lookup is safe and stays narrow.
+        values: dict[str, str] = {
+            "sector": self.sector,
+            "business_model": self.business_model,
+            "customer_type": self.customer_type,
+            "geography": self.geography,
+            "monetization": self.monetization,
+        }
+        for field_name, value in values.items():
+            if value not in taxonomy[field_name]:
+                msg = f"{field_name}={value!r} not in taxonomy.{field_name}"
+                raise ValueError(msg)
+        return self
 
 
 class Synthesis(BaseModel):

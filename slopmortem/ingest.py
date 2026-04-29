@@ -40,7 +40,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
-import json
 import logging
 import secrets
 import uuid
@@ -263,33 +262,6 @@ def _skip_key(  # noqa: PLR0913 — the spec-defined tuple is wide
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _facets_default() -> Facets:
-    return Facets(
-        sector="other",
-        business_model="other",
-        customer_type="other",
-        geography="other",
-        monetization="other",
-    )
-
-
-def _parse_facets(payload_json: str) -> Facets:
-    try:
-        parsed: object = json.loads(payload_json)
-    except json.JSONDecodeError:
-        return _facets_default()
-    if not isinstance(parsed, dict):
-        return _facets_default()
-    data = cast("dict[str, object]", parsed)
-    # Only accept keys Facets knows about.
-    known = set(Facets.model_fields.keys())
-    cleaned = {k: v for k, v in data.items() if k in known}
-    try:
-        return Facets.model_validate(cleaned)
-    except Exception:  # noqa: BLE001 — fall back to "other" on any validation slip
-        return _facets_default()
-
-
 def _entry_summary_text(entry: RawEntry) -> str:
     """Return the entry's body text for slop+facet+summarize stages."""
     if entry.markdown_text:
@@ -365,14 +337,11 @@ async def _gather_entries(
 
 
 async def _facet_call(text: str, *, llm: LLMClient, model: str | None) -> Facets:
-    prompt = render_prompt("facet_extract", description=text)
-    res = await llm.complete(
-        prompt,
-        model=model,
-        cache=True,
-        extra_body={"prompt_template_sha": prompt_template_sha("facet_extract")},
-    )
-    return _parse_facets(res.text)
+    # Delegates to the dedicated stage; strict-mode validation propagates as
+    # ``ValidationError`` to the per-entry isolator at line ~840.
+    from slopmortem.stages.facet_extract import extract_facets  # noqa: PLC0415
+
+    return await extract_facets(text, llm, model)
 
 
 async def _summarize_call(text: str, *, llm: LLMClient, model: str | None) -> tuple[str, int, int]:
