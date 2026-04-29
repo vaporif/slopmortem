@@ -76,7 +76,7 @@ async def gather_with_limit[T](
 
 
 class OpenRouterClient:
-    """OpenAI-compatible SDK wrapper that drives OpenRouter; runs the retry and tool-call loops."""
+    """OpenAI-compatible SDK wrapper for OpenRouter; runs the retry and tool-call loops."""
 
     def __init__(  # noqa: PLR0913 — knobs are public API; users construct this directly.
         self,
@@ -109,7 +109,7 @@ class OpenRouterClient:
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> CompletionResult:
-        """Run a chat completion. Handles tool calls, cache re-warming, and retries."""
+        """Run a chat completion, including the tool-call loop, cache re-warming, and retries."""
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
         registered = {t.name: t for t in (tools or [])}
@@ -314,7 +314,7 @@ def _tc_id(tc: object) -> str:
 def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Render the assistant turn that requested tool calls.
 
-    Builds the payload the next API call can replay so the model can see its own
+    Builds the payload the next API call can replay so the model sees its own
     prior tool-call request alongside the tool's response.
     """
     tcs = [

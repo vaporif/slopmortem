@@ -1,9 +1,10 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportIndexIssue=false, reportOptionalSubscript=false
 """Qdrant-backed corpus store: collection bootstrap + read methods + chunk upsert.
 
-Vendor-SDK boundary module: Qdrant's models are loosely typed (``Optional`` /
-``Mapping`` everywhere), so per-file ``reportAny`` / ``reportUnknown*`` silences
-match the pattern used by ``slopmortem/llm/openai_embeddings.py``.
+Vendor-SDK boundary module. Qdrant's models are loosely typed
+(``Optional`` / ``Mapping`` everywhere), so the per-file ``reportAny`` /
+``reportUnknown*`` silences match the pattern in
+``slopmortem/llm/openai_embeddings.py``.
 """
 
 from __future__ import annotations
@@ -75,9 +76,9 @@ async def ensure_collection(client: AsyncQdrantClient, name: str, *, dim: int) -
 class QdrantCorpus:
     """Live :class:`Corpus` impl backed by a Qdrant service + on-disk markdown tree.
 
-    Holds vectors and small payload in Qdrant; the full canonical body lives on
-    disk under ``<post_mortems_root>/canonical/<text_id>.md`` and is loaded on
-    demand by ``get_post_mortem``.
+    Vectors and small payload live in Qdrant; the full canonical body lives
+    on disk under ``<post_mortems_root>/canonical/<text_id>.md`` and loads
+    on demand via ``get_post_mortem``.
     """
 
     def __init__(  # noqa: PLR0913 — orchestration knobs are public construction surface
@@ -96,16 +97,16 @@ class QdrantCorpus:
             client: Live :class:`AsyncQdrantClient`.
             collection: Qdrant collection name.
             post_mortems_root: Root for ``raw/`` + ``canonical/`` markdown.
-            facet_boost: Per-non-``"other"`` facet match boost added on top of
-                the inner RRF score; ``0.01`` matches the spec's provisional
-                value (lifts ~0.04 max for a 4-facet match against an RRF
-                ceiling of ~0.033).
-            rrf_k: Reciprocal-rank-fusion ``k`` constant — passed through to
+            facet_boost: Per-non-``"other"`` facet match boost added on top
+                of the inner RRF score; ``0.01`` matches the spec's
+                provisional value (lifts ~0.04 max for a 4-facet match
+                against an RRF ceiling of ~0.033).
+            rrf_k: Reciprocal-rank-fusion ``k`` constant, passed through to
                 the inner :class:`Prefetch`. Default 60 matches Qdrant's
                 server default.
             fetch_aliases: Optional async fetcher (canonical_id -> list of
-                alias edges). When ``None``, the alias-graph dedup pass is a
-                no-op — useful for tests that don't seed an aliases table.
+                alias edges). When ``None``, the alias-graph dedup pass is
+                a no-op (useful for tests that don't seed an aliases table).
         """
         self._client = client
         self._collection = collection
@@ -126,15 +127,17 @@ class QdrantCorpus:
     ) -> list[Candidate]:
         """Hybrid retrieve top-K candidates with FormulaQuery facet boost.
 
-        Per spec lines 605-689: an inner :class:`Prefetch` with dense+sparse
+        Spec lines 605-689: an inner :class:`Prefetch` with dense+sparse
         RRF fusion, an outer :class:`FormulaQuery` adding a per-facet boost
         (skipping ``"other"``) on top of ``$score``, and a recency
-        :class:`Filter` with three branches (or one under ``--strict-deaths``).
+        :class:`Filter` with three branches (or one under
+        ``--strict-deaths``).
 
         Over-fetches chunks at ``k_retrieve * 4`` so the in-Python collapse
-        to parents has room. After collapse, alias-graph connected components
-        are deduped via :func:`collapse_alias_components` and the result is
-        truncated to ``k_retrieve`` Candidates.
+        to parents has room. After collapse,
+        :func:`collapse_alias_components` dedupes alias-graph connected
+        components and the result is truncated to ``k_retrieve``
+        Candidates.
 
         Args:
             dense: Dense query vector.
@@ -182,8 +185,8 @@ class QdrantCorpus:
 
         # Build the facet-boost FilterCondition: skip "other" deliberately.
         # Free-form (sub_sector, product_type, ...) and integer-typed year
-        # facets are intentionally not part of the soft-boost set: closed
-        # taxonomy fields are the contract surface (see spec line 605-648).
+        # facets stay out of the soft-boost set; the closed taxonomy fields
+        # are the contract surface (spec line 605-648).
         boost_must: list[Any] = []  # pyright: ignore[reportExplicitAny]
         for fname in ("sector", "business_model", "customer_type", "geography", "monetization"):
             val = getattr(facets, fname)
@@ -192,9 +195,9 @@ class QdrantCorpus:
             boost_must.append(FieldCondition(key=f"facets.{fname}", match=MatchValue(value=val)))
 
         # Outer formula: $score + boost * Filter(must=boost_must). When
-        # boost_must is empty, the Filter matches every doc (a 1.0
-        # contribution on every candidate); to keep "no facet boost in play"
-        # truly neutral, drop the Mult term entirely in that case.
+        # boost_must is empty the Filter matches every doc (a 1.0
+        # contribution on every candidate). Drop the Mult term entirely in
+        # that case so "no facet boost in play" stays neutral.
         formula_terms: list[Any] = ["$score"]  # pyright: ignore[reportExplicitAny]
         if boost_must:
             formula_terms.append(MultExpression(mult=[self._facet_boost, Filter(must=boost_must)]))
@@ -228,9 +231,9 @@ class QdrantCorpus:
             if cid not in best or score > best[cid][0]:
                 best[cid] = (score, payload)
 
-        # Build Candidates in descending score order. Bad payloads on a
-        # specific doc are per-doc isolated (logged + dropped) so a single
-        # malformed point can't fail the whole query.
+        # Build Candidates in descending score order. Bad payloads are
+        # per-doc isolated (logged + dropped) so one malformed point can't
+        # fail the whole query.
         ordered = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)
         candidates: list[Candidate] = []
         for cid, (score, payload) in ordered:
@@ -241,8 +244,8 @@ class QdrantCorpus:
                 continue
             candidates.append(Candidate(canonical_id=cid, score=score, payload=cp))
 
-        # Alias-graph dedup. The fetcher is per-canonical_id; gather all
-        # edges referencing any of our retrieved canonicals.
+        # Alias-graph dedup. The fetcher is per-canonical_id; gather every
+        # edge referencing any retrieved canonical.
         if self._fetch_aliases is not None and candidates:
             edges: list[AliasEdge] = []
             for c in candidates:
@@ -263,10 +266,10 @@ class QdrantCorpus:
     ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]  # Protocol surface
         """Lightweight scroll-based search; returns a list of payload dicts.
 
-        v1 uses Qdrant's payload scroll filtering on the canonical_id +
-        provided facet keys; full text relevance arrives with the FormulaQuery
-        path in Task #7. The synthesis-tool layer asks for at most a handful
-        of hits.
+        v1 uses Qdrant's payload scroll filtering on canonical_id + the
+        provided facet keys. Full text relevance arrives with the
+        FormulaQuery path in Task #7. The synthesis-tool layer asks for a
+        handful of hits at most.
         """
         from qdrant_client.models import (  # noqa: PLC0415 — keep import surface lean
             FieldCondition,
@@ -299,7 +302,7 @@ class QdrantCorpus:
         return out
 
     async def upsert_chunk(self, point: Any) -> None:  # pyright: ignore[reportExplicitAny]
-        """Upsert a single chunk point into the collection — used by ingest."""
+        """Upsert a single chunk point into the collection (used by ingest)."""
         await self._client.upsert(
             collection_name=self._collection,
             points=[point],
@@ -313,9 +316,9 @@ def canonical_path_for(post_mortems_root: Path, canonical_id: str) -> Path:
 
 
 def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any:  # pyright: ignore[reportExplicitAny]
-    """Compose the three-branch recency :class:`Filter` (or single-branch in strict mode).
+    """Compose the three-branch recency :class:`Filter` (single-branch in strict mode).
 
-    Branches A/B/C per spec lines 661-689 use derived
+    Branches A/B/C (spec lines 661-689) use derived
     ``failure_date_unknown`` / ``founding_date_unknown`` boolean payloads
     rather than ``IsNullCondition`` (qdrant#5148: documented slow under
     indexed payloads).
@@ -330,10 +333,10 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
         MatchValue,
     )
 
-    # ``DatetimeRange.gte`` is typed ``datetime | date | None``; the runtime
-    # accepts ISO strings via pydantic coercion but the stub is strict.
-    # Parse once here so the rest of this function stays narrow. Python 3.11+
-    # ``fromisoformat`` accepts the trailing ``Z`` directly, no replace needed.
+    # ``DatetimeRange.gte`` is typed ``datetime | date | None``. The runtime
+    # accepts ISO strings via pydantic coercion, but the stub is strict, so
+    # parse once here to keep the rest narrow. Python 3.11+
+    # ``fromisoformat`` handles the trailing ``Z`` directly.
     cutoff_dt = datetime.fromisoformat(cutoff_iso)
 
     branch_a_must: list[Any] = [  # pyright: ignore[reportExplicitAny]
@@ -364,10 +367,10 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
 def _payload_dict_to_candidate_payload(payload: dict[str, Any]) -> CandidatePayload:  # pyright: ignore[reportExplicitAny]
     """Validate a Qdrant payload dict back into a :class:`CandidatePayload`.
 
-    Pydantic v2 handles ISO-8601 strings → ``date`` automatically via
-    ``model_validate``. Drops Qdrant-only keys (``canonical_id``,
-    ``chunk_idx``) before validation so they don't trigger ``extra="forbid"``
-    (currently the model is not strict but the cleanup keeps payloads small).
+    Pydantic v2 handles ISO-8601 strings → ``date`` via ``model_validate``.
+    Qdrant-only keys (``canonical_id``, ``chunk_idx``) get dropped before
+    validation so they don't trigger ``extra="forbid"`` (the model isn't
+    strict today, but the cleanup keeps payloads small).
     """
     cleaned = {k: v for k, v in payload.items() if k not in ("canonical_id", "chunk_idx")}
     return CandidatePayload.model_validate(cleaned)

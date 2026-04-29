@@ -5,15 +5,15 @@
 **Spec under review:** `docs/specs/2026-04-27-slopmortem-design.md`
 **Original review source:** 10 parallel ultrathink agents, one per dimension (API, Security, Concurrency, Data integrity, Cost, Retrieval, Entity resolution, Testing, Observability, Architecture).
 
-The original review had 34 numbered findings + LOW polish items. Mechanical fixes plus #1 (FACET_BOOST calibration), #2 (OpenRouter Protocol scope — resolved by switching v1 to OpenRouter), and #6 (entity-resolution flip GC — resolved via reverse-index + reconcile drift class (f)) have been applied to the spec; the items below remain because each carries a real design tradeoff or empirical question.
+The original review had 34 numbered findings + LOW polish items. Mechanical fixes plus #1 (FACET_BOOST calibration), #2 (OpenRouter Protocol scope, resolved by switching v1 to OpenRouter), and #6 (entity-resolution flip GC, resolved via reverse-index + reconcile drift class (f)) have been applied to the spec; the items below remain because each carries a real tradeoff or empirical question.
 
 ---
 
-## What was already fixed (traceability)
+## Already fixed (traceability)
 
 Applied to spec, no longer in this doc:
 
-**This pass:** #26 (curated drift → quarantine_journal w/ `quarantine_reason="curated_drift"`, non-zero exit, `--accept-corpus-drift` override); #29 (split `SourceAdapter` into `Source.fetch() -> AsyncIterable[RawEntry]` + `Enricher.enrich(RawEntry) -> RawEntry`; wayback/tavily are Enrichers, curated/hn/crunchbase are Sources); #31 (v0 corpus ~50 URLs added to Task #4a; Task #4b re-framed as scale-up to ≥200, no longer a v1-utility blocker); #33 (LLM10 per-doc inline cap default 50K tokens with `corpus.doc_truncated` span; LLM07 by-construction note; LLM08 partial mitigation noted, full adversarial-embedding tests added to v2 hardening); #34 (skip_key two-tier split deferred to "Open questions / future work" — rank-version bumps are rare, steady-state cost ~$0.10/week makes the optimization not worth the journal-schema change for v1).
+**This pass:** #26 (curated drift → quarantine_journal w/ `quarantine_reason="curated_drift"`, non-zero exit, `--accept-corpus-drift` override); #29 (split `SourceAdapter` into `Source.fetch() -> AsyncIterable[RawEntry]` + `Enricher.enrich(RawEntry) -> RawEntry`; wayback/tavily are Enrichers, curated/hn/crunchbase are Sources); #31 (v0 corpus ~50 URLs added to Task #4a; Task #4b re-framed as scale-up to ≥200, no longer a v1-utility blocker); #33 (LLM10 per-doc inline cap default 50K tokens with `corpus.doc_truncated` span; LLM07 by-construction note; LLM08 partial mitigation noted, full adversarial-embedding tests added to v2 hardening); #34 (skip_key two-tier split deferred to "Open questions / future work". Rank-version bumps are rare, steady-state cost ~$0.10/week makes the optimization not worth the journal-schema change for v1).
 
 
 **Critical (8):** #1 FACET_BOOST calibration (provisional 0.01 + sweep eval); #2 OpenRouter scope (resolved by making OpenRouter the v1 LLMClient and dropping Batches); #3 web.archive.org allowlist; #4 HTML injection sanitizer; #5 SSRF guard; #6 entity-resolution flip GC (reverse-index + resolver_flipped state + reconcile drift class (f)); #7 quarantine schema; #8 Pydantic auto-capture leak.

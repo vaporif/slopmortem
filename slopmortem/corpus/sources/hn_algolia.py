@@ -1,7 +1,7 @@
-"""HN Algolia source — chronological obituary coverage via the Algolia REST API.
+"""HN Algolia source. Chronological obituary coverage via the Algolia REST API.
 
 Endpoint is pinned to ``/api/v1/search_by_date`` (chronological, newest-first)
-rather than ``/search`` (relevance-ranked) — see spec line 242. Relevance
+rather than ``/search`` (relevance-ranked); see spec line 242. Relevance
 ranking would re-surface the same long-tail popular threads on every ingest.
 
 Query params per spec:
@@ -10,14 +10,14 @@ Query params per spec:
 * ``numericFilters=created_at_i>=<since-epoch>`` for incremental ingest
 * paginated via ``page=<n>`` until ``nbPages`` is exhausted
 
-All HTTP funnels through :func:`safe_get` (SSRF-hardened) with the configured
+All HTTP goes through :func:`safe_get` (SSRF-hardened) with the configured
 ``slopmortem/<version> (+<repo>)`` UA, gated by the per-host throttle and
 robots.txt check from :mod:`._throttle`.
 
 Why not the official ``algoliasearch`` Python client?
 * HN's Algolia mirror is a public read-only REST endpoint (no ``app_id`` /
   ``api_key`` pair); the official client is built around app-keyed indices
-  and cluster discovery — configuring it would just route back to the same
+  and cluster discovery, so configuring it would just route back to the same
   URL via more layers.
 * The official client ships its own httpx/aiohttp transport with retry +
   failover. Using it would bypass :func:`safe_get`, which is the project's
@@ -89,13 +89,13 @@ class HNAlgoliaSource:
             f"page={page}",
         ]
         if self.since_epoch is not None:
-            # numericFilters=created_at_i>=<epoch> — the >= must be URL-encoded.
+            # numericFilters=created_at_i>=<epoch>; the >= must be URL-encoded.
             params.append(f"numericFilters={quote_plus(f'created_at_i>={self.since_epoch}')}")
         return f"{ENDPOINT}?{'&'.join(params)}"
 
     @staticmethod
     def _hit_to_entry(
-        hit: dict[str, Any],  # pyright: ignore[reportExplicitAny] — Algolia payload
+        hit: dict[str, Any],  # pyright: ignore[reportExplicitAny]; Algolia payload
     ) -> RawEntry | None:
         object_id: object = hit.get("objectID")
         if not isinstance(object_id, str) or not object_id:

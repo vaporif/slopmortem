@@ -5,8 +5,8 @@ Covers Task 10 plan steps:
 - 10.5 Ctrl-C cancel propagates as ``asyncio.CancelledError``.
 
 Tests use ``FakeLLMClient`` (canned ``(prompt_template_sha, model)`` responses)
-and ``FakeEmbeddingClient`` (sha256-derived vectors). The Corpus is an in-memory
-implementation of the :class:`slopmortem.corpus.store.Corpus` Protocol — no
+and ``FakeEmbeddingClient`` (sha256-derived vectors). The Corpus is an
+in-memory implementation of :class:`slopmortem.corpus.store.Corpus`; no
 Qdrant required.
 """
 
@@ -146,9 +146,9 @@ def _build_canned(
         (prompt_template_sha("llm_rerank"), _RERANK_MODEL): FakeResponse(
             text=_rerank_payload(candidate_ids), cost_usd=0.005
         ),
-        # Synthesis returns the same canned response for every candidate; the
-        # ``candidate_id`` field in the payload stays "acme" but the stage's
-        # parser doesn't enforce it matches the request.
+        # Synthesis returns the same canned response for every candidate. The
+        # ``candidate_id`` field stays "acme" but the stage's parser doesn't
+        # enforce that it matches the request.
         (prompt_template_sha("synthesize"), _SYNTH_MODEL): FakeResponse(
             text=_synthesis_payload("acme"), cost_usd=0.01, cache_creation_tokens=10
         ),
@@ -239,7 +239,7 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    # Override retrieve's default sparse encoder so the fastembed model isn't loaded.
+    # Override retrieve's default sparse encoder; avoids loading fastembed.
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
 
     ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
@@ -265,9 +265,9 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     meta = report.pipeline_meta
     assert meta.K_retrieve == cfg.K_retrieve
     assert meta.N_synthesize == cfg.N_synthesize
-    # FakeLLMClient/FakeEmbeddingClient don't push costs into the budget;
-    # we still assert ``cost_usd_total`` is sourced from ``Budget.spent_usd``
-    # so the pipeline doesn't hand-roll the figure.
+    # FakeLLMClient/FakeEmbeddingClient don't push costs into the budget. We
+    # still assert ``cost_usd_total`` reads from ``Budget.spent_usd`` so the
+    # pipeline doesn't hand-roll the figure.
     assert meta.cost_usd_total == budget.spent_usd
     assert meta.latency_ms_total >= 0
     assert meta.budget_exceeded is False
@@ -291,21 +291,21 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
 
 
 async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A BudgetExceededError mid-run sets ``budget_exceeded=True`` and returns gracefully."""
+    """BudgetExceededError mid-run sets ``budget_exceeded=True`` and returns cleanly."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
     cfg = _build_config(k_retrieve=6, n_synthesize=3)
     canned = _build_canned(candidate_ids=[c.canonical_id for c in candidates[:3]])
     fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
     fake_corpus = _FakeCorpus(candidates=candidates)
-    # Cap at 0.0 so any LLM call's cost reservation will exceed.
+    # Cap at 0.0 so any LLM call's cost reservation exceeds the budget.
     budget = Budget(cap_usd=0.0)
 
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
 
-    # Make extract_facets raise BudgetExceededError immediately so we exercise the
-    # except-branch path in ``run_query`` without needing the embedding client to
-    # do any real reservation accounting.
+    # Force extract_facets to raise BudgetExceededError immediately. This
+    # exercises the except-branch in ``run_query`` without needing the
+    # embedding client to do real reservation accounting.
     from slopmortem.budget import BudgetExceededError  # noqa: PLC0415
 
     async def _raise(*_a: object, **_kw: object) -> None:
@@ -336,7 +336,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
 
     @dataclass
     class _SlowFakeLLMClient:
-        """FakeLLMClient that sleeps before each completion to give cancel time to land."""
+        """FakeLLMClient that sleeps before each completion so cancel can land."""
 
         inner: FakeLLMClient
 

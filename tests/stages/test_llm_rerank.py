@@ -79,10 +79,9 @@ def _scored_payload(candidate_ids: list[str]) -> str:
 
 
 def _config(*, n_synthesize: int = 5) -> Config:
-    # ``Config`` ships every knob with a sensible default; we override only
-    # ``N_synthesize`` per test. ``BaseSettings`` also reads env/TOML, but
-    # the test suite is pinned to repo-root ``slopmortem.toml`` which
-    # doesn't override these values.
+    # ``Config`` defaults every knob; we override only ``N_synthesize`` per
+    # test. ``BaseSettings`` also reads env/TOML, but the test suite is
+    # pinned to repo-root ``slopmortem.toml`` which doesn't override these.
     cfg = Config()
     return cfg.model_copy(update={"N_synthesize": n_synthesize})
 

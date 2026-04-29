@@ -116,12 +116,11 @@ async def fixture_corpus(
 ) -> AsyncIterator[tuple[QdrantCorpus, str, FakeEmbeddingClient]]:
     """Create a fresh collection + QdrantCorpus instance scoped to one test.
 
-    Uses a generous ``facet_boost=10.0`` so a 4-facet match overwhelms RRF
-    tie-breaking noise (Qdrant tie-breaks identical RRF positions by point
-    id, not symmetrically — see qdrant#5182). The production value 0.01
-    is verified separately by reading-side unit tests; this fixture exists
-    to assert the integration shape of the FormulaQuery wiring, not the
-    calibrated value.
+    Uses ``facet_boost=10.0`` so a 4-facet match overwhelms RRF tie-breaking
+    noise (Qdrant tie-breaks identical RRF positions by point id, not
+    symmetrically — see qdrant#5182). The production value 0.01 is verified
+    separately by reading-side unit tests; this fixture covers the
+    FormulaQuery wiring shape, not the calibrated value.
     """
     name = f"test_retrieve_{uuid.uuid4().hex[:8]}"
     if await qdrant_client.collection_exists(name):

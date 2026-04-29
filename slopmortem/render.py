@@ -1,13 +1,13 @@
-"""Pure markdown renderer for :class:`Report`. No I/O — strictly text-in, text-out.
+"""Pure markdown renderer for :class:`Report`. No I/O. Strictly text-in, text-out.
 
 Defense-in-depth output filter: clickable autolinks (``[txt](url)`` and
 reference-style ``[txt][ref]``) and image markdown (``![alt](url)``) are
 stripped from prose fields so the rendered output cannot embed a one-click
-attacker URL or an exfil pixel. Sources render as plain text — the user
-must copy-paste.
+attacker URL or an exfil pixel. Sources render as plain text; the user must
+copy-paste.
 
 The synthesize-stage URL allowlist already drops off-allowlist hosts before
-the data reaches here; this module is the second line of defense for
+the data reaches here. This module is the second line of defense for
 markdown-rendered prose that didn't pass through that filter (e.g.
 ``where_diverged`` text).
 """
@@ -26,11 +26,11 @@ if TYPE_CHECKING:
         Synthesis,
     )
 
-# ``[txt](url)`` — inline markdown link. Must NOT be greedy across lines.
+# ``[txt](url)``: inline markdown link. Must NOT be greedy across lines.
 _INLINE_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-# ``[txt][ref]`` — reference-style link.
+# ``[txt][ref]``: reference-style link.
 _REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]+\]")
-# ``![alt](url)`` — image markdown.
+# ``![alt](url)``: image markdown.
 _IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 
 
@@ -101,7 +101,7 @@ def _render_candidate(syn: Synthesis) -> str:
         "",
         "Sources:",
         "",
-        # Sources render as plain text, one per line — no `[]()` wrapping.
+        # Sources render as plain text, one per line. No `[]()` wrapping.
         "\n".join(syn.sources),
     ]
     return "\n".join(parts)

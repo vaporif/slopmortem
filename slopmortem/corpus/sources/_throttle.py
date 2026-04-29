@@ -1,16 +1,15 @@
 """Per-host throttle and robots.txt cache for source adapters.
 
-* :func:`throttle_for` — process-wide token bucket keyed on host. The default
-  budget is 1 request per second per host. Built on a simple in-memory dict
-  rather than ``aiolimiter`` because the call surface is ~30 LOC and we don't
-  want a new dep just for this.
-* :func:`respect_robots` — fetch and parse the host's ``robots.txt`` once per
-  process, ask :class:`urllib.robotparser.RobotFileParser` whether *url* is
-  permitted for the configured user agent.
+* :func:`throttle_for`: process-wide token bucket keyed on host. Default budget
+  is 1 request per second per host. Built on an in-memory dict rather than
+  ``aiolimiter`` since the call surface is ~30 LOC and a new dep isn't worth it.
+* :func:`respect_robots`: fetch and parse the host's ``robots.txt`` once per
+  process, then ask :class:`urllib.robotparser.RobotFileParser` whether *url*
+  is permitted for the configured user agent.
 
-Both helpers fetch outbound HTTP through :func:`slopmortem.http.safe_get`. They
-are agnostic to the source adapter — Curated, HN, and Wayback all funnel
-through the same instance. Crunchbase CSV reads the filesystem and skips both.
+Both helpers send outbound HTTP through :func:`slopmortem.http.safe_get` and
+don't care which source adapter calls them. Curated, HN, and Wayback all share
+the same instance. Crunchbase CSV reads the filesystem and skips both.
 """
 
 from __future__ import annotations
@@ -77,7 +76,7 @@ async def _load_robots(host: str, scheme: str) -> RobotFileParser | None:
     try:
         resp = await safe_get(robots_url)
     except SSRFBlockedError, httpx.HTTPError:
-        # No robots fetched — default to "allowed" by returning None.
+        # No robots fetched. Default to "allowed" by returning None.
         return None
     if resp.status_code >= HTTP_BAD_REQUEST:
         return None
@@ -89,9 +88,9 @@ async def _load_robots(host: str, scheme: str) -> RobotFileParser | None:
 async def respect_robots(url: str, *, user_agent: str = USER_AGENT) -> bool:
     """Return whether *user_agent* is allowed to fetch *url* per robots.txt.
 
-    On any failure to fetch or parse robots.txt the return value is ``True`` —
-    robots is etiquette, not a security boundary, and the SSRF wrapper is the
-    real outbound-network gate.
+    Returns ``True`` on any failure to fetch or parse robots.txt. Robots is
+    etiquette, not a security boundary; the SSRF wrapper is the real
+    outbound-network gate.
 
     Args:
         url: The URL the caller wants to fetch.

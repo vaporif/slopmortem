@@ -1,8 +1,8 @@
 """Integration tests for :mod:`slopmortem.evals.runner`.
 
-The runner is invoked via ``main(argv)`` directly; we never spawn a subprocess.
-Tests exercise the deterministic mode path (no env vars, no Qdrant, no real
-API calls) by monkeypatching ``run_query`` to return a hand-built Report.
+Invokes ``main(argv)`` directly — never spawns a subprocess. Tests run the
+deterministic path (no env vars, no Qdrant, no real API calls) by
+monkeypatching ``run_query`` to return a hand-built Report.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ def _patch_run_query(
         del llm, embedding_client, corpus, config, budget, progress
         return _make_report(input_ctx, [fn(input_ctx)])
 
-    # The runner calls run_query via its own module reference; patch there.
+    # Runner calls run_query via its own module reference; patch there.
     monkeypatch.setattr("slopmortem.evals.runner.run_query", _fake)
 
 
@@ -167,8 +167,8 @@ def test_runner_exits_nonzero_on_regression(
     rows = [{"name": "alpha", "description": "An alpha pitch."}]
     seed = _write_seed(tmp_path, rows)
 
-    # Patched run_query returns a Synthesis with empty where_diverged — the
-    # baseline expects True, so this is a regression.
+    # Patched run_query returns a Synthesis with empty where_diverged. The
+    # baseline expects True, so this counts as a regression.
     _patch_run_query(
         monkeypatch,
         lambda _ctx: _make_synth(candidate_id="cand-0", where_diverged=""),
@@ -230,7 +230,7 @@ def test_runner_record_flag_is_deferred(tmp_path: Path, capsys: pytest.CaptureFi
 def test_runner_writes_baseline_when_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A missing baseline should be created via --write-baseline; exit 0, no regressions."""
+    """Missing baseline gets created via --write-baseline; exit 0, no regressions."""
     rows = [{"name": "alpha", "description": "An alpha pitch."}]
     seed = _write_seed(tmp_path, rows)
 

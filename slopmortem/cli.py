@@ -1,18 +1,18 @@
 # ruff: noqa: FBT002 — typer signatures are bool flags with False defaults by convention.
 """Top-level CLI entry point: ``slopmortem ingest``, ``query``, and ``replay``.
 
-The ``query`` command is the production entry point for the synthesis pipeline:
-it loads :class:`Config`, initializes Laminar tracing (gated on the endpoint
+The ``query`` command is the production entry point for the synthesis pipeline.
+It loads :class:`Config`, initializes Laminar tracing (gated on the endpoint
 guard in :mod:`slopmortem.tracing` plus an env-var API key), constructs the
 real OpenRouter LLM client, the OpenAI embedding client, and the Qdrant corpus,
-and dispatches to :func:`slopmortem.pipeline.run_query`. Stage progress goes to
-stderr (TTY-gated); the rendered Markdown report goes to stdout.
+then dispatches to :func:`slopmortem.pipeline.run_query`. Stage progress goes
+to stderr (TTY-gated); the rendered Markdown report goes to stdout.
 
 The ``replay`` command iterates an evals dataset (Task 11 ships the dataset
-format and content); the missing-dataset path exits with code 2 so CI smoke
+format and content). The missing-dataset path exits with code 2 so CI smoke
 tests can probe the wiring without a fixture corpus.
 
-The ``ingest`` command is unchanged from the v1 5b stub — production wiring
+The ``ingest`` command is unchanged from the v1 5b stub. Production wiring
 lands in a follow-up.
 """
 
@@ -113,9 +113,9 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
 ) -> None:
     """Run the ingest pipeline against the configured sources.
 
-    Wires user flags into :func:`slopmortem.ingest.ingest`. Every config knob
+    Wires user flags into :func:`slopmortem.ingest.ingest`. Config knobs
     (slop_threshold, ingest_concurrency, embed_model_id, taxonomy_version,
-    reliability_rank_version, etc.) comes from :func:`slopmortem.config.load_config`.
+    reliability_rank_version, etc.) come from :func:`slopmortem.config.load_config`.
     """
     anyio.run(
         functools.partial(
@@ -146,9 +146,9 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     post_mortems_root: Path,
 ) -> None:
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
-    # Concrete production wiring (sources, qdrant client, embedder, llm, classifier)
-    # arrives in a follow-up; for v1 5b the CLI is a thin shim. Surface what flag
-    # combinations the operator chose so they show up in the run log.
+    # Production wiring (sources, qdrant client, embedder, llm, classifier) lands
+    # in a follow-up; for v1 5b the CLI is a thin shim. Surface the chosen flag
+    # combination so it shows up in the run log.
     flags = {
         "dry_run": dry_run,
         "force": force,
@@ -196,8 +196,8 @@ def query_cmd(
 
     Streams stage progress to stderr (TTY-gated) while the pipeline runs; emits
     the rendered :class:`Report` to stdout when done. Tracing wiring (Laminar)
-    is gated on ``Config.enable_tracing`` plus a present ``LMNR_PROJECT_API_KEY``;
-    when the API key is missing but tracing is enabled, a one-line warning goes
+    is gated on ``Config.enable_tracing`` plus a present ``LMNR_PROJECT_API_KEY``.
+    When the API key is missing but tracing is enabled, a one-line warning goes
     to stderr and the run continues without tracing.
     """
     anyio.run(functools.partial(_query, description=description, name=name, years=years))
@@ -225,10 +225,9 @@ async def _query(*, description: str, name: str | None, years: int | None) -> No
 def _maybe_init_tracing(config: Config) -> None:
     """Run the endpoint guard, then conditionally call ``Laminar.initialize``.
 
-    Always runs the SSRF-style endpoint guard (it's a no-op when
-    ``LMNR_BASE_URL`` is unset). If tracing is enabled in config but the
-    project API key is missing, log to stderr and skip Laminar init — tracing
-    is best-effort.
+    Always runs the SSRF-style endpoint guard (a no-op when ``LMNR_BASE_URL``
+    is unset). If tracing is enabled in config but the project API key is
+    missing, log to stderr and skip Laminar init. Tracing is best-effort.
     """
     base_url = os.environ.get("LMNR_BASE_URL")
     init_tracing(
@@ -341,8 +340,8 @@ async def _replay(dataset: str) -> None:
         if not line:
             continue
         # ``json.loads`` returns ``Any`` by design; the per-site ignore narrows
-        # the unknown payload to ``object``, then ``InputContext.model_validate``
-        # is the strict boundary.
+        # the unknown payload to ``object``. ``InputContext.model_validate`` is
+        # the strict boundary.
         row: object = json.loads(line)  # pyright: ignore[reportAny]
         ctx = InputContext.model_validate(row)
         report = await run_query(

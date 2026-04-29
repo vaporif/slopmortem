@@ -67,10 +67,10 @@ def _canned_for_run(
 ) -> dict[tuple[str, str], FakeResponse]:
     facets_text = facets_json or _fake_facets_json()
     sum_text = summary_text or _summary_text()
-    # Same key (template_sha, model) — FakeLLMClient returns this for every call.
-    # The orchestrator's cache-warm path runs serially first, then the fan-out runs.
-    # We don't differentiate per-call in the canned table; tests that need
-    # per-call differentiation use a CountingFakeLLM subclass.
+    # Same key (template_sha, model); FakeLLMClient returns this for every call.
+    # The orchestrator runs cache-warm serially first, then fans out. We don't
+    # differentiate per-call in the canned table — tests that need per-call
+    # differentiation use a CountingFakeLLM subclass.
     return {
         (prompt_template_sha("facet_extract"), _HAIKU): FakeResponse(
             text=facets_text,
@@ -87,7 +87,7 @@ def _canned_for_run(
 
 @dataclass
 class _ListSource:
-    """[Source] in-memory list of pre-built RawEntry. Bypasses HTTP entirely."""
+    """[Source] in-memory list of pre-built RawEntry; bypasses HTTP."""
 
     entries: list[RawEntry]
     raise_on_index: int | None = None
@@ -213,7 +213,7 @@ async def test_ingest_bounded_fan_out_concurrency(tmp_path):
                 in_flight += 1
                 peak = max(peak, in_flight)
             try:
-                # Simulate latency so calls overlap.
+                # Add latency so calls overlap.
                 await asyncio.sleep(0.02)
                 return await super().complete(prompt, **kw)
             finally:
@@ -240,7 +240,7 @@ async def test_ingest_bounded_fan_out_concurrency(tmp_path):
         sparse_encoder=_stub_sparse,
     )
     assert result.processed == n_entries
-    # cache-warm runs before the fan-out and is serial, so peak applies to fan-out only.
+    # cache-warm runs serially before the fan-out, so peak measures fan-out only.
     assert peak <= cfg.ingest_concurrency, f"peak={peak} exceeds limit={cfg.ingest_concurrency}"
 
 
@@ -252,10 +252,10 @@ async def test_ingest_cache_warm_records_creation_tokens(tmp_path, cfg):
     budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
     classifier = FakeSlopClassifier(default_score=0.0)
 
-    # The cache-warm path renders the summarize template, so the summarize
-    # canned entry must carry cache_creation_tokens > 0 to satisfy the warm
-    # check. After the warm call, the same canned entry is reused for fan-out
-    # — that's fine for this test which only asserts the warm bookkeeping.
+    # cache-warm renders the summarize template, so the summarize canned entry
+    # needs cache_creation_tokens > 0 to satisfy the warm check. The same
+    # canned entry gets reused for fan-out; this test only asserts warm
+    # bookkeeping, so reuse is fine.
     canned: dict[tuple[str, str], FakeResponse] = {
         (prompt_template_sha("facet_extract"), _HAIKU): FakeResponse(
             text=_fake_facets_json(),

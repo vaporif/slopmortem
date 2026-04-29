@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Corpus(Protocol):
-    """Read-side protocol over the persisted candidate corpus, real (Qdrant) or fake."""
+    """Read-side protocol over the persisted candidate corpus (real Qdrant or fake)."""
 
     async def query(  # noqa: PLR0913 — Protocol method signature is the public contract
         self,

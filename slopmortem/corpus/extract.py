@@ -1,21 +1,20 @@
 """HTML sanitize and extract pipeline for raw source documents.
 
-Pipeline (per spec line 244): sanitize HTML -> trafilatura -> readability
+Pipeline (spec line 244): sanitize HTML -> trafilatura -> readability
 fallback -> length floor (<500 chars => empty). The sanitizer runs BEFORE
-trafilatura because trafilatura otherwise treats HTML comments, JSON-LD,
-hidden nodes, and attribute text as "visible," which makes them an
-indirect-injection surface.
+trafilatura: trafilatura otherwise treats HTML comments, JSON-LD, hidden
+nodes, and attribute text as visible, opening an indirect-injection surface.
 
-The set of surfaces stripped here is pinned by the hostile-fixture test in
+The stripped surfaces are pinned by the hostile-fixture test in
 ``tests/sources/test_extract_visible_text_only.py`` and must match spec
-line 244 exactly: comments, ``<script>``/``<style>``/``<noscript>``, JSON-LD
+line 244: comments, ``<script>``/``<style>``/``<noscript>``, JSON-LD
 scripts, ``display:none``/``visibility:hidden``/``hidden`` nodes, and
 ``aria-label``/``alt``/``title`` attributes.
 """
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportAny=false
 # lxml ships no type stubs, and pulling `lxml-stubs` into the dep list isn't
 # worth it for this module alone. Module-wide suppression is local to the
-# sanitizer; the actual surfaces are pinned by the hostile-fixture test.
+# sanitizer; the hostile-fixture test pins the actual surfaces.
 
 from __future__ import annotations
 

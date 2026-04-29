@@ -1,33 +1,35 @@
 # pyright: reportAny=false
 """Entity resolution: tier-1 / tier-2 / tier-3 canonical_id derivation.
 
-The resolver returns a :class:`ResolveResult` summarizing the chosen canonical_id,
-the action taken (``create`` / ``merge`` / ``resolver_flipped`` / ``alias_blocked``),
-and any span events the caller should emit.
+``resolve_entity`` returns a :class:`ResolveResult` with the chosen
+canonical_id, the action (``create`` / ``merge`` / ``resolver_flipped`` /
+``alias_blocked``), and any span events the caller should emit.
 
-Tiered IDs (per spec lines 257-268):
+Tiered IDs (spec lines 257-268):
 
-- **Tier 1**: registrable_domain (via ``tldextract``), unless the domain is on the
-  CODEOWNERS-protected ``platform_domains.yml`` blocklist or a recycled-domain
-  founding-year delta or parent/subsidiary suffix delta forces demotion.
-- **Tier 2**: ``{normalized_name}::{sector}`` — used when tier 1 is demoted or
+- Tier 1: registrable_domain (via ``tldextract``). Demoted if the domain is
+  on the CODEOWNERS-protected ``platform_domains.yml`` blocklist, or if a
+  recycled-domain founding-year delta or parent/subsidiary suffix delta
+  forces demotion.
+- Tier 2: ``{normalized_name}::{sector}``. Used when tier 1 is demoted or
   blocked.
-- **Tier 3**: dense-embedding cosine similarity against the existing tier-2
-  canonical, with a Haiku tiebreaker for the calibration band ``[0.65, 0.85]``.
+- Tier 3: dense-embedding cosine similarity against the existing tier-2
+  canonical, with a Haiku tiebreaker inside the calibration band
+  ``[0.65, 0.85]``.
 
-Atomicity contracts (per spec line 538):
+Atomicity contracts (spec line 538):
 
-- **Resolver-flip precheck** runs first. If ``(source, source_id)`` was previously
-  bound to a different canonical_id, the journal row lands as ``resolver_flipped``
-  in its terminal state — no transient ``pending`` row, no ingest of the new
-  canonical (repair owned by ``--reconcile``).
-- **Alias precheck** runs before any ingest write. If an alias hint is supplied,
-  :meth:`MergeJournal.upsert_alias_blocked` writes the alias edge and the journal
-  row in one SQLite transaction; on failure both roll back.
+- Resolver-flip precheck runs first. If ``(source, source_id)`` was
+  previously bound to a different canonical_id, the journal row lands as
+  ``resolver_flipped`` in its terminal state. No transient ``pending`` row,
+  no ingest of the new canonical (``--reconcile`` owns repair).
+- Alias precheck runs before any ingest write. With an alias hint,
+  :meth:`MergeJournal.upsert_alias_blocked` writes the alias edge and the
+  journal row in one SQLite transaction; on failure both roll back.
 
-Tier-3 decisions cache in a module-private ``tier3_decisions`` SQLite table that
-shares the merge journal's ``db_path``. The cache key is sorted lexicographically
-so ``(A, B)`` and ``(B, A)`` collapse to the same row.
+Tier-3 decisions cache in a module-private ``tier3_decisions`` SQLite table
+that shares the merge journal's ``db_path``. The cache key is
+lex-sorted so ``(A, B)`` and ``(B, A)`` collapse to one row.
 """
 
 from __future__ import annotations
@@ -104,11 +106,12 @@ class ResolveResult:
 
     Attributes:
         canonical_id: The chosen canonical id for *this* entry. For
-            ``resolver_flipped`` this is the NEW id (which is intentionally NOT
-            written; repair owns it).
-        action: One of ``create``, ``merge``, ``resolver_flipped``, ``alias_blocked``.
-        prior_canonical_id: For ``resolver_flipped``, the previously bound id.
-            None for every other action.
+            ``resolver_flipped`` this is the NEW id, intentionally NOT
+            written (repair owns it).
+        action: One of ``create``, ``merge``, ``resolver_flipped``,
+            ``alias_blocked``.
+        prior_canonical_id: For ``resolver_flipped``, the previously bound
+            id. None otherwise.
         span_events: Span event names the caller should emit (e.g.
             ``RESOLVER_FLIP_DETECTED``).
     """
@@ -465,11 +468,11 @@ def _looks_tier1(canonical_id: str) -> bool:
 async def _is_parent_subsidiary_suspect(journal: MergeJournal, domain: str, new_name: str) -> bool:
     """Heuristic: tier-1 hit on *domain* + new name carries a corporate suffix.
 
-    Without per-row display-name persistence, we conservatively flag suffix-delta
-    cases when (a) the bare domain is already journal-resident in pending or
-    complete state, and (b) the new entry's name carries a known corporate
-    suffix. The :file:`corporate_hierarchy_overrides.yml` file is also consulted
-    for explicit parent/subsidiary pairs (ships empty in v1).
+    No per-row display-name persistence yet, so we conservatively flag a
+    suffix-delta when (a) the bare domain is already journal-resident in
+    pending or complete state, and (b) the new entry's name carries a
+    known corporate suffix. :file:`corporate_hierarchy_overrides.yml` also
+    seeds explicit parent/subsidiary pairs (ships empty in v1).
     """
     if domain in _HIERARCHY_OVERRIDES:
         return True
@@ -506,38 +509,42 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
 
     Args:
         entry: The raw scraped document (URL + bytes + (source, source_id)).
-        journal: Merge journal (provides reverse-index, alias write, founding-year cache).
-        embed_client: Used to embed the new entry's name + body head for tier-3 fuzzy.
-        name: Pre-extracted entity name. Caller (ingest, Task 5b) extracts this via Haiku.
-        sector: Pre-extracted sector facet. Used to form tier-2 ids.
-        founding_year: Pre-extracted founding year, if known. Drives recycled-domain detection.
-        alias_hint: When set (e.g. founder blog mentions "we became X"), the resolver
-            writes the alias edge atomically with an ``alias_blocked`` journal row
-            and short-circuits.
-        llm_client: Required only for in-band tier-3 calls. Outside the band the
-            resolver auto-decides; ``None`` is fine if the band is never entered.
-        haiku_model_id: Model id used for the tier-3 tiebreaker.
-        tier3_band: Calibration band for the tier-3 tiebreaker; band semantics
+        journal: Merge journal (reverse-index, alias write, founding-year cache).
+        embed_client: Embeds the new entry's name + body head for tier-3 fuzzy.
+        name: Pre-extracted entity name. Caller (ingest, Task 5b) pulls this
+            via Haiku.
+        sector: Pre-extracted sector facet. Forms tier-2 ids.
+        founding_year: Pre-extracted founding year, if known. Drives
+            recycled-domain detection.
+        alias_hint: When set (e.g. founder blog mentions "we became X"), the
+            resolver writes the alias edge atomically with an
+            ``alias_blocked`` journal row and short-circuits.
+        llm_client: Only required for in-band tier-3 calls. Outside the band
+            the resolver auto-decides; ``None`` is fine if the band is never
+            entered.
+        haiku_model_id: Model id for the tier-3 tiebreaker.
+        tier3_band: Calibration band for the tier-3 tiebreaker; semantics
             mirror spec line 264.
-        force_similarity: Test-only. When set, skips the embedding cosine and
-            uses this value directly.
+        force_similarity: Test-only. Skips the embedding cosine and uses
+            this value directly.
 
     Returns:
         :class:`ResolveResult` with the chosen canonical_id and action.
 
     Raises:
         Exception: Any sqlite or LLM exception propagates after the journal
-            transaction rolls back (see :meth:`MergeJournal.upsert_alias_blocked`).
+            transaction rolls back (see
+            :meth:`MergeJournal.upsert_alias_blocked`).
     """
-    # Same-package coordination: the resolver's tier-3 cache and founding-year
-    # cache live in the same sqlite file as the merge journal. There is no
-    # public accessor by design (merge.py is read-only from this side).
+    # Same-package coordination: the resolver's tier-3 cache and
+    # founding-year cache live in the same sqlite file as the merge journal.
+    # No public accessor by design (merge.py is read-only from this side).
     db_path = journal._db  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
     await to_thread.run_sync(_ensure_tier3_table_sync, db_path)
 
     span_events: list[str] = []
 
-    # ─── Step 1: alias precheck (highest priority — atomic terminal write). ────
+    # ─── Step 1: alias precheck (atomic terminal write, runs first). ────
     if alias_hint is not None:
         await journal.upsert_alias_blocked(
             canonical_id=alias_hint.canonical_id,
@@ -566,7 +573,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         ):
             use_tier2 = True
 
-    # Parent/subsidiary suffix-delta: tier-1 hit but the existing canonical's
+    # Parent/subsidiary suffix-delta: tier-1 hit, but the existing canonical's
     # name differs from the new name only by a corporate suffix.
     if not use_tier2 and await _is_parent_subsidiary_suspect(journal, domain, name):
         use_tier2 = True
@@ -610,11 +617,11 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
 
     # ─── Step 5: write founding_year cache (if provided), classify create/merge. ─
     if founding_year is not None and _looks_tier1(candidate_id):
-        # content_sha256 keyed cache: the spec asks for content_sha256 as the
-        # second key component. We don't have the merged content yet at resolve
-        # time, so use the entry's source_id as the per-row dedup key — this is
-        # acceptable for v1 since the cache only needs *some* entry per
-        # (registrable_domain, *) for the delta check.
+        # content_sha256 keyed cache: the spec asks for content_sha256 as
+        # the second key component, but we don't have the merged content
+        # yet at resolve time. Use the entry's source_id as the per-row
+        # dedup key. Fine for v1 since the cache only needs *some* entry
+        # per (registrable_domain, *) for the delta check.
         await to_thread.run_sync(
             _write_founding_year_sync,
             db_path,
@@ -646,9 +653,9 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
 ) -> str:
     """Run tier-3 fuzzy matching against existing canonicals; return the (possibly merged) id.
 
-    Only fires when ``is_tier2`` is True and at least one existing tier-2
-    canonical is journal-resident under the same sector. A tier-3 ``same``
-    collapses *candidate_id* onto the existing canonical's id.
+    Only fires when ``is_tier2`` is True and at least one tier-2 canonical
+    is journal-resident under the same sector. A tier-3 ``same`` collapses
+    *candidate_id* onto the existing canonical's id.
     """
     if not is_tier2:
         return candidate_id

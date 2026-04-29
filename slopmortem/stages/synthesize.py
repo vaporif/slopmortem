@@ -1,13 +1,12 @@
 """Synthesize stage: per-candidate post-mortem generation with cache-warm fan-out.
 
-One candidate per ``synthesize`` call; ``synthesize_all`` fronts the cache-warm
-pattern (first call alone, then :func:`gather_resilient` on the rest) so the
-per-candidate failure-tolerance promised in the design's failure-handling
-section is preserved.
+One candidate per ``synthesize`` call. ``synthesize_all`` runs the cache-warm
+pattern (first call alone, then :func:`gather_resilient` on the rest) so one
+candidate's failure does not cancel the others.
 
 The OpenRouter client (``slopmortem/llm/openrouter.py``) drives the tool-call
 loop, wraps tool results in ``<untrusted_document>`` tags, and enforces the
-5-turn bound — this stage is one ``llm.complete(...)`` call. ``Laminar.init``
+5-turn bound; this stage is one ``llm.complete(...)`` call. ``Laminar.init``
 wiring lands in Task 10 (per plan line 713); the module-level ``_emit_event``
 hook is a no-op stub until that orchestration ships.
 """
@@ -46,9 +45,8 @@ def _emit_event(event: SpanEvent) -> None:
 
     Tests monkeypatch this to observe emissions; in production the body fires
     ``Laminar.event(name=str(event))`` when ``Laminar.is_initialized()`` is
-    true. Short-circuits cleanly in test environments that don't initialize
-    Laminar — ``Laminar.event`` already guards on initialization itself, but
-    we check here to keep the seam explicit and avoid surprise traces from
+    true. ``Laminar.event`` already guards on initialization itself, but we
+    check here to keep the seam explicit and avoid surprise traces from
     misconfigured fixtures.
     """
     if Laminar.is_initialized():
@@ -151,7 +149,7 @@ async def synthesize_all(
     The first call runs alone so the prompt cache is populated before the
     parallel fan-out hits it (avoiding a pile-up of cache-write races). The
     remaining calls run via :func:`gather_resilient` so a single failed
-    candidate does not cancel its siblings — the reporting path filters
+    candidate does not cancel its siblings; the reporting path filters
     exceptions out and notes the gap on ``Report.candidates``.
 
     Args:

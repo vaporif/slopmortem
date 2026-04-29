@@ -42,16 +42,14 @@ async def test_cassette_miss_loud(monkeypatch):
         pytest.skip("live mode")
 
     sdk = AsyncOpenAI(api_key="sk-or-v1-test", base_url="https://openrouter.ai/api/v1")
-    # The SDK wraps the underlying VCR error as APIConnectionError; the test
-    # then walks __cause__/__context__ to verify the cassette-miss hint surfaces.
+    # SDK wraps the VCR error as APIConnectionError; we walk __cause__/__context__
+    # below to find the cassette-miss hint.
     with pytest.raises(APIConnectionError) as ei:
         await sdk.chat.completions.create(
             model="anthropic/claude-haiku-4.5",
             messages=[{"role": "user", "content": "missing cassette"}],
         )
 
-    # The openai SDK wraps the underlying VCR/HTTP error; walk __cause__/__context__
-    # so the test sees the actual "no cassette / record" hint.
     seen: list[str] = []
     cur: BaseException | None = ei.value
     while cur is not None:

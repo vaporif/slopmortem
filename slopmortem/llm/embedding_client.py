@@ -17,7 +17,7 @@ class EmbeddingResult:
 
 @runtime_checkable
 class EmbeddingClient(Protocol):
-    """The async embedding contract every backend (OpenAI, fake) implements."""
+    """Async embedding contract that the OpenAI and fake backends implement."""
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
         """Embed *texts* with the configured (or overridden) model and return vectors."""
