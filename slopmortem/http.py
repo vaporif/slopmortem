@@ -1,7 +1,10 @@
+"""SSRF-aware HTTP fetch — refuses loopback, link-local, private, and IMDS targets."""
+
 from __future__ import annotations
 
 import ipaddress
 import socket
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -16,7 +19,8 @@ _BLOCKED_IMDS_HOSTS = frozenset(
 )
 
 
-class SSRFBlockedError(RuntimeError): ...
+class SSRFBlockedError(RuntimeError):
+    """Raised when ``safe_get`` refuses a URL on SSRF-policy grounds."""
 
 
 def _is_blocked_address(addr: str) -> bool:
@@ -33,7 +37,7 @@ def _is_blocked_address(addr: str) -> bool:
             return True
         if ip in ipaddress.ip_network("169.254.0.0/16"):
             return True
-    if isinstance(ip, ipaddress.IPv6Address):
+    elif isinstance(ip, ipaddress.IPv6Address):
         if ip in ipaddress.ip_network("fc00::/7"):
             return True
         if ip in ipaddress.ip_network("fe80::/10"):
@@ -47,10 +51,15 @@ def _resolve_all(host: str) -> list[str]:
     except socket.gaierror as e:
         msg = f"cannot resolve host {host!r}: {e}"
         raise SSRFBlockedError(msg) from e
-    return list({info[4][0] for info in infos})
+    # getaddrinfo returns sockaddr tuples whose [0] element is a host string;
+    # cast keeps mypy from widening the set element type to ``str | int``.
+    return list({str(info[4][0]) for info in infos})
 
 
-async def safe_get(url: str, *, timeout: float = 30.0) -> httpx.Response:
+async def safe_get(  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
+    url: str, *, timeout: float = 30.0
+) -> httpx.Response:
+    """Fetch *url* via httpx after enforcing scheme + DNS-pinned SSRF checks."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         msg = f"refusing non-http(s) scheme: {parsed.scheme!r}"
@@ -74,7 +83,12 @@ async def safe_get(url: str, *, timeout: float = 30.0) -> httpx.Response:
     pinned_ip = addrs[0]
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
-    async def _resolver(*args, **kwargs):
+    # The httpx resolver hook keeps a static, pre-validated address tuple so
+    # subsequent connect() can never round-trip back through DNS (SSRF rebinding).
+    async def _resolver(
+        *_args: Any,  # type: ignore[explicit-any]  # httpx resolver signature is untyped
+        **_kwargs: Any,  # type: ignore[explicit-any]
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
         return [
             (
                 socket.AF_INET if ":" not in pinned_ip else socket.AF_INET6,

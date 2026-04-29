@@ -8,7 +8,7 @@ install:
     uv sync
 
 test:
-    uv run pytest
+    uv run pytest -n auto
 
 smoke-live:
     RUN_LIVE=1 uv run pytest tests/smoke -v

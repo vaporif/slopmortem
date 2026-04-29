@@ -1,3 +1,5 @@
+"""On-disk cassette path discovery for pytest-recording / VCR."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,8 +8,9 @@ CASSETTE_ROOT = Path(__file__).resolve().parent.parent.parent / "tests" / "casse
 
 
 def cassette_dir_for(test_file: str | Path) -> Path:
-    """Return the on-disk directory pytest-recording should use for a given
-    test file. We mirror the test path under ``tests/cassettes/``.
+    """Return the on-disk directory pytest-recording should use for a given test file.
+
+    We mirror the test path under ``tests/cassettes/`` so the layout tracks the test tree.
     """
     p = Path(test_file).resolve()
     try:

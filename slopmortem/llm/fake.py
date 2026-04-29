@@ -1,3 +1,5 @@
+"""In-memory LLMClient stub for stage tests — fixture-keyed canned responses."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,14 +9,17 @@ from slopmortem.llm.client import CompletionResult
 
 
 class NoCannedResponseError(KeyError):
-    """Raised when a stage test calls FakeLLMClient with a (template_sha, model)
-    pair that has no recorded fixture. Carries enough context for the failure
-    message to point at the missing key without needing repro steps.
+    """Raised when FakeLLMClient cannot find a canned reply for the given key.
+
+    Carries enough context for the failure message to point at the missing
+    ``(template_sha, model)`` without needing repro steps.
     """
 
 
 @dataclass
 class FakeResponse:
+    """A canned response the FakeLLMClient renders into a CompletionResult on demand."""
+
     text: str
     stop_reason: str = "stop"
     cost_usd: float = 0.0
@@ -22,6 +27,7 @@ class FakeResponse:
     cache_creation_tokens: int | None = None
 
     def to_completion(self) -> CompletionResult:
+        """Materialize this fixture into a real CompletionResult."""
         return CompletionResult(
             text=self.text,
             stop_reason=self.stop_reason,
@@ -37,16 +43,15 @@ class _Call:
     model: str
     template_sha: str | None
     system: str | None
-    tools: list[Any] | None
+    tools: list[Any] | None  # type: ignore[explicit-any]  # mirrors LLMClient.complete
     cache: bool
-    response_format: dict[str, Any] | None
-    extra_body: dict[str, Any] | None
+    response_format: dict[str, Any] | None  # type: ignore[explicit-any]  # mirrors LLMClient.complete
+    extra_body: dict[str, Any] | None  # type: ignore[explicit-any]  # mirrors LLMClient.complete
 
 
 @dataclass
 class FakeLLMClient:
-    """In-memory LLMClient stub that returns canned responses keyed on
-    ``(prompt_template_sha, model)``.
+    """In-memory LLMClient stub keyed on ``(prompt_template_sha, model)``.
 
     The template SHA is supplied by callers via ``extra_body['prompt_template_sha']``;
     stage tests load it from ``slopmortem.llm.prompts.prompt_template_sha(name)``
@@ -57,17 +62,18 @@ class FakeLLMClient:
     default_model: str
     calls: list[_Call] = field(default_factory=list)
 
-    async def complete(
+    async def complete(  # noqa: PLR0913 — mirrors LLMClient.complete public signature
         self,
         prompt: str,
         *,
         system: str | None = None,
-        tools: list[Any] | None = None,
+        tools: list[Any] | None = None,  # type: ignore[explicit-any]  # mirrors LLMClient.complete
         model: str | None = None,
         cache: bool = False,
-        response_format: dict[str, Any] | None = None,
-        extra_body: dict[str, Any] | None = None,
+        response_format: dict[str, Any] | None = None,  # type: ignore[explicit-any]
+        extra_body: dict[str, Any] | None = None,  # type: ignore[explicit-any]
     ) -> CompletionResult:
+        """Look up a canned response keyed by ``(prompt_template_sha, model)``."""
         eff_model = model or self.default_model
         template_sha: str | None = None
         if extra_body and "prompt_template_sha" in extra_body:

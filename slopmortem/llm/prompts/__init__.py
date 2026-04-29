@@ -1,3 +1,5 @@
+"""Jinja2 prompt rendering and stable template-SHA computation for fixture pinning."""
+
 from __future__ import annotations
 
 import hashlib
@@ -19,15 +21,22 @@ _env = Environment(
 _env.globals["taxonomy"] = yaml.safe_load(_TAXONOMY_PATH.read_text())
 
 
-def render_prompt(name: str, **vars: Any) -> str:
-    return _env.get_template(f"{name}.j2").render(**vars)
+def render_prompt(
+    name: str,
+    **template_vars: Any,  # type: ignore[explicit-any]  # Jinja accepts arbitrary template context
+) -> str:
+    """Render the named ``.j2`` template fully, returning the joined output text."""
+    return _env.get_template(f"{name}.j2").render(**template_vars)
 
 
-def render_blocks(name: str, **vars: Any) -> dict[str, str]:
-    """Render `system` and `user` blocks separately for cache_control handling."""
+def render_blocks(
+    name: str,
+    **template_vars: Any,  # type: ignore[explicit-any]  # Jinja accepts arbitrary template context
+) -> dict[str, str]:
+    """Render ``system`` and ``user`` blocks separately for cache_control handling."""
     template = _env.get_template(f"{name}.j2")
-    context = template.new_context(vars)
-    blocks = {}
+    context = template.new_context(template_vars)
+    blocks: dict[str, str] = {}
     for block_name in ("system", "user"):
         if block_name in template.blocks:
             blocks[block_name] = "".join(template.blocks[block_name](context))
@@ -35,4 +44,5 @@ def render_blocks(name: str, **vars: Any) -> dict[str, str]:
 
 
 def prompt_template_sha(name: str) -> str:
+    """Return the first 16 hex chars of sha256 over the ``.j2`` source — fixture key."""
     return hashlib.sha256(_PROMPT_DIR.joinpath(f"{name}.j2").read_bytes()).hexdigest()[:16]

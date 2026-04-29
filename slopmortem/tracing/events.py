@@ -1,9 +1,13 @@
+"""Closed enum of span event names emitted to the tracer for security/health monitoring."""
+
 from __future__ import annotations
 
 from enum import StrEnum
 
 
 class SpanEvent(StrEnum):
+    """Security- and health-relevant events emitted as Laminar span attributes."""
+
     PROMPT_INJECTION_ATTEMPTED = "prompt_injection_attempted"
     TOOL_ALLOWLIST_VIOLATION = "tool_allowlist_violation"
     PARENT_SUBSIDIARY_SUSPECTED = "entity.parent_subsidiary_suspected"

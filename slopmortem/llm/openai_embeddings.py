@@ -1,3 +1,5 @@
+"""Async embedding client for OpenAI-compatible APIs with budget reserve/settle."""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,7 +13,7 @@ from slopmortem.llm.embedding_client import EmbeddingResult
 from slopmortem.llm.openrouter import _is_transient_http
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Callable
 
     from slopmortem.budget import Budget
 
@@ -21,7 +23,7 @@ EMBED_DIMS: dict[str, int] = {
 }
 
 _PRICES_PATH = Path(__file__).resolve().parent / "prices.yml"
-_PRICES: dict[str, Any] = yaml.safe_load(_PRICES_PATH.read_text())
+_PRICES: dict[str, Any] = yaml.safe_load(_PRICES_PATH.read_text())  # type: ignore[explicit-any]  # heterogeneous YAML
 
 
 def _input_rate_per_million(model: str) -> float:
@@ -36,16 +38,19 @@ def _input_rate_per_million(model: str) -> float:
 
 
 class OpenAIEmbeddingClient:
-    def __init__(
+    """Wraps an OpenAI-compatible SDK to embed text under a shared cost Budget."""
+
+    def __init__(  # noqa: PLR0913 — knobs are public API; users construct this directly.
         self,
         *,
-        sdk: Any,
+        sdk: object,
         budget: Budget,
         model: str,
         max_retries: int = 3,
         initial_backoff: float = 1.0,
-        sleep: Awaitable[None] | Any = None,
+        sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
+        """Bind an SDK instance, budget, and tunable retry knobs."""
         if model not in EMBED_DIMS:
             msg = f"unknown embed model {model!r}; add it to EMBED_DIMS"
             raise ValueError(msg)
@@ -54,13 +59,15 @@ class OpenAIEmbeddingClient:
         self.model = model
         self._max_retries = max_retries
         self._initial_backoff = initial_backoff
-        self._sleep = sleep or asyncio.sleep
+        self._sleep: Callable[[float], Awaitable[None]] = sleep or asyncio.sleep
 
     @property
     def dim(self) -> int:
+        """Vector dimensionality for the configured embedding model."""
         return EMBED_DIMS[self.model]
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
+        """Embed *texts* and settle actual cost against the budget."""
         eff_model = model or self.model
         rate = _input_rate_per_million(eff_model)
         # Reserve a conservative ceiling: assume worst-case ~1k tokens per text.
@@ -77,12 +84,13 @@ class OpenAIEmbeddingClient:
             await self._budget.settle(rid, cost_usd)
         return EmbeddingResult(vectors=vectors, n_tokens=n_tokens, cost_usd=cost_usd)
 
-    async def _call_with_retry(self, **kw: Any) -> Any:
+    async def _call_with_retry(self, **kw: Any) -> Any:  # type: ignore[explicit-any]  # SDK passthrough
+        sdk: Any = self._sdk  # type: ignore[explicit-any]  # vendor SDK has no public type
         attempt = 0
         last_exc: BaseException | None = None
         while attempt <= self._max_retries:
             try:
-                return await self._sdk.embeddings.create(**kw)
+                return await sdk.embeddings.create(**kw)
             except Exception as exc:
                 if not _is_transient_http(exc):
                     raise
@@ -99,5 +107,5 @@ class OpenAIEmbeddingClient:
 
     async def _backoff(self, attempt: int) -> None:
         delay = self._initial_backoff * (2**attempt)
-        delay += random.uniform(0, delay * 0.25)
+        delay += random.uniform(0, delay * 0.25)  # noqa: S311 — non-cryptographic jitter
         await self._sleep(delay)

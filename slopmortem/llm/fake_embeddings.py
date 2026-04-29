@@ -1,3 +1,5 @@
+"""Deterministic in-memory EmbeddingClient stub keyed on sha256(text)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -27,6 +29,7 @@ class FakeEmbeddingClient:
         cost_per_call: float = 0.0,
         calls: list[_EmbedCall] | None = None,
     ) -> None:
+        """Bind the model dim and a per-call cost; ``calls`` is a record of invocations."""
         if model not in EMBED_DIMS:
             msg = f"unknown embed model {model!r}; add it to EMBED_DIMS"
             raise ValueError(msg)
@@ -36,9 +39,11 @@ class FakeEmbeddingClient:
 
     @property
     def dim(self) -> int:
+        """Vector dimensionality for the configured embedding model."""
         return EMBED_DIMS[self.model]
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
+        """Return deterministic sha256-derived vectors for *texts*."""
         eff_model = model or self.model
         self.calls.append(_EmbedCall(texts=list(texts), model=eff_model))
         dim = EMBED_DIMS[eff_model] if model is not None else self.dim

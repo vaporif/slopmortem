@@ -1,6 +1,8 @@
+"""Pydantic v2 models shared across the pipeline — facets, candidates, synthesis output."""
+
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -9,11 +11,15 @@ from pydantic import BaseModel
 
 
 class PerspectiveScore(BaseModel):
+    """A single similarity-perspective score (0-10) with the LLM's rationale."""
+
     score: float
     rationale: str
 
 
 class SimilarityScores(BaseModel):
+    """Closed set of similarity perspectives the reranker scores against."""
+
     business_model: PerspectiveScore
     market: PerspectiveScore
     gtm: PerspectiveScore
@@ -21,6 +27,8 @@ class SimilarityScores(BaseModel):
 
 
 class Facets(BaseModel):
+    """Facets extracted from an input pitch — the closed-key half pins taxonomy schema."""
+
     sector: str
     business_model: str
     customer_type: str
@@ -34,6 +42,8 @@ class Facets(BaseModel):
 
 
 class Synthesis(BaseModel):
+    """The synthesized post-mortem analogue the LLM emits per candidate."""
+
     candidate_id: str
     name: str
     one_liner: str
@@ -48,6 +58,8 @@ class Synthesis(BaseModel):
 
 
 class CandidatePayload(BaseModel):
+    """Persisted candidate doc — body, facets, provenance, and text id."""
+
     name: str
     summary: str
     body: str
@@ -63,6 +75,8 @@ class CandidatePayload(BaseModel):
 
 
 class Candidate(BaseModel):
+    """A retrieval hit — canonical id + retrieval score + the persisted payload."""
+
     canonical_id: str
     score: float
     payload: CandidatePayload
@@ -70,22 +84,30 @@ class Candidate(BaseModel):
 
 
 class InputContext(BaseModel):
+    """The user's pitch under analysis — name, description, optional recency filter."""
+
     name: str
     description: str
     years_filter: int | None = None
 
 
 class ScoredCandidate(BaseModel):
+    """LLM rerank output for a single candidate — perspective scores + free-text rationale."""
+
     candidate_id: str
     perspective_scores: SimilarityScores
     rationale: str
 
 
 class LlmRerankResult(BaseModel):
+    """Wrapper for the rerank stage's array output, so the schema is a single object."""
+
     ranked: list[ScoredCandidate]
 
 
 class MergeState(StrEnum):
+    """Lifecycle of an entity-resolution merge between two candidates."""
+
     PENDING = "pending"
     COMPLETE = "complete"
     ALIAS_BLOCKED = "alias_blocked"
@@ -93,6 +115,8 @@ class MergeState(StrEnum):
 
 
 class PipelineMeta(BaseModel):
+    """Run metadata pinned to the final ``Report`` for cost/latency/budget bookkeeping."""
+
     K_retrieve: int
     N_synthesize: int
     models: dict[str, str]
@@ -104,6 +128,8 @@ class PipelineMeta(BaseModel):
 
 
 class Report(BaseModel):
+    """The user-visible output — input echo, synthesized candidates, and pipeline meta."""
+
     input: InputContext
     generated_at: datetime
     candidates: list[Synthesis]
@@ -111,14 +137,18 @@ class Report(BaseModel):
 
 
 class ToolSpec(BaseModel):
+    """Spec for an LLM-callable tool — name, description, arg model, and async impl."""
+
     name: str
     description: str
     args_model: type[BaseModel]
-    fn: Callable[..., Any]
+    fn: Callable[..., Awaitable[Any]]  # type: ignore[explicit-any]  # tools return varied payloads
     model_config = {"arbitrary_types_allowed": True}
 
 
 class RawEntry(BaseModel):
+    """A scraped raw document before canonicalization — source attribution + bytes."""
+
     source: str
     source_id: str
     url: str | None
