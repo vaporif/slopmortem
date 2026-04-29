@@ -7,8 +7,6 @@ available, fetch it and stash the response in ``raw_html`` + ``markdown_text``.
 A no-op when ``raw_html`` is already populated.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote_plus

@@ -1,16 +1,15 @@
 """Tests for the ``llm_rerank`` stage: structured-output round trip + length guard."""
 
-from __future__ import annotations
-
 import json
 from datetime import date
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.config import Config
 from slopmortem.errors import RerankLengthError
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets
 from slopmortem.stages.llm_rerank import llm_rerank
 
@@ -86,15 +85,39 @@ def _config(*, n_synthesize: int = 5) -> Config:
     return cfg.model_copy(update={"N_synthesize": n_synthesize})
 
 
-def _canned(text: str, *, model: str = _DEFAULT_MODEL) -> dict[tuple[str, str], FakeResponse]:
-    return {(prompt_template_sha("llm_rerank"), model): FakeResponse(text=text)}
+def _rerank_canned(
+    *,
+    text: str,
+    pitch: str,
+    candidates: list[Candidate],
+    model: str = _DEFAULT_MODEL,
+) -> dict[tuple[str, str, str], FakeResponse]:
+    rendered = render_prompt(
+        "llm_rerank",
+        pitch=pitch,
+        facets=_facets().model_dump(),
+        candidates=[
+            {
+                "candidate_id": c.canonical_id,
+                "name": c.payload.name,
+                "summary": c.payload.summary,
+            }
+            for c in candidates
+        ],
+    )
+    return {
+        llm_canned_key("llm_rerank", model=model, prompt=rendered): FakeResponse(text=text),
+    }
 
 
 async def test_llm_rerank_returns_n_synthesize() -> None:
     candidates = _make_candidates(30)
     cfg = _config(n_synthesize=5)
     payload = _scored_payload([c.canonical_id for c in candidates[:5]])
-    fake_llm = FakeLLMClient(canned=_canned(payload), default_model=_DEFAULT_MODEL)
+    fake_llm = FakeLLMClient(
+        canned=_rerank_canned(text=payload, pitch="pitch text", candidates=candidates),
+        default_model=_DEFAULT_MODEL,
+    )
 
     result = await llm_rerank(candidates, "pitch text", _facets(), fake_llm, cfg)
 
@@ -116,7 +139,10 @@ async def test_llm_rerank_uses_summary_not_body() -> None:
     ]
     cfg = _config(n_synthesize=1)
     payload = _scored_payload(["only-cand"])
-    fake_llm = FakeLLMClient(canned=_canned(payload), default_model=_DEFAULT_MODEL)
+    fake_llm = FakeLLMClient(
+        canned=_rerank_canned(text=payload, pitch="pitch", candidates=candidates),
+        default_model=_DEFAULT_MODEL,
+    )
 
     _ = await llm_rerank(candidates, "pitch", _facets(), fake_llm, cfg)
 
@@ -131,7 +157,10 @@ async def test_llm_rerank_raises_on_length_mismatch() -> None:
     # Return only 3 ranked entries — strict-mode JSON schema doesn't constrain
     # array length, so the stage's post-parse length guard must trigger.
     payload = _scored_payload([c.canonical_id for c in candidates[:3]])
-    fake_llm = FakeLLMClient(canned=_canned(payload), default_model=_DEFAULT_MODEL)
+    fake_llm = FakeLLMClient(
+        canned=_rerank_canned(text=payload, pitch="pitch", candidates=candidates),
+        default_model=_DEFAULT_MODEL,
+    )
 
     with pytest.raises(RerankLengthError, match="expected 5, got 3"):
         await llm_rerank(candidates, "pitch", _facets(), fake_llm, cfg)

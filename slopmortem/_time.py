@@ -1,7 +1,5 @@
 """UTC time helpers used across modules."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 

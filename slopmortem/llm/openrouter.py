@@ -9,8 +9,6 @@ boundary. Explicit `Any` in annotations is still gated per-site via
 `reportExplicitAny` ignores.
 """
 
-from __future__ import annotations
-
 import json
 import random
 from typing import TYPE_CHECKING, Any

@@ -1,14 +1,13 @@
 """URL allowlist filter test for synthesize: drops sources whose host isn't in the allowlist."""
 
-from __future__ import annotations
-
 import json
 from datetime import date
 from urllib.parse import urlparse
 
+from conftest import llm_canned_key
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages.synthesize import synthesize
 
@@ -75,11 +74,18 @@ def _bad_synthesis_payload() -> str:
 
 async def test_synthesize_drops_off_allowlist_urls() -> None:
     cand = _candidate()
+    rendered = render_prompt(
+        "synthesize",
+        pitch=_ctx().description,
+        candidate_id=cand.canonical_id,
+        candidate_name=cand.payload.name,
+        candidate_body=cand.payload.body,
+    )
     fake_llm = FakeLLMClient(
         canned={
-            (prompt_template_sha("synthesize"), _DEFAULT_MODEL): FakeResponse(
+            llm_canned_key("synthesize", model=_DEFAULT_MODEL, prompt=rendered): FakeResponse(
                 text=_bad_synthesis_payload()
-            )
+            ),
         },
         default_model=_DEFAULT_MODEL,
     )

@@ -26,8 +26,6 @@ Why not the official ``algoliasearch`` Python client?
   client's connection pooling and retry logic make cassettes brittle.
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast

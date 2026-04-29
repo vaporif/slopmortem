@@ -1,7 +1,5 @@
 """Jinja2 prompt rendering plus a stable template SHA used to pin fixtures."""
 
-from __future__ import annotations
-
 import hashlib
 from pathlib import Path
 from typing import Any

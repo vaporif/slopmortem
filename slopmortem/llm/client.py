@@ -1,7 +1,5 @@
 """LLMClient Protocol: chat-completion shape shared by real, fake, and cassette backends."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 

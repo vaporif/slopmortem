@@ -81,6 +81,7 @@ ignore = [
   "SLF001",   # tests can poke private attrs
   "ARG",      # unused fixture args are common
   "INP001",   # tests dir doesn't need __init__.py
+  "ASYNC240", # blocking Path I/O is fine in async test setup/assertions
 ]
 "conftest.py" = ["ANN", "D", "INP001"]
 

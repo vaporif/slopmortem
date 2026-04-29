@@ -1,7 +1,5 @@
 """--list-review reads the pending_review table and prints to stdout."""
 
-from __future__ import annotations
-
 import sqlite3
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock

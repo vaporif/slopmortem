@@ -1,7 +1,5 @@
 """SSRF-aware HTTP fetch. Refuses loopback, link-local, private, and IMDS targets."""
 
-from __future__ import annotations
-
 import ipaddress
 import socket
 from urllib.parse import urlparse

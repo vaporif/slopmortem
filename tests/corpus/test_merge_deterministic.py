@@ -1,7 +1,5 @@
 """Deterministic combined_text rule: byte-identical output across section orderings."""
 
-from __future__ import annotations
-
 import hashlib
 
 from slopmortem.corpus.merge_text import Section, combined_hash, combined_text

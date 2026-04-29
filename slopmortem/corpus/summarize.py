@@ -7,8 +7,6 @@ The 400-token cap is a contract on the LLM's output, enforced by the
 which budgets ``K * summary`` tokens for its input window.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt

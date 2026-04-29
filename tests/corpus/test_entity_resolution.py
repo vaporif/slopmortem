@@ -1,19 +1,39 @@
 """Tests for entity resolution: tier-1 / tier-2 / tier-3, recycled domains, parent suffix, flips."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
 
+from conftest import llm_canned_key
 from slopmortem.corpus.entity_resolution import ResolveResult, resolve_entity
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import MergeState, RawEntry
 from slopmortem.tracing.events import SpanEvent
+
+
+def _tier3_canned(
+    *,
+    sibling: str,
+    name_new: str,
+    section_head_new: str,
+    text: str,
+    model: str,
+) -> dict[tuple[str, str, str], FakeResponse]:
+    """Build a canned entry keyed on the tier3 tiebreaker prompt rendered with these args."""
+    rendered = render_prompt(
+        "tier3_tiebreaker",
+        name_a=sibling,
+        name_b=name_new,
+        section_head_a="",
+        section_head_b=section_head_new[:200],
+    )
+    return {
+        llm_canned_key("tier3_tiebreaker", model=model, prompt=rendered): FakeResponse(text=text),
+    }
 
 
 def make_entry(
@@ -219,16 +239,18 @@ async def test_tier3_band_invokes_haiku_tiebreaker(journal, embed_client):
         journal, canonical_id=r1.canonical_id, source=e1.source, source_id=e1.source_id
     )
     haiku_model = "anthropic/claude-haiku-4.5"
-    fake_llm = FakeLLMClient(
-        canned={
-            (prompt_template_sha("tier3_tiebreaker"), haiku_model): FakeResponse(
-                text='{"decision": "same", "rationale": "Same product, same domain area."}',
-            ),
-        },
-        default_model=haiku_model,
-    )
     e2 = make_entry(
         url="https://y.medium.com/p2", source_id="2", text="AcmeAI widgets re-imagined."
+    )
+    fake_llm = FakeLLMClient(
+        canned=_tier3_canned(
+            sibling=r1.canonical_id,
+            name_new="AcmeAI",
+            section_head_new=e2.markdown_text or "",
+            text='{"decision": "same", "rationale": "Same product, same domain area."}',
+            model=haiku_model,
+        ),
+        default_model=haiku_model,
     )
     r2 = await resolve_entity(
         e2,
@@ -277,15 +299,17 @@ async def test_tier3_decision_is_cached(journal, embed_client):
         journal, canonical_id=r1.canonical_id, source=e1.source, source_id=e1.source_id
     )
     haiku_model = "anthropic/claude-haiku-4.5"
+    e2 = make_entry(url="https://y.medium.com/p2", source_id="2")
     fake_llm = FakeLLMClient(
-        canned={
-            (prompt_template_sha("tier3_tiebreaker"), haiku_model): FakeResponse(
-                text='{"decision": "same", "rationale": "yep"}',
-            ),
-        },
+        canned=_tier3_canned(
+            sibling=r1.canonical_id,
+            name_new="AcmeAI",
+            section_head_new=e2.markdown_text or "",
+            text='{"decision": "same", "rationale": "yep"}',
+            model=haiku_model,
+        ),
         default_model=haiku_model,
     )
-    e2 = make_entry(url="https://y.medium.com/p2", source_id="2")
     _ = await resolve_entity(
         e2,
         journal=journal,

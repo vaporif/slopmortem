@@ -117,6 +117,7 @@
           yq-go
           jq
           git
+          git-lfs
           curl
         ];
 

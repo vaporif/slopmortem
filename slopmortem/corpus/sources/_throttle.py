@@ -12,8 +12,6 @@ don't care which source adapter calls them. Curated, HN, and Wayback all share
 the same instance. Crunchbase CSV reads the filesystem and skips both.
 """
 
-from __future__ import annotations
-
 import time
 from typing import Final
 from urllib.parse import urlparse

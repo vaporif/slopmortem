@@ -20,9 +20,21 @@ smoke-live:
 eval:
     uv run python -m slopmortem.evals.runner --dataset tests/evals/datasets/seed.jsonl --baseline tests/evals/baseline.json
 
-# Re-record cassettes against the live API. Costs real money; do not run in CI.
+# Re-record cassettes against live OpenRouter + local fastembed; LLM-side cost only.
+# Run sparingly. Default cost ceiling --max-cost-usd=2.0 in the runner.
 eval-record:
-    RUN_LIVE=1 uv run python -m slopmortem.evals.runner --dataset tests/evals/datasets/seed.jsonl --baseline tests/evals/baseline.json --live --record
+    RUN_LIVE=1 uv run python -m slopmortem.evals.runner \
+        --dataset tests/evals/datasets/seed.jsonl \
+        --baseline tests/evals/baseline.json \
+        --record \
+        --max-cost-usd 2.0
+
+# Regenerate the seed corpus fixture from corpus_fixture_inputs.yml. Run rarely.
+# Cost: ~$0.30-$1 under the default fastembed embedding provider.
+eval-record-corpus:
+    RUN_LIVE=1 uv run python -m slopmortem.evals.corpus_recorder \
+        --inputs tests/fixtures/corpus_fixture_inputs.yml \
+        --out tests/fixtures/corpus_fixture.jsonl
 
 lint:
     uv run ruff check .

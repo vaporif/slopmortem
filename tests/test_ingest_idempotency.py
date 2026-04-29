@@ -1,22 +1,22 @@
 """Idempotency: running ingest twice on the same fixture creates no duplicate Qdrant points."""
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.ingest import FakeSlopClassifier, InMemoryCorpus, ingest
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import RawEntry
 
 _HAIKU = "anthropic/claude-haiku-4.5"
+_BODY = "Acme was a marketplace startup that ran out of money. " * 30
 
 
 def _stub_sparse(_text: str) -> dict[int, float]:
@@ -37,18 +37,25 @@ def _facets() -> str:
     )
 
 
-def _canned() -> dict[tuple[str, str], FakeResponse]:
+def _canned() -> dict[tuple[str, str, str], FakeResponse]:
+    """Build canned entries for one ingest of `_BODY`: cache-warm + facet + fanout summarize."""
+    facets_resp = FakeResponse(
+        text=_facets(),
+        cache_creation_tokens=1000,
+        cache_read_tokens=5000,
+    )
+    summary_resp = FakeResponse(
+        text="Acme summary here.",
+        cache_creation_tokens=0,
+        cache_read_tokens=5000,
+    )
+    facet_prompt = render_prompt("facet_extract", description=_BODY)
+    summarize_warm_prompt = render_prompt("summarize", body=_BODY[:1000], source_id="warm")
+    summarize_fanout_prompt = render_prompt("summarize", body=_BODY, source_id="")
     return {
-        (prompt_template_sha("facet_extract"), _HAIKU): FakeResponse(
-            text=_facets(),
-            cache_creation_tokens=1000,
-            cache_read_tokens=5000,
-        ),
-        (prompt_template_sha("summarize"), _HAIKU): FakeResponse(
-            text="Acme summary here.",
-            cache_creation_tokens=0,
-            cache_read_tokens=5000,
-        ),
+        llm_canned_key("facet_extract", model=_HAIKU, prompt=facet_prompt): facets_resp,
+        llm_canned_key("summarize", model=_HAIKU, prompt=summarize_warm_prompt): summary_resp,
+        llm_canned_key("summarize", model=_HAIKU, prompt=summarize_fanout_prompt): summary_resp,
     }
 
 
@@ -58,7 +65,7 @@ def _entry() -> RawEntry:
         source_id="acme",
         url="https://acme.com",
         raw_html=None,
-        markdown_text="Acme was a marketplace startup that ran out of money. " * 30,
+        markdown_text=_BODY,
         fetched_at=datetime(2026, 4, 28, tzinfo=UTC),
     )
 

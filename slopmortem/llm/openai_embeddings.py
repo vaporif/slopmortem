@@ -5,8 +5,6 @@ Vendor SDK responses are loosely typed; this file silences `reportAny` and
 `reportUnknown*` at the boundary while keeping `reportExplicitAny` per-site.
 """
 
-from __future__ import annotations
-
 import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Any

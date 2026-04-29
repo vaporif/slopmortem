@@ -5,8 +5,6 @@ deterministic path (no env vars, no Qdrant, no real API calls) by
 monkeypatching ``run_query`` to return a hand-built Report.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
@@ -206,10 +204,35 @@ def test_runner_exits_nonzero_on_regression(
     assert "where_diverged_nonempty" in captured.err
 
 
-def test_runner_record_flag_is_deferred(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_runner_record_flag_invokes_helper(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """--record dispatches to record_cassettes_for_inputs via asyncio.run."""
     seed = _write_seed(tmp_path, [{"name": "alpha", "description": "x"}])
     baseline = tmp_path / "baseline.json"
     baseline.write_text("{}")
+
+    seen: dict[str, object] = {}
+
+    async def fake_helper(
+        *,
+        inputs: list[InputContext],
+        output_dir: Path,
+        corpus_fixture_path: Path,
+        config: Config,
+        max_cost_usd: float,
+    ) -> None:
+        del output_dir, corpus_fixture_path, config
+        seen["called"] = True
+        seen["inputs"] = inputs
+        seen["max_cost_usd"] = max_cost_usd
+
+    monkeypatch.setattr(
+        "slopmortem.evals.recording_helper.record_cassettes_for_inputs",
+        fake_helper,
+    )
+    # Stub the corpus fixture so the existence check passes.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tests" / "fixtures" / "corpus_fixture.jsonl").write_text("")
 
     with pytest.raises(SystemExit) as exc_info:
         runner.main(
@@ -218,13 +241,14 @@ def test_runner_record_flag_is_deferred(tmp_path: Path, capsys: pytest.CaptureFi
                 str(seed),
                 "--baseline",
                 str(baseline),
-                "--live",
                 "--record",
+                "--max-cost-usd",
+                "1.5",
             ]
         )
     assert exc_info.value.code == 0
-    captured = capsys.readouterr()
-    assert "deferred" in captured.out
+    assert seen["called"] is True
+    assert seen["max_cost_usd"] == pytest.approx(1.5)
 
 
 def test_runner_writes_baseline_when_missing(

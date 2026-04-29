@@ -16,8 +16,6 @@ runner constructs the ``allowed_hosts`` set itself (because the read-side
 candidate ``payload.sources`` needed for a per-candidate domain check).
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 

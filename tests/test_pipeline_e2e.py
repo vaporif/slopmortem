@@ -10,8 +10,6 @@ in-memory implementation of :class:`slopmortem.corpus.store.Corpus`; no
 Qdrant required.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 from dataclasses import dataclass, field
@@ -20,11 +18,12 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis
 from slopmortem.pipeline import _cutoff_iso, _join_to_candidates, run_query
 
@@ -136,23 +135,60 @@ def _synthesis_payload(canonical_id: str) -> str:
 
 
 def _build_canned(
-    *, candidate_ids: list[str]
-) -> Mapping[tuple[str, str], FakeResponse | CompletionResult]:
-    """Build the FakeLLMClient canned-response map for the full pipeline."""
-    canned: dict[tuple[str, str], FakeResponse | CompletionResult] = {
-        (prompt_template_sha("facet_extract"), _FACET_MODEL): FakeResponse(
+    *,
+    retrieved: list[Candidate],
+    top_n: list[Candidate],
+    ctx: InputContext,
+) -> Mapping[tuple[str, str, str], FakeResponse | CompletionResult]:
+    """Build the FakeLLMClient canned-response map for the full pipeline.
+
+    Renders one entry per (template_sha, model, prompt_hash) the pipeline
+    will produce: one facet_extract, one llm_rerank over the ``retrieved``
+    set, and one synthesize per candidate in ``top_n``.
+    """
+    # 1) facet_extract is rendered with `description=ctx.description`.
+    facet_prompt = render_prompt("facet_extract", description=ctx.description)
+    # 2) llm_rerank is rendered over the retrieved candidates with the parsed
+    # facets (post LLM JSON validation including the extra fields the prompt
+    # response embeds). Reproduce by parsing the canned facet payload.
+    parsed_facets = Facets.model_validate_json(_facet_extract_payload())
+    rerank_prompt = render_prompt(
+        "llm_rerank",
+        pitch=ctx.description,
+        facets=parsed_facets.model_dump(),
+        candidates=[
+            {
+                "candidate_id": c.canonical_id,
+                "name": c.payload.name,
+                "summary": c.payload.summary,
+            }
+            for c in retrieved
+        ],
+    )
+    canned: dict[tuple[str, str, str], FakeResponse | CompletionResult] = {
+        llm_canned_key("facet_extract", model=_FACET_MODEL, prompt=facet_prompt): FakeResponse(
             text=_facet_extract_payload(), cost_usd=0.001
         ),
-        (prompt_template_sha("llm_rerank"), _RERANK_MODEL): FakeResponse(
-            text=_rerank_payload(candidate_ids), cost_usd=0.005
-        ),
-        # Synthesis returns the same canned response for every candidate. The
-        # ``candidate_id`` field stays "acme" but the stage's parser doesn't
-        # enforce that it matches the request.
-        (prompt_template_sha("synthesize"), _SYNTH_MODEL): FakeResponse(
-            text=_synthesis_payload("acme"), cost_usd=0.01, cache_creation_tokens=10
+        llm_canned_key("llm_rerank", model=_RERANK_MODEL, prompt=rerank_prompt): FakeResponse(
+            text=_rerank_payload([c.canonical_id for c in top_n]), cost_usd=0.005
         ),
     }
+    # 3) Synthesis runs once per top_n candidate; render each prompt and emit
+    # one canned entry per (template, model, prompt_hash). The response's
+    # ``candidate_id`` field stays "acme" but the stage's parser doesn't
+    # enforce that it matches the request.
+    synth_resp = FakeResponse(
+        text=_synthesis_payload("acme"), cost_usd=0.01, cache_creation_tokens=10
+    )
+    for cand in top_n:
+        synth_prompt = render_prompt(
+            "synthesize",
+            pitch=ctx.description,
+            candidate_id=cand.canonical_id,
+            candidate_name=cand.payload.name,
+            candidate_body=cand.payload.body,
+        )
+        canned[llm_canned_key("synthesize", model=_SYNTH_MODEL, prompt=synth_prompt)] = synth_resp
     return canned
 
 
@@ -233,7 +269,12 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     """Run the full pipeline end-to-end with fakes; assert the Report shape."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
     cfg = _build_config(k_retrieve=6, n_synthesize=3)
-    canned = _build_canned(candidate_ids=[c.canonical_id for c in candidates[:3]])
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
     fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
     fake_corpus = _FakeCorpus(candidates=candidates)
@@ -241,8 +282,6 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
 
     # Override retrieve's default sparse encoder; avoids loading fastembed.
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
-
-    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
 
     progress_events: list[str] = []
     report = await run_query(
@@ -290,11 +329,61 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     assert q["strict_deaths"] == cfg.strict_deaths
 
 
+async def test_run_query_forwards_sparse_encoder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_query forwards sparse_encoder to retrieve(); production fastembed not loaded."""
+    candidates = [_candidate(f"cand-{i}") for i in range(6)]
+    cfg = _build_config(k_retrieve=6, n_synthesize=3)
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
+    fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
+    fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
+    fake_corpus = _FakeCorpus(candidates=candidates)
+    budget = Budget(cap_usd=2.0)
+
+    seen_calls: list[str] = []
+
+    def my_sparse(text: str) -> dict[int, float]:
+        seen_calls.append(text)
+        return {1: 1.0}
+
+    # Sabotage the lazy fastembed default so the test fails loud if the
+    # injected encoder is NOT used.
+    def _boom(_t: str) -> dict[int, float]:
+        msg = "default sparse encoder must not be invoked"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _boom)
+
+    _ = await run_query(
+        ctx,
+        llm=fake_llm,
+        embedding_client=fake_embed,
+        corpus=fake_corpus,
+        config=cfg,
+        budget=budget,
+        sparse_encoder=my_sparse,
+    )
+
+    # The injected encoder ran during retrieve(): ctx.description goes through
+    # the sparse path verbatim.
+    assert seen_calls
+    assert ctx.description in seen_calls
+
+
 async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
     """BudgetExceededError mid-run sets ``budget_exceeded=True`` and returns cleanly."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
     cfg = _build_config(k_retrieve=6, n_synthesize=3)
-    canned = _build_canned(candidate_ids=[c.canonical_id for c in candidates[:3]])
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
     fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
     fake_corpus = _FakeCorpus(candidates=candidates)
@@ -314,7 +403,6 @@ async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr("slopmortem.pipeline.extract_facets", _raise)
 
-    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
     report = await run_query(
         ctx,
         llm=fake_llm,
@@ -332,7 +420,12 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
     """Cancelling the run_query task propagates as ``asyncio.CancelledError``."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
     cfg = _build_config(k_retrieve=6, n_synthesize=3)
-    canned = _build_canned(candidate_ids=[c.canonical_id for c in candidates[:3]])
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
 
     @dataclass
     class _SlowFakeLLMClient:
@@ -369,7 +462,6 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
 
-    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
     task = asyncio.create_task(
         run_query(
             ctx,

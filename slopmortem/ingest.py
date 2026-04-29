@@ -35,8 +35,6 @@ Concurrency contract: every LLM/embedding call routes through the same
 through the bounded fan-out limiter for the facet+summarize batch.
 """
 
-from __future__ import annotations
-
 import contextlib
 import hashlib
 import logging

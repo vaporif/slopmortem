@@ -7,8 +7,6 @@ The model loads lazily on the first ``encode`` call so ONNX startup doesn't
 dominate test collection time.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
