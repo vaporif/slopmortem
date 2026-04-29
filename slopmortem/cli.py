@@ -19,9 +19,10 @@ The ``ingest`` command assembles real :class:`Source` / :class:`Enricher`
 :func:`slopmortem.ingest.ingest`. ``--list-review`` is a read-only path that
 queries :class:`MergeJournal` for the pending entity-resolution review queue
 and prints it to stdout. ``--reconcile`` runs the six-drift-class scan with
-``repair=True`` and prints the report. The ``--reclassify`` flag is deferred
-to a follow-up plan and currently exits non-zero with a clear message;
-``--tavily-enrich`` appends a :class:`TavilyEnricher` to the enrichers list.
+``repair=True`` and prints the report. ``--reclassify`` re-runs the slop
+classifier against every quarantine row and routes survivors back out of
+the quarantine tree; ``--tavily-enrich`` appends a :class:`TavilyEnricher`
+to the enrichers list.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from openai import AsyncOpenAI
 from slopmortem.budget import Budget
 from slopmortem.config import load_config
 from slopmortem.corpus.qdrant_store import QdrantCorpus
+from slopmortem.corpus.reclassify import reclassify_quarantined
 from slopmortem.corpus.reconcile import reconcile
 from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource
 from slopmortem.corpus.sources.curated import CuratedSource
@@ -165,19 +167,27 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     post_mortems_root: Path,
 ) -> None:
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
-    if reclassify:
-        msg = (
-            "--reclassify is a separate orchestration path "
-            "deferred to a follow-up plan; not implemented in this iteration."
-        )
-        typer.echo(msg, err=True)
-        raise typer.Exit(code=1)
-
     config = load_config()
     _maybe_init_tracing(config)
     llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
         config, post_mortems_root
     )
+
+    # ``--reclassify`` re-runs the slop classifier across every quarantine row
+    # and routes survivors out of the quarantine tree. Read-mostly path: it
+    # touches the journal + filesystem, but does not invoke sources, the LLM,
+    # or the embedder. Spec: §Quarantine and reclassify line 252.
+    if reclassify:
+        report = await reclassify_quarantined(
+            journal=journal,
+            slop_classifier=classifier,
+            post_mortems_root=post_mortems_root,
+            slop_threshold=config.slop_threshold,
+        )
+        counts = f"total={report.total} declassified={report.declassified}"
+        tail = f"still_slop={report.still_slop} errors={report.errors}"
+        typer.echo(f"reclassify: {counts} {tail}")
+        return
 
     # ``--reconcile`` runs the six-drift-class scan with ``repair=True`` and
     # exits without touching the ingest orchestrator. Spec: §Atomicity / six

@@ -752,13 +752,13 @@ Expected: all green; test count = +2.
 
 ### Step-by-step
 
-- [ ] **Step D.1: Read spec lines 252 and 408–445** (the quarantine routing diagram and reclassify semantics).
+- [x] **Step D.1: Read spec lines 252 and 408–445** (the quarantine routing diagram and reclassify semantics).
 
-- [ ] **Step D.2: Verify `quarantine_journal` schema** (`slopmortem/corpus/merge.py` lines 56–62).
+- [x] **Step D.2: Verify `quarantine_journal` schema** (`slopmortem/corpus/merge.py` lines 56–62).
 
 The columns are `(content_sha256, source, source_id, reason, slop_score, quarantined_at)` per the schema in merge.py. Confirm by reading those lines directly before writing tests.
 
-- [ ] **Step D.3: Write failing orchestrator tests.**
+- [x] **Step D.3: Write failing orchestrator tests.**
 
 `tests/test_reclassify.py`:
 

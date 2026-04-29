@@ -419,6 +419,31 @@ class MergeJournal:
             cur = conn.execute("SELECT * FROM quarantine_journal")
             return [_row_to_dict(r) for r in cur.fetchall()]
 
+    async def drop_quarantine_row(
+        self,
+        *,
+        content_sha256: str,
+        source: str,
+        source_id: str,
+    ) -> None:
+        """Delete the quarantine_journal row for the given primary key.
+
+        Used by ``slopmortem ingest --reclassify`` after a doc is declassified
+        (re-scored below ``slop_threshold``) and its markdown is moved out of
+        the quarantine tree.
+        """
+        await to_thread.run_sync(self._drop_quarantine_row_sync, content_sha256, source, source_id)
+
+    def _drop_quarantine_row_sync(self, content_sha256: str, source: str, source_id: str) -> None:
+        with _connect(self._db) as conn:
+            conn.execute(
+                """
+                DELETE FROM quarantine_journal
+                 WHERE content_sha256 = ? AND source = ? AND source_id = ?
+                """,
+                (content_sha256, source, source_id),
+            )
+
     # ─── Pending review queue (entity-resolution borderline pairs) ─────────
 
     async def list_pending_review(self) -> list[PendingReviewRow]:

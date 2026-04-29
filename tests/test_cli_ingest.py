@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from typer.testing import CliRunner
 
 from slopmortem.cli import app
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import pytest
 
 
 def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
@@ -68,16 +69,6 @@ def test_ingest_tavily_enrich_appends_enricher(
     assert isinstance(enrichers, list)
     enricher_classnames = [type(e).__name__ for e in enrichers]
     assert "TavilyEnricher" in enricher_classnames
-
-
-@pytest.mark.parametrize("flag", ["--reclassify"])
-def test_ingest_deferred_flags_rejected(flag: str, tmp_path: Path) -> None:
-    """--reclassify is a separate path, not in this task."""
-    runner = CliRunner()
-    result = runner.invoke(app, ["ingest", flag, "--post-mortems-root", str(tmp_path)])
-    assert result.exit_code != 0
-    combined = (result.output + (result.stderr or "")).lower()
-    assert flag.lstrip("-") in combined or "deferred" in combined
 
 
 def test_ingest_with_crunchbase_csv_appends_source(

@@ -228,3 +228,12 @@ class PendingReviewRow(BaseModel):
     haiku_decision: str | None
     haiku_rationale: str | None
     raw_section_heads: str | None
+
+
+class ReclassifyReport(BaseModel):
+    """Result of a ``slopmortem ingest --reclassify`` pass (spec line 252)."""
+
+    total: int
+    declassified: int
+    still_slop: int
+    errors: int
