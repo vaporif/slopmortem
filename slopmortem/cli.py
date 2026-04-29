@@ -126,10 +126,11 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     }
     logger.info("slopmortem ingest invoked: %s", flags)
     typer.echo(f"slopmortem ingest invoked: {flags}")
-    typer.echo(
+    note = (
         "production wiring (sources/qdrant/openrouter/openai-embed) lands in Task #10; "
         "the orchestrator itself is exercised by the test suite."
     )
+    typer.echo(f"{note} flags={flags}")
 
 
 if __name__ == "__main__":

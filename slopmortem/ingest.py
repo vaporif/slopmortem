@@ -187,16 +187,20 @@ class BinocularsSlopClassifier:
             # Binoculars ships no type stubs — import dynamically and treat the
             # returned class as `object`. The error suppressions below are
             # gated by reportAttributeAccessIssue on the dynamic call.
-            from binoculars import Binoculars  # noqa: PLC0415  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            import binoculars  # noqa: PLC0415
 
-            ctor = cast("Callable[[], object]", Binoculars)  # pyright: ignore[reportUnknownArgumentType]  # noqa: F821 — string annotation
+            ctor_attr: object = getattr(binoculars, "Binoculars", None)
+            if ctor_attr is None:
+                msg = "binoculars module has no Binoculars class"
+                raise RuntimeError(msg)
+            ctor = cast("Callable[[], object]", ctor_attr)
             impl = await asyncio.to_thread(ctor)
             self._impl = impl
         impl_obj = impl
 
         def _run() -> float:
             ans = impl_obj.predict(text)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-            return float(ans)  # pyright: ignore[reportUnknownArgumentType, reportAny]
+            return float(ans)  # pyright: ignore[reportUnknownArgumentType]
 
         return await asyncio.to_thread(_run)
 
@@ -854,5 +858,3 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             result.skipped += 1
 
     return result
-
-

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import typing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -205,7 +206,8 @@ async def test_ingest_bounded_fan_out_concurrency(tmp_path):
     canned = _canned_for_run()
 
     class _CountingLLM(FakeLLMClient):
-        async def complete(self, prompt, **kw):  # pyright: ignore[reportIncompatibleMethodOverride]
+        @typing.override
+        async def complete(self, prompt, **kw):
             nonlocal in_flight, peak
             async with lock:
                 in_flight += 1
