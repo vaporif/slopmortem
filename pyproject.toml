@@ -35,7 +35,7 @@ dev = [
   "syrupy>=4.6",
   "jsonschema>=4.23",
   "ruff>=0.6",
-  "mypy>=1.11",
+  "basedpyright>=1.20",
 ]
 
 [tool.pytest.ini_options]
@@ -62,8 +62,8 @@ ignore = [
   # Practically unenforceable
   "CPY001",  # missing copyright header on every file
   # `Any` is used deliberately for SDK passthroughs and Jinja contexts;
-  # mypy's `disallow_any_explicit = true` is the real gate (each site carries
-  # `# type: ignore[explicit-any]` with rationale).
+  # basedpyright's `reportAny` is the real gate (each site carries
+  # `# pyright: ignore[reportAny]` with rationale).
   "ANN401",
 ]
 
@@ -97,32 +97,25 @@ max-branches = 12
 max-returns = 6
 max-statements = 50
 
-[tool.mypy]
-python_version = "3.11"
-plugins = ["pydantic.mypy"]
-strict = true
-warn_unreachable = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_explicit = true
-disallow_any_unimported = true
-no_implicit_reexport = true
-extra_checks = true
+[tool.basedpyright]
+include = ["slopmortem", "tests"]
+extraPaths = ["."]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+reportAny = "error"
+reportExplicitAny = "error"
+reportImplicitOverride = "error"
+reportUnreachable = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportImplicitStringConcatenation = "error"
+reportMissingTypeStubs = false
 
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = [
-  "jsonref",
-  "yaml",
-  "trafilatura",
-  "readability.*",
-  "tldextract",
-  "binoculars",
-  "lmnr",
-  "fastembed",
-  "tavily.*",
-]
-ignore_missing_imports = true
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+reportMissingParameterType = false
+reportUnknownParameterType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportAny = false
+reportExplicitAny = false

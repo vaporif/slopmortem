@@ -26,4 +26,4 @@ lint:
     uv run ruff format --check .
 
 typecheck:
-    uv run mypy slopmortem
+    uv run basedpyright

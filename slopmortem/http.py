@@ -41,9 +41,8 @@ def _is_blocked_address(addr: str) -> bool:
         return ip in ipaddress.ip_network("100.64.0.0/10") or ip in ipaddress.ip_network(
             "169.254.0.0/16"
         )
-    if isinstance(ip, ipaddress.IPv6Address):
-        return ip in ipaddress.ip_network("fc00::/7") or ip in ipaddress.ip_network("fe80::/10")
-    return False
+    # ip_address() returns IPv4Address | IPv6Address, so this branch is exhaustive.
+    return ip in ipaddress.ip_network("fc00::/7") or ip in ipaddress.ip_network("fe80::/10")
 
 
 def _resolve_all(host: str) -> list[str]:
