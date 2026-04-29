@@ -1,3 +1,4 @@
+# pyright: reportAny=false
 """Entity resolution: tier-1 / tier-2 / tier-3 canonical_id derivation.
 
 The resolver returns a :class:`ResolveResult` summarizing the chosen canonical_id,
@@ -62,10 +63,26 @@ _CORPORATE_HIERARCHY_YAML = (
 )
 
 # Suffix-delta detection: corporate suffixes that indicate parent/subsidiary disambiguation.
+_CORPORATE_SUFFIXES = (
+    "holdings",
+    "group",
+    "corp",
+    "corporation",
+    "ltd",
+    "limited",
+    "llc",
+    "inc",
+    "incorporated",
+    "co",
+    "company",
+    "plc",
+    "gmbh",
+    "ag",
+    "sa",
+    "sas",
+)
 _CORPORATE_SUFFIXES_RE = re.compile(
-    r"\s+(holdings|group|corp|corporation|ltd|limited|llc|inc|incorporated|co|company|"
-    r"plc|gmbh|ag|sa|sas)\b\.?$",
-    re.IGNORECASE,
+    rf"\s+({'|'.join(_CORPORATE_SUFFIXES)})\b\.?$", re.IGNORECASE
 )
 
 # Founding-year delta: more than this many years apart → demote (recycled domain).
@@ -352,16 +369,6 @@ def _candidate_tier1_id(url: str) -> tuple[str, bool]:
     """Return ``(registrable_domain, is_platform)``."""
     domain = _registrable_domain(url)
     return domain, domain in _PLATFORM_DOMAINS
-
-
-def _suffix_delta_demotes(name_a: str, name_b: str) -> bool:
-    """True when the two names share a stem but differ by corporate suffix."""
-    stem_a, suffix_a = _strip_corporate_suffix(name_a)
-    stem_b, suffix_b = _strip_corporate_suffix(name_b)
-    if stem_a != stem_b:
-        return False
-    # Same stem; differ in suffix → suffix-delta case.
-    return suffix_a != suffix_b
 
 
 async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
