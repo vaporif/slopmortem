@@ -108,7 +108,15 @@ async def _seed(
 async def fixture_corpus(qdrant_client, tmp_path) -> AsyncIterator[
     tuple[QdrantCorpus, str, FakeEmbeddingClient]
 ]:
-    """Create a fresh collection + QdrantCorpus instance scoped to one test."""
+    """Create a fresh collection + QdrantCorpus instance scoped to one test.
+
+    Uses a generous ``facet_boost=10.0`` so a 4-facet match overwhelms RRF
+    tie-breaking noise (Qdrant tie-breaks identical RRF positions by point
+    id, not symmetrically — see qdrant#5182). The production value 0.01
+    is verified separately by reading-side unit tests; this fixture exists
+    to assert the integration shape of the FormulaQuery wiring, not the
+    calibrated value.
+    """
     name = f"test_retrieve_{uuid.uuid4().hex[:8]}"
     if await qdrant_client.collection_exists(name):
         await qdrant_client.delete_collection(name)
@@ -117,7 +125,7 @@ async def fixture_corpus(qdrant_client, tmp_path) -> AsyncIterator[
         client=qdrant_client,
         collection=name,
         post_mortems_root=tmp_path,
-        facet_boost=0.01,
+        facet_boost=10.0,
     )
     embed = FakeEmbeddingClient(model="text-embedding-3-small")
     try:
@@ -302,10 +310,12 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
     )
 
     # Query with all-"other" facets: the FormulaQuery must skip every "other"
-    # entry, leaving NO boost condition active. Both docs should score the
-    # same and either ordering is acceptable; the load-bearing assertion is
-    # that "all_other" does NOT outrank "real_match" (which would only happen
-    # if the boost matched on facets.X == "other").
+    # entry, leaving NO boost condition active. With ``facet_boost=10.0``
+    # (see fixture), an active 5-facet boost would yield score >= ~50.
+    # We assert no candidate's score crosses the no-boost ceiling — Qdrant's
+    # RRF $score caps at 1.0 with two channels — regardless of which facet
+    # bucket the candidate landed in. This confirms "other" did not enter
+    # the FormulaQuery condition.
     candidates = await retrieve(
         description=description,
         facets=other_facets,
@@ -319,8 +329,11 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
     ids = [c.canonical_id for c in candidates]
     assert "all_other" in ids
     assert "real_match" in ids
-    # Same dense+sparse vector → identical RRF score; with no boost condition
-    # firing, the two scores must be equal (within float tolerance).
+    # Sanity ceiling: with no boost active, no candidate's score should
+    # exceed the RRF cap. If "other" had entered the boost FilterCondition,
+    # "all_other" alone would have matched all 5 facet equality checks and
+    # earned 5 * facet_boost = 50.0 on top of the RRF $score.
     score_by_id = {c.canonical_id: c.score for c in candidates}
-    assert abs(score_by_id["all_other"] - score_by_id["real_match"]) < 1e-6
+    assert score_by_id["all_other"] < 5.0
+    assert score_by_id["real_match"] < 5.0
     _ = Path  # silence unused-import lint when this test runs alone
