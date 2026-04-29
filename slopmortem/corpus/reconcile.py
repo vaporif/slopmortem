@@ -32,14 +32,14 @@ event so the operator can audit what changed across runs.
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
 import yaml
-from pydantic import BaseModel
+from anyio import to_thread
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from slopmortem.corpus.merge import MergeJournal
@@ -73,7 +73,7 @@ class ReconcileReport(BaseModel):
     """
 
     rows: list[ReconcileRow]
-    applied: list[str] = []
+    applied: list[str] = Field(default_factory=list)
 
 
 def _text_id(canonical_id: str) -> str:
@@ -104,7 +104,7 @@ async def _scan_orphan_tmps(root: Path) -> list[ReconcileRow]:
             return []
         return [p for p in root.rglob("*.tmp") if p.is_file()]
 
-    paths = await asyncio.to_thread(_walk)
+    paths = await to_thread.run_sync(_walk)
     return [
         ReconcileRow(
             drift_class="e",
@@ -131,7 +131,7 @@ async def _scan_canonical_tree(
             [p for p in canonical_dir.glob("*.md") if p.is_file()] if canonical_dir.exists() else []
         )
 
-    paths = await asyncio.to_thread(_walk)
+    paths = await to_thread.run_sync(_walk)
     rows: list[ReconcileRow] = []
     for p in paths:
         fm = _read_front_matter(p)
@@ -233,7 +233,7 @@ async def _scan_raw_tree(
             out.extend((p, source_dir.name) for p in source_dir.glob("*.md") if p.is_file())
         return out
 
-    raw_files = await asyncio.to_thread(_walk)
+    raw_files = await to_thread.run_sync(_walk)
     rows: list[ReconcileRow] = []
     for p, source in raw_files:
         fm = _read_front_matter(p)
@@ -350,20 +350,23 @@ async def _apply_repairs(
     # against any corpus surface.
     delete_fn = getattr(corpus, "delete_chunks_for_canonical", None)
     for row in findings:
-        if row.drift_class == "e":
-            await _repair_class_e(row, applied)
-        elif row.drift_class == "a":
-            applied.append("needs_reembed")
-        elif row.drift_class == "b":
-            applied.append("pending_redo")
-        elif row.drift_class in ("c", "d"):
-            applied.append("needs_remerge")
-        elif row.drift_class == "f":
-            # Strip stale chunks for the prior canonical_id (best-effort).
-            if delete_fn is not None and row.canonical_id is not None:
-                with contextlib.suppress(Exception):
-                    await delete_fn(row.canonical_id)
-            applied.append("resolver_flipped_repair")
+        match row.drift_class:
+            case "e":
+                await _repair_class_e(row, applied)
+            case "a":
+                applied.append("needs_reembed")
+            case "b":
+                applied.append("pending_redo")
+            case "c" | "d":
+                applied.append("needs_remerge")
+            case "f":
+                # Strip stale chunks for the prior canonical_id (best-effort).
+                if delete_fn is not None and row.canonical_id is not None:
+                    with contextlib.suppress(Exception):
+                        await delete_fn(row.canonical_id)
+                applied.append("resolver_flipped_repair")
+            case _:
+                pass
     return applied
 
 
@@ -377,5 +380,5 @@ async def _repair_class_e(row: ReconcileRow, applied: list[str]) -> None:
         if p.exists():
             p.unlink()
 
-    await asyncio.to_thread(_delete)
+    await to_thread.run_sync(_delete)
     applied.append("tmp_deleted")

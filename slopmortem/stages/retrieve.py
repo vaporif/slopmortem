@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from slopmortem.llm.embedding_client import EmbeddingClient
     from slopmortem.models import Candidate, Facets
 
-    SparseEncoder = Callable[[str], dict[int, float]]
+type SparseEncoder = Callable[[str], dict[int, float]]
 
 
 async def retrieve(  # noqa: PLR0913 — every dependency is required at the call site

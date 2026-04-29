@@ -7,11 +7,11 @@ Vendor SDK responses are loosely typed; this file silences `reportAny` and
 
 from __future__ import annotations
 
-import asyncio
 import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import anyio
 import yaml
 
 from slopmortem.llm.embedding_client import EmbeddingResult
@@ -64,7 +64,7 @@ class OpenAIEmbeddingClient:
         self.model = model
         self._max_retries = max_retries
         self._initial_backoff = initial_backoff
-        self._sleep: Callable[[float], Awaitable[None]] = sleep or asyncio.sleep
+        self._sleep: Callable[[float], Awaitable[None]] = sleep or anyio.sleep
 
     @property
     def dim(self) -> int:
@@ -91,23 +91,15 @@ class OpenAIEmbeddingClient:
 
     async def _call_with_retry(self, **kw: Any) -> Any:  # pyright: ignore[reportExplicitAny]
         sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
-        attempt = 0
-        last_exc: BaseException | None = None
-        while attempt <= self._max_retries:
+        for attempt in range(self._max_retries + 1):
             try:
                 return await sdk.embeddings.create(**kw)
             except Exception as exc:
-                if not is_transient_http(exc):
-                    raise
-                last_exc = exc
-                if attempt >= self._max_retries:
+                if not is_transient_http(exc) or attempt >= self._max_retries:
                     raise
                 await self._backoff(attempt)
-                attempt += 1
                 continue
-        if last_exc is not None:
-            raise last_exc
-        msg = "retry loop exited without resolution"
+        msg = "retry loop exited without resolution"  # pragma: no cover — unreachable
         raise RuntimeError(msg)
 
     async def _backoff(self, attempt: int) -> None:

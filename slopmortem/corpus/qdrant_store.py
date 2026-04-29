@@ -8,6 +8,9 @@ match the pattern used by ``slopmortem/llm/openai_embeddings.py``.
 
 from __future__ import annotations
 
+import hashlib
+import logging
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from qdrant_client.models import (
@@ -22,6 +25,8 @@ from slopmortem.corpus.alias_graph import collapse_alias_components
 from slopmortem.corpus.disk import read_canonical
 from slopmortem.corpus.paths import safe_path
 from slopmortem.models import Candidate, CandidatePayload
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -164,7 +169,7 @@ class QdrantCorpus:
                 Prefetch(query=dense, using="dense", limit=k_retrieve * 2),
                 Prefetch(
                     query=SparseVector(
-                        indices=list(sparse.keys()),
+                        indices=list(sparse),
                         values=list(sparse.values()),
                     ),
                     using="sparse",
@@ -179,7 +184,7 @@ class QdrantCorpus:
         # Free-form (sub_sector, product_type, ...) and integer-typed year
         # facets are intentionally not part of the soft-boost set: closed
         # taxonomy fields are the contract surface (see spec line 605-648).
-        boost_must: list[Any] = []  # type: ignore[explicit-any]
+        boost_must: list[Any] = []  # pyright: ignore[reportExplicitAny]
         for fname in ("sector", "business_model", "customer_type", "geography", "monetization"):
             val = getattr(facets, fname)
             if val == "other":
@@ -190,7 +195,7 @@ class QdrantCorpus:
         # boost_must is empty, the Filter matches every doc (a 1.0
         # contribution on every candidate); to keep "no facet boost in play"
         # truly neutral, drop the Mult term entirely in that case.
-        formula_terms: list[Any] = ["$score"]  # type: ignore[explicit-any]
+        formula_terms: list[Any] = ["$score"]  # pyright: ignore[reportExplicitAny]
         if boost_must:
             formula_terms.append(MultExpression(mult=[self._facet_boost, Filter(must=boost_must)]))
         formula = FormulaQuery(formula=SumExpression(sum=formula_terms))
@@ -213,7 +218,7 @@ class QdrantCorpus:
         # Collapse chunk hits to parents: best-score per canonical_id.
         # ``query_points`` returns ``QueryResponse`` whose ``.points`` is a
         # list of ``ScoredPoint``.
-        best: dict[str, tuple[float, dict[str, Any]]] = {}  # type: ignore[explicit-any]
+        best: dict[str, tuple[float, dict[str, Any]]] = {}  # pyright: ignore[reportExplicitAny]
         for hit in resp.points:
             payload = dict(hit.payload or {})
             cid = str(payload.get("canonical_id", ""))
@@ -226,16 +231,13 @@ class QdrantCorpus:
         # Build Candidates in descending score order. Bad payloads on a
         # specific doc are per-doc isolated (logged + dropped) so a single
         # malformed point can't fail the whole query.
-        import logging  # noqa: PLC0415 — keep top-level imports lean
-
-        log = logging.getLogger(__name__)
         ordered = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)
         candidates: list[Candidate] = []
         for cid, (score, payload) in ordered:
             try:
                 cp = _payload_dict_to_candidate_payload(payload)
             except Exception as exc:  # noqa: BLE001 — per-doc isolation; we log and continue
-                log.warning("qdrant_query: dropped malformed payload for %r: %s", cid, exc)
+                logger.warning("qdrant_query: dropped malformed payload for %r: %s", cid, exc)
                 continue
             candidates.append(Candidate(canonical_id=cid, score=score, payload=cp))
 
@@ -251,8 +253,6 @@ class QdrantCorpus:
 
     async def get_post_mortem(self, canonical_id: str) -> str:
         """Read the canonical merged markdown body for *canonical_id*."""
-        import hashlib  # noqa: PLC0415 — keep top-level imports lean
-
         text_id = hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:16]
         return read_canonical(self._root, text_id)
 
@@ -260,7 +260,7 @@ class QdrantCorpus:
         self,
         q: str,
         facets: dict[str, str] | None = None,
-    ) -> list[dict[str, Any]]:  # type: ignore[explicit-any]  # Protocol surface
+    ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]  # Protocol surface
         """Lightweight scroll-based search; returns a list of payload dicts.
 
         v1 uses Qdrant's payload scroll filtering on the canonical_id +
@@ -275,7 +275,7 @@ class QdrantCorpus:
             MatchValue,
         )
 
-        must: list[Any] = [  # type: ignore[explicit-any]
+        must: list[Any] = [  # pyright: ignore[reportExplicitAny]
             FieldCondition(key="body", match=MatchText(text=q)),
         ]
         if facets:
@@ -291,14 +291,14 @@ class QdrantCorpus:
             with_payload=True,
             with_vectors=False,
         )
-        out: list[dict[str, Any]] = []  # type: ignore[explicit-any]
+        out: list[dict[str, Any]] = []  # pyright: ignore[reportExplicitAny]
         for rec in records:
             payload = dict(rec.payload or {})
             payload["_point_id"] = rec.id
             out.append(payload)
         return out
 
-    async def upsert_chunk(self, point: Any) -> None:  # type: ignore[explicit-any]
+    async def upsert_chunk(self, point: Any) -> None:  # pyright: ignore[reportExplicitAny]
         """Upsert a single chunk point into the collection — used by ingest."""
         await self._client.upsert(
             collection_name=self._collection,
@@ -308,13 +308,11 @@ class QdrantCorpus:
 
 def canonical_path_for(post_mortems_root: Path, canonical_id: str) -> Path:
     """Return the validated on-disk path to the canonical doc for *canonical_id*."""
-    import hashlib  # noqa: PLC0415
-
     text_id = hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:16]
     return safe_path(post_mortems_root, kind="canonical", text_id=text_id)
 
 
-def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any:  # type: ignore[explicit-any]
+def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any:  # pyright: ignore[reportExplicitAny]
     """Compose the three-branch recency :class:`Filter` (or single-branch in strict mode).
 
     Branches A/B/C per spec lines 661-689 use derived
@@ -324,8 +322,6 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
     """
     if cutoff_iso is None:
         return None
-
-    from datetime import datetime  # noqa: PLC0415
 
     from qdrant_client.models import (  # noqa: PLC0415
         DatetimeRange,
@@ -340,19 +336,19 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
     # ``fromisoformat`` accepts the trailing ``Z`` directly, no replace needed.
     cutoff_dt = datetime.fromisoformat(cutoff_iso)
 
-    branch_a_must: list[Any] = [  # type: ignore[explicit-any]
+    branch_a_must: list[Any] = [  # pyright: ignore[reportExplicitAny]
         FieldCondition(key="failure_date_unknown", match=MatchValue(value=False)),
         FieldCondition(key="failure_date", range=DatetimeRange(gte=cutoff_dt)),
     ]
     if strict_deaths:
         return Filter(must=branch_a_must)
 
-    branch_b_must: list[Any] = [  # type: ignore[explicit-any]
+    branch_b_must: list[Any] = [  # pyright: ignore[reportExplicitAny]
         FieldCondition(key="failure_date_unknown", match=MatchValue(value=True)),
         FieldCondition(key="founding_date_unknown", match=MatchValue(value=False)),
         FieldCondition(key="founding_date", range=DatetimeRange(gte=cutoff_dt)),
     ]
-    branch_c_must: list[Any] = [  # type: ignore[explicit-any]
+    branch_c_must: list[Any] = [  # pyright: ignore[reportExplicitAny]
         FieldCondition(key="failure_date_unknown", match=MatchValue(value=True)),
         FieldCondition(key="founding_date_unknown", match=MatchValue(value=True)),
     ]
@@ -365,7 +361,7 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
     )
 
 
-def _payload_dict_to_candidate_payload(payload: dict[str, Any]) -> CandidatePayload:  # type: ignore[explicit-any]
+def _payload_dict_to_candidate_payload(payload: dict[str, Any]) -> CandidatePayload:  # pyright: ignore[reportExplicitAny]
     """Validate a Qdrant payload dict back into a :class:`CandidatePayload`.
 
     Pydantic v2 handles ISO-8601 strings → ``date`` automatically via

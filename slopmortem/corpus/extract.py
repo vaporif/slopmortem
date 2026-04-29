@@ -95,7 +95,7 @@ def sanitize_html(html: str) -> str:
         return ""
     try:
         root = lxml.html.fromstring(html)
-    except (lxml.etree.ParserError, ValueError) as _exc:
+    except lxml.etree.ParserError, ValueError:
         return ""
 
     _drop_comments(root)
@@ -120,7 +120,7 @@ def _readability_extract(html: str) -> str:
         return ""
     try:
         root = lxml.html.fromstring(summary_html)
-    except (lxml.etree.ParserError, ValueError) as _exc:
+    except lxml.etree.ParserError, ValueError:
         return ""
     return cast("str", root.text_content()).strip()
 

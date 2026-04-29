@@ -11,13 +11,13 @@ boundary. Explicit `Any` in annotations is still gated per-site via
 
 from __future__ import annotations
 
-import asyncio
 import json
 import random
 from typing import TYPE_CHECKING, Any
 
 import anyio
 
+from slopmortem.concurrency import gather_resilient
 from slopmortem.llm.client import CompletionResult
 from slopmortem.tracing.events import SpanEvent
 
@@ -62,7 +62,7 @@ async def gather_with_limit[T](
 ) -> list[T | BaseException]:
     """Run *coros* concurrently with at most *limit* in flight.
 
-    Wraps ``asyncio.gather(..., return_exceptions=True)`` behind an
+    Wraps :func:`slopmortem.concurrency.gather_resilient` behind an
     ``anyio.CapacityLimiter`` so callers can cap parallel OpenRouter calls
     against ``config.ingest_concurrency`` without rewriting the bookkeeping.
     """
@@ -72,7 +72,7 @@ async def gather_with_limit[T](
         async with limiter:
             return await coro
 
-    return await asyncio.gather(*(_run(c) for c in coros), return_exceptions=True)
+    return await gather_resilient(*(_run(c) for c in coros))
 
 
 class OpenRouterClient:
@@ -96,7 +96,7 @@ class OpenRouterClient:
         self._max_retries = max_retries
         self._max_tool_turns = max_tool_turns
         self._initial_backoff = initial_backoff
-        self._sleep: Callable[[float], Awaitable[None]] = sleep or asyncio.sleep
+        self._sleep: Callable[[float], Awaitable[None]] = sleep or anyio.sleep
 
     async def complete(  # noqa: C901, PLR0913 — public surface mirrors OpenAI chat.create kwargs.
         self,
@@ -213,9 +213,7 @@ class OpenRouterClient:
         non-overloaded mid-stream errors are fatal — re-raised immediately.
         """
         sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
-        attempt = 0
-        last_exc: BaseException | None = None
-        while attempt <= self._max_retries:
+        for attempt in range(self._max_retries + 1):
             try:
                 resp = await sdk.chat.completions.create(**kw)
                 # Inspect for mid-stream error signal even on a non-streaming-shaped
@@ -228,16 +226,11 @@ class OpenRouterClient:
             except Exception as exc:
                 if not self._is_transient(exc) or attempt >= self._max_retries:
                     raise
-                last_exc = exc
                 await self._backoff(attempt)
-                attempt += 1
                 continue
             else:
                 return resp
-        # Unreachable: every loop branch returns or raises. Re-raise as a guard.
-        if last_exc is not None:
-            raise last_exc
-        msg = "retry loop exited without resolution"
+        msg = "retry loop exited without resolution"  # pragma: no cover — unreachable
         raise RuntimeError(msg)
 
     async def _backoff(self, attempt: int) -> None:

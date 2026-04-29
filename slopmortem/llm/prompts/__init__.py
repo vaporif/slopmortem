@@ -23,7 +23,7 @@ _env.globals["taxonomy"] = yaml.safe_load(_TAXONOMY_PATH.read_text())
 
 def render_prompt(
     name: str,
-    **template_vars: Any,  # type: ignore[explicit-any]  # Jinja accepts arbitrary template context
+    **template_vars: Any,  # pyright: ignore[reportAny, reportExplicitAny]  # Jinja accepts arbitrary template context
 ) -> str:
     """Render the named ``.j2`` template fully, returning the joined output text."""
     return _env.get_template(f"{name}.j2").render(**template_vars)
@@ -31,7 +31,7 @@ def render_prompt(
 
 def render_blocks(
     name: str,
-    **template_vars: Any,  # type: ignore[explicit-any]  # Jinja accepts arbitrary template context
+    **template_vars: Any,  # pyright: ignore[reportAny, reportExplicitAny]  # Jinja accepts arbitrary template context
 ) -> dict[str, str]:
     """Render ``system`` and ``user`` blocks separately for cache_control handling."""
     template = _env.get_template(f"{name}.j2")

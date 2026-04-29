@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from uuid import uuid4
+
+import anyio
 
 
 class BudgetExceededError(Exception):
@@ -13,12 +14,12 @@ class BudgetExceededError(Exception):
 
 @dataclass
 class Budget:
-    """An asyncio-safe USD cap shared across every LLM and embedding call in a pipeline."""
+    """A coroutine-safe USD cap shared across every LLM and embedding call in a pipeline."""
 
     cap_usd: float
     spent_usd: float = 0.0
     reserved: dict[str, float] = field(default_factory=dict)
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    lock: anyio.Lock = field(default_factory=anyio.Lock)
 
     @property
     def remaining(self) -> float:

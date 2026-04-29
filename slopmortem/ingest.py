@@ -37,16 +37,19 @@ through the bounded fan-out limiter for the facet+summarize batch.
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import hashlib
 import logging
 import secrets
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
+import anyio
+from anyio import to_thread
+
+from slopmortem._time import utcnow_iso
+from slopmortem.concurrency import gather_resilient
 from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION, chunk_markdown
 from slopmortem.corpus.disk import write_canonical_atomic, write_raw_atomic
 from slopmortem.corpus.entity_resolution import resolve_entity
@@ -72,8 +75,8 @@ if TYPE_CHECKING:
     from slopmortem.llm.embedding_client import EmbeddingClient
     from slopmortem.models import RawEntry
 
-    # Sparse encoder shape — Callable[[text], {token_id: weight}].
-    SparseEncoder = Callable[[str], dict[int, float]]
+# Sparse encoder shape — Callable[[text], {token_id: weight}].
+type SparseEncoder = Callable[[str], dict[int, float]]
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +196,7 @@ class BinocularsSlopClassifier:
                 msg = "binoculars module has no Binoculars class"
                 raise RuntimeError(msg)
             ctor = cast("Callable[[], object]", ctor_attr)
-            impl = await asyncio.to_thread(ctor)
+            impl = await to_thread.run_sync(ctor)
             self._impl = impl
         impl_obj = impl
 
@@ -201,7 +204,7 @@ class BinocularsSlopClassifier:
             ans = impl_obj.predict(text)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
             return float(ans)  # pyright: ignore[reportUnknownArgumentType]
 
-        return await asyncio.to_thread(_run)
+        return await to_thread.run_sync(_run)
 
 
 # ─── Result type ───────────────────────────────────────────────────────────────
@@ -225,10 +228,6 @@ class IngestResult:
 
 
 # ─── Internal helpers ──────────────────────────────────────────────────────────
-
-
-def _utcnow_iso() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _content_sha256(text: str) -> str:
@@ -293,7 +292,7 @@ async def _quarantine(
             if tmp.exists():
                 tmp.unlink()
 
-    await asyncio.to_thread(_write_sync)
+    await to_thread.run_sync(_write_sync)
     await journal.write_quarantine(
         content_sha256=sha,
         source=entry.source,
@@ -489,8 +488,6 @@ async def _facet_summarize_fanout(
     flight — facet and summarize for the same entry run sequentially so two
     LLM calls never share one limiter slot.
     """
-    import anyio  # noqa: PLC0415
-
     limiter = anyio.CapacityLimiter(config.ingest_concurrency)
 
     async def _run(text: str) -> _FanoutResult:
@@ -500,10 +497,7 @@ async def _facet_summarize_fanout(
             summary, cr, cc = await _summarize_call(text, llm=llm, model=config.model_summarize)
         return _FanoutResult(facets=facets, summary=summary, cache_read=cr, cache_creation=cc)
 
-    return await asyncio.gather(
-        *(_run(text) for _, text in entries),
-        return_exceptions=True,
-    )
+    return await gather_resilient(*(_run(text) for _, text in entries))
 
 
 async def _process_entry(  # noqa: PLR0913 — orchestration density is the contract
@@ -610,7 +604,7 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
             "canonical_id": canonical_id,
             "combined_hash": content_hash,
             "skip_key": skip_key,
-            "merged_at": _utcnow_iso(),
+            "merged_at": utcnow_iso(),
             "source_ids": [f"{entry.source}:{entry.source_id}"],
         },
     )
@@ -648,7 +642,7 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
         source=entry.source,
         source_id=entry.source_id,
         skip_key=skip_key,
-        merged_at=_utcnow_iso(),
+        merged_at=utcnow_iso(),
         content_hash=content_hash,
     )
     return "processed"

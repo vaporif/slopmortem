@@ -40,7 +40,7 @@ def _force_required(node: object) -> None:
     if not isinstance(node, dict):
         return
     if node.get("type") == "object" and "properties" in node:
-        node["required"] = list(node["properties"].keys())
+        node["required"] = list(node["properties"])
         node["additionalProperties"] = False
         for v in node["properties"].values():
             _force_required(v)

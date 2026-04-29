@@ -32,7 +32,6 @@ so ``(A, B)`` and ``(B, A)`` collapse to the same row.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import math
 import re
@@ -40,10 +39,13 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
+from urllib.parse import urlparse
 
 import tldextract
 import yaml
+from anyio import to_thread
 
+from slopmortem._time import utcnow_iso
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
 from slopmortem.models import MergeState
 from slopmortem.tracing.events import SpanEvent
@@ -162,8 +164,6 @@ _HIERARCHY_OVERRIDES: dict[str, list[str]] = _load_corporate_hierarchy_overrides
 def _registrable_domain(url: str) -> str:
     extracted = tldextract.extract(url)
     if not extracted.domain or not extracted.suffix:
-        from urllib.parse import urlparse  # noqa: PLC0415
-
         host = urlparse(url).hostname or ""
         return host.lower()
     return f"{extracted.domain}.{extracted.suffix}".lower()
@@ -396,7 +396,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
         return "different", "no llm: defaulting to different inside calibration band"
     pk = _pair_key(canonical_existing, canonical_new)
     tiebreaker_hash = prompt_template_sha(_TIEBREAKER_PROMPT_NAME)
-    cached = await asyncio.to_thread(
+    cached = await to_thread.run_sync(
         _read_tier3_decision_sync, db_path, pk, haiku_model_id, tiebreaker_hash
     )
     if cached is not None:
@@ -414,10 +414,8 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
         extra_body={"prompt_template_sha": tiebreaker_hash},
     )
     decision, rationale = _parse_tiebreaker_response(result.text)
-    from datetime import UTC, datetime  # noqa: PLC0415
-
-    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    await asyncio.to_thread(
+    now_iso = utcnow_iso()
+    await to_thread.run_sync(
         _write_tier3_decision_sync,
         db_path,
         pk,
@@ -434,7 +432,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
             "new": section_head_new[:200],
         }
     )
-    await asyncio.to_thread(
+    await to_thread.run_sync(
         _write_pending_review_sync,
         db_path,
         pk,
@@ -535,7 +533,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     # cache live in the same sqlite file as the merge journal. There is no
     # public accessor by design (merge.py is read-only from this side).
     db_path = journal._db  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
-    await asyncio.to_thread(_ensure_tier3_table_sync, db_path)
+    await to_thread.run_sync(_ensure_tier3_table_sync, db_path)
 
     span_events: list[str] = []
 
@@ -561,7 +559,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
 
     # Recycled-domain check: same registrable_domain + founding_year delta > 10.
     if not use_tier2 and founding_year is not None:
-        cached_year = await asyncio.to_thread(_read_founding_year_sync, db_path, domain)
+        cached_year = await to_thread.run_sync(_read_founding_year_sync, db_path, domain)
         if (
             cached_year is not None
             and abs(founding_year - cached_year) > _RECYCLED_DOMAIN_YEAR_DELTA
@@ -617,7 +615,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         # time, so use the entry's source_id as the per-row dedup key — this is
         # acceptable for v1 since the cache only needs *some* entry per
         # (registrable_domain, *) for the delta check.
-        await asyncio.to_thread(
+        await to_thread.run_sync(
             _write_founding_year_sync,
             db_path,
             domain,
