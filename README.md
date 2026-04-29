@@ -164,9 +164,9 @@ tests/
 
 ## Running it
 
-Dev shell is a Nix flake. With direnv: `direnv allow` and the shell loads on `cd`. Without: `nix develop`. Either path provisions Python 3.14, `uv`, `ruff`, `basedpyright`, `just`, `taplo`, `pre-commit`, `docker`/`docker-compose`, plus the C/zlib/openssl runtime libs fastembed needs. The shellHook calls `uv venv` + `uv sync --frozen` for you, so the Python env is ready by the time the prompt returns.
+Dev shell is a Nix flake. With direnv: `direnv allow` and the shell loads on `cd`. Without: `nix develop`. The shellHook calls `uv venv` + `uv sync --frozen`, so Python is ready by the time the prompt returns. Then `just` for the rest.
 
-Secrets go in `.env` (gitignored): `OPENROUTER_API_KEY` is required; `OPENAI_API_KEY` only if you flip `embedding_provider` to OpenAI; `TAVILY_API_KEY` only if you turn on Tavily; `LMNR_PROJECT_API_KEY` only if `enable_tracing = true`. Configuration knobs live in `slopmortem.toml` with comments — see [Configuration](#configuration) for the override pattern.
+Secrets go in `.env` (gitignored): `OPENROUTER_API_KEY` is required; `OPENAI_API_KEY` only if you flip `embedding_provider` to OpenAI; `TAVILY_API_KEY` only if you enable Tavily; `LMNR_PROJECT_API_KEY` only if `enable_tracing = true`. Knobs live in `slopmortem.toml` with comments — see [Configuration](#configuration) for the override pattern.
 
 First-run sequence:
 
@@ -178,11 +178,15 @@ slopmortem ingest                    # curated YAML + HN by default; ~$7.50 firs
 slopmortem query "your pitch here"   # ~$0.50, run whenever
 ```
 
-Day-to-day uses `just`: `just test`, `just lint`, `just format`, `just typecheck`, `just coverage`, `just eval` (offline cassette replay), `just eval-record` and `just eval-record-corpus` (live, costs real money), `just smoke-live` (weekly sanity check against live OpenRouter).
-
 Ingest picks up curated + HN automatically. Add `--crunchbase-csv PATH` for a Crunchbase dump, `--enrich-wayback` to chase 404s through the Wayback Machine, and `--tavily-enrich` to fill in missing context from Tavily search. `--dry-run` counts without writing; `--force` bypasses the per-source skip key.
 
-A handful of corners worth knowing. `slopmortem ingest --reconcile` patches drift between the journal, the markdown tree, and Qdrant. `slopmortem ingest --reclassify` re-runs the slop classifier against the quarantine tree and routes survivors back through entity resolution. `slopmortem ingest --list-review` prints the entity-resolution review queue (tier-2 ambiguous pairs that landed in the calibration band). `slopmortem replay <dataset>` re-runs a saved JSONL input through current code, which is what you want when you're iterating on prompts and don't feel like reburning the LLM bill on the same examples.
+A handful of corners worth knowing. `slopmortem ingest --reconcile` patches drift between the journal, the markdown tree, and Qdrant. `slopmortem ingest --reclassify` re-runs the slop classifier against the quarantine tree and routes survivors back through entity resolution. `slopmortem ingest --list-review` prints the entity-resolution review queue (tier-2 ambiguous pairs that landed in the calibration band).
+
+### Cassettes
+
+Every LLM and HTTP call made during tests or evals replays from `tests/fixtures/cassettes/` (pytest-recording, vcrpy underneath). That's why `just test` and `just eval` are free and offline — `FakeLLMClient` + `FakeEmbeddingClient` plus disk-backed cassettes for the rest. Cassettes get re-recorded on demand, not in CI, because each re-record hits live OpenRouter and costs real money; see [Testing](#testing) for the live-record flow.
+
+`slopmortem replay <dataset>` is the runtime equivalent: it re-runs a saved JSONL of inputs through current code without re-burning the LLM bill, which is what you want when you're iterating on prompts.
 
 Storage defaults to `./post_mortems/{raw,canonical,quarantine}/` with the merge journal at `./journal.sqlite` next to the root. Override with `--post-mortems-root` or the `POST_MORTEMS_ROOT` / `MERGE_JOURNAL_PATH` env vars. The fastembed model lands wherever fastembed defaults unless you point `embed_cache_dir` somewhere in `slopmortem.toml`.
 
