@@ -235,7 +235,7 @@ Imports are one-way `evals → llm` and `evals → corpus`. Recording wrappers l
 {
   "schema_version": 1,
   "key": {
-    "model": "text-embedding-3-small",
+    "model": "nomic-ai/nomic-embed-text-v1.5",
     "text_hash": "<16 hex chars>"
   },
   "response": {
@@ -243,11 +243,13 @@ Imports are one-way `evals → llm` and `evals → corpus`. Recording wrappers l
   },
   "request_debug": {
     "text_preview": "first 200 chars",
-    "vector_dim": 1536,
+    "vector_dim": 768,
     "recorded_at": "..."
   }
 }
 ```
+
+The `key.model` field is whatever string `EmbeddingClient.model` returned at record time. The default fastembed provider produces `"nomic-ai/nomic-embed-text-v1.5"` (768 dim); `"text-embedding-3-small"` (1536 dim) and `"text-embedding-3-large"` (3072 dim) are the OpenAI-provider variants. `vector_dim` is informational — the loader trusts the model registry (`EMBED_DIMS`) and asserts on dim mismatch.
 
 ### Sparse-embedding cassette JSON
 
