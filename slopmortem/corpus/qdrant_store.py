@@ -109,7 +109,7 @@ class QdrantCorpus:
         self._rrf_k = rrf_k
         self._fetch_aliases = fetch_aliases
 
-    async def query(  # noqa: PLR0913 — Protocol method signature is the public contract
+    async def query(  # noqa: PLR0913, C901 — Protocol method signature is the public contract; orchestration density mirrors spec lines 605-689
         self,
         *,
         dense: list[float],
@@ -184,9 +184,7 @@ class QdrantCorpus:
             val = getattr(facets, fname)
             if val == "other":
                 continue
-            boost_must.append(
-                FieldCondition(key=f"facets.{fname}", match=MatchValue(value=val))
-            )
+            boost_must.append(FieldCondition(key=f"facets.{fname}", match=MatchValue(value=val)))
 
         # Outer formula: $score + boost * Filter(must=boost_must). When
         # boost_must is empty, the Filter matches every doc (a 1.0
@@ -194,9 +192,7 @@ class QdrantCorpus:
         # truly neutral, drop the Mult term entirely in that case.
         formula_terms: list[Any] = ["$score"]
         if boost_must:
-            formula_terms.append(
-                MultExpression(mult=[self._facet_boost, Filter(must=boost_must)])
-            )
+            formula_terms.append(MultExpression(mult=[self._facet_boost, Filter(must=boost_must)]))
         formula = FormulaQuery(formula=SumExpression(sum=formula_terms))
 
         query_filter = _build_recency_filter(
@@ -227,13 +223,19 @@ class QdrantCorpus:
             if cid not in best or score > best[cid][0]:
                 best[cid] = (score, payload)
 
-        # Build Candidates in descending score order.
+        # Build Candidates in descending score order. Bad payloads on a
+        # specific doc are per-doc isolated (logged + dropped) so a single
+        # malformed point can't fail the whole query.
+        import logging  # noqa: PLC0415 — keep top-level imports lean
+
+        log = logging.getLogger(__name__)
         ordered = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)
         candidates: list[Candidate] = []
         for cid, (score, payload) in ordered:
             try:
                 cp = _payload_dict_to_candidate_payload(payload)
-            except Exception:  # noqa: BLE001 — bad payload is per-doc isolation, not a query failure
+            except Exception as exc:  # noqa: BLE001 — per-doc isolation; we log and continue
+                log.warning("qdrant_query: dropped malformed payload for %r: %s", cid, exc)
                 continue
             candidates.append(Candidate(canonical_id=cid, score=score, payload=cp))
 
@@ -323,6 +325,7 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
     if cutoff_iso is None:
         return None
 
+    from datetime import datetime  # noqa: PLC0415
     from qdrant_client.models import (  # noqa: PLC0415
         DatetimeRange,
         FieldCondition,
@@ -330,19 +333,24 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
         MatchValue,
     )
 
-    branch_a_must: list[Any] = [
+    # ``DatetimeRange.gte`` is typed ``datetime | date | None``; the runtime
+    # accepts ISO strings via pydantic coercion but the stub is strict.
+    # Parse once here so the rest of this function stays narrow.
+    cutoff_dt = datetime.fromisoformat(cutoff_iso.replace("Z", "+00:00"))
+
+    branch_a_must: list[Any] = [  # type: ignore[explicit-any]
         FieldCondition(key="failure_date_unknown", match=MatchValue(value=False)),
-        FieldCondition(key="failure_date", range=DatetimeRange(gte=cutoff_iso)),
+        FieldCondition(key="failure_date", range=DatetimeRange(gte=cutoff_dt)),
     ]
     if strict_deaths:
         return Filter(must=branch_a_must)
 
-    branch_b_must: list[Any] = [
+    branch_b_must: list[Any] = [  # type: ignore[explicit-any]
         FieldCondition(key="failure_date_unknown", match=MatchValue(value=True)),
         FieldCondition(key="founding_date_unknown", match=MatchValue(value=False)),
-        FieldCondition(key="founding_date", range=DatetimeRange(gte=cutoff_iso)),
+        FieldCondition(key="founding_date", range=DatetimeRange(gte=cutoff_dt)),
     ]
-    branch_c_must: list[Any] = [
+    branch_c_must: list[Any] = [  # type: ignore[explicit-any]
         FieldCondition(key="failure_date_unknown", match=MatchValue(value=True)),
         FieldCondition(key="founding_date_unknown", match=MatchValue(value=True)),
     ]

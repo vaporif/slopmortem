@@ -27,7 +27,12 @@ def _facets() -> Facets:
     )
 
 
-def _payload(*, name: str, summary: str = "summary text", body: str = "body text") -> CandidatePayload:
+def _payload(
+    *,
+    name: str,
+    summary: str = "summary text",
+    body: str = "body text",
+) -> CandidatePayload:
     return CandidatePayload(
         name=name,
         summary=summary,
@@ -95,9 +100,7 @@ async def test_llm_rerank_returns_n_synthesize() -> None:
     result = await llm_rerank(candidates, "pitch text", _facets(), fake_llm, cfg)
 
     assert len(result.ranked) == 5
-    assert all(
-        isinstance(s.perspective_scores.business_model.score, float) for s in result.ranked
-    )
+    assert all(isinstance(s.perspective_scores.business_model.score, float) for s in result.ranked)
 
 
 async def test_llm_rerank_uses_summary_not_body() -> None:

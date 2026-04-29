@@ -8,8 +8,7 @@ against a Qdrant service on ``localhost:6333``.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
-from pathlib import Path
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -42,10 +41,17 @@ def _facets(**overrides: object) -> Facets:
     return Facets(**base)  # type: ignore[arg-type]
 
 
-def _payload(*, name: str, summary: str = "summary", facets: Facets | None = None,
-             founding_date: date | None = None, failure_date: date | None = None,
-             founding_unknown: bool = False, failure_unknown: bool = False,
-             text_id: str = "abcdef0123456789") -> CandidatePayload:
+def _payload(  # noqa: PLR0913 — test helper with optional payload fields
+    *,
+    name: str,
+    summary: str = "summary",
+    facets: Facets | None = None,
+    founding_date: date | None = None,
+    failure_date: date | None = None,
+    founding_unknown: bool = False,
+    failure_unknown: bool = False,
+    text_id: str = "abcdef0123456789",
+) -> CandidatePayload:
     return CandidatePayload(
         name=name,
         summary=summary,
@@ -65,7 +71,7 @@ def _payload(*, name: str, summary: str = "summary", facets: Facets | None = Non
 def _to_iso(d: date | None) -> str | None:
     if d is None:
         return None
-    return datetime(d.year, d.month, d.day).isoformat() + "Z"
+    return datetime(d.year, d.month, d.day, tzinfo=UTC).isoformat().replace("+00:00", "Z")
 
 
 def _build_payload_dict(canonical_id: str, payload: CandidatePayload) -> dict[str, object]:
@@ -79,7 +85,7 @@ def _build_payload_dict(canonical_id: str, payload: CandidatePayload) -> dict[st
     return pd
 
 
-async def _seed(
+async def _seed(  # noqa: PLR0913 — test helper threading every payload field
     client: AsyncQdrantClient,
     collection: str,
     *,
@@ -105,9 +111,9 @@ async def _seed(
 
 
 @pytest_asyncio.fixture
-async def fixture_corpus(qdrant_client, tmp_path) -> AsyncIterator[
-    tuple[QdrantCorpus, str, FakeEmbeddingClient]
-]:
+async def fixture_corpus(
+    qdrant_client, tmp_path
+) -> AsyncIterator[tuple[QdrantCorpus, str, FakeEmbeddingClient]]:
     """Create a fresh collection + QdrantCorpus instance scoped to one test.
 
     Uses a generous ``facet_boost=10.0`` so a 4-facet match overwhelms RRF
@@ -143,15 +149,27 @@ async def test_retrieve_with_facet_boost_outranks_unboosted(qdrant_client, fixtu
     description = "marketplace for industrial scrap metal"
     [qvec] = (await embed.embed([description])).vectors
 
-    full = _facets(sector="fintech", business_model="b2b_saas",
-                   customer_type="smb", geography="us",
-                   monetization="subscription_recurring")
-    partial = _facets(sector="fintech", business_model="b2b_saas",
-                      customer_type="enterprise", geography="eu",
-                      monetization="ad_revenue")
-    none_match = _facets(sector="healthtech", business_model="b2c_subscription",
-                         customer_type="enterprise", geography="eu",
-                         monetization="ad_revenue")
+    full = _facets(
+        sector="fintech",
+        business_model="b2b_saas",
+        customer_type="smb",
+        geography="us",
+        monetization="subscription_recurring",
+    )
+    partial = _facets(
+        sector="fintech",
+        business_model="b2b_saas",
+        customer_type="enterprise",
+        geography="eu",
+        monetization="ad_revenue",
+    )
+    none_match = _facets(
+        sector="healthtech",
+        business_model="b2c_subscription",
+        customer_type="enterprise",
+        geography="eu",
+        monetization="ad_revenue",
+    )
 
     sparse: dict[int, float] = {1: 1.0}
     today = date(2024, 1, 1)
@@ -161,13 +179,16 @@ async def test_retrieve_with_facet_boost_outranks_unboosted(qdrant_client, fixtu
         ("none", none_match),
     ):
         await _seed(
-            qdrant_client, name,
+            qdrant_client,
+            name,
             canonical_id=cid,
             dense=qvec,
             sparse=sparse,
             payload=_payload(
-                name=cid, facets=facets,
-                failure_date=today, founding_date=date(2020, 1, 1),
+                name=cid,
+                facets=facets,
+                failure_date=today,
+                founding_date=date(2020, 1, 1),
             ),
         )
 
@@ -189,7 +210,7 @@ async def test_retrieve_with_facet_boost_outranks_unboosted(qdrant_client, fixtu
 
 
 @pytest.mark.requires_qdrant
-async def test_recency_branch_C_passthrough_undated(qdrant_client, fixture_corpus):
+async def test_recency_branch_C_passthrough_undated(qdrant_client, fixture_corpus):  # noqa: N802
     """A doc with both dates unknown must surface under non-strict mode (branch C)."""
     corpus, name, embed = fixture_corpus
     description = "saas startup"
@@ -197,14 +218,18 @@ async def test_recency_branch_C_passthrough_undated(qdrant_client, fixture_corpu
 
     facets = _facets()
     await _seed(
-        qdrant_client, name,
+        qdrant_client,
+        name,
         canonical_id="undated",
         dense=qvec,
         sparse={1: 1.0},
         payload=_payload(
-            name="undated", facets=facets,
-            founding_date=None, failure_date=None,
-            founding_unknown=True, failure_unknown=True,
+            name="undated",
+            facets=facets,
+            founding_date=None,
+            failure_date=None,
+            founding_unknown=True,
+            failure_unknown=True,
         ),
     )
 
@@ -232,25 +257,32 @@ async def test_strict_deaths_filters_unknown(qdrant_client, fixture_corpus):
     facets = _facets()
     # branch A doc — should appear.
     await _seed(
-        qdrant_client, name,
+        qdrant_client,
+        name,
         canonical_id="dated",
         dense=qvec,
         sparse={1: 1.0},
         payload=_payload(
-            name="dated", facets=facets,
-            founding_date=date(2018, 1, 1), failure_date=date(2023, 6, 1),
+            name="dated",
+            facets=facets,
+            founding_date=date(2018, 1, 1),
+            failure_date=date(2023, 6, 1),
         ),
     )
     # branch C doc — should NOT appear under --strict-deaths.
     await _seed(
-        qdrant_client, name,
+        qdrant_client,
+        name,
         canonical_id="undated",
         dense=qvec,
         sparse={1: 1.0},
         payload=_payload(
-            name="undated", facets=facets,
-            founding_date=None, failure_date=None,
-            founding_unknown=True, failure_unknown=True,
+            name="undated",
+            facets=facets,
+            founding_date=None,
+            failure_date=None,
+            founding_unknown=True,
+            failure_unknown=True,
         ),
     )
 
@@ -283,29 +315,40 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
     [qvec] = (await embed.embed([description])).vectors
 
     real_facets = _facets()
-    other_facets = _facets(sector="other", business_model="other",
-                           customer_type="other", geography="other", monetization="other")
+    other_facets = _facets(
+        sector="other",
+        business_model="other",
+        customer_type="other",
+        geography="other",
+        monetization="other",
+    )
     today = date(2023, 1, 1)
     # Doc whose payload has every facet bucketed to "other".
     await _seed(
-        qdrant_client, name,
+        qdrant_client,
+        name,
         canonical_id="all_other",
         dense=qvec,
         sparse={1: 1.0},
         payload=_payload(
-            name="all_other", facets=other_facets,
-            failure_date=today, founding_date=date(2018, 1, 1),
+            name="all_other",
+            facets=other_facets,
+            failure_date=today,
+            founding_date=date(2018, 1, 1),
         ),
     )
     # Doc with concrete facets that DO match the (real_facets) boost set.
     await _seed(
-        qdrant_client, name,
+        qdrant_client,
+        name,
         canonical_id="real_match",
         dense=qvec,
         sparse={1: 1.0},
         payload=_payload(
-            name="real_match", facets=real_facets,
-            failure_date=today, founding_date=date(2018, 1, 1),
+            name="real_match",
+            facets=real_facets,
+            failure_date=today,
+            founding_date=date(2018, 1, 1),
         ),
     )
 
@@ -336,4 +379,3 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
     score_by_id = {c.canonical_id: c.score for c in candidates}
     assert score_by_id["all_other"] < 5.0
     assert score_by_id["real_match"] < 5.0
-    _ = Path  # silence unused-import lint when this test runs alone

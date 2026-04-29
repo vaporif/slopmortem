@@ -10,7 +10,7 @@ from __future__ import annotations
 
 
 class RerankLengthError(RuntimeError):
-    """Raised when ``llm_rerank`` returns a number of ``ranked`` entries that is not ``N_synthesize``.
+    """Raised when ``llm_rerank``'s ``ranked`` array length is not ``N_synthesize``.
 
     Strict-mode JSON schema constrains the shape of each entry but cannot
     constrain the array length, so we re-validate post-parse and surface

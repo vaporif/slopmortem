@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from slopmortem.models import Candidate, Facets
 
 
-async def llm_rerank(
+async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the call site
     candidates: list[Candidate],
     pitch: str,
     facets: Facets,
