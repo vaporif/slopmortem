@@ -52,6 +52,7 @@ from slopmortem.corpus.sources.tavily import TavilyEnricher
 from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.corpus.tools_impl import _set_corpus
 from slopmortem.ingest import ingest
+from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.models import InputContext
@@ -333,6 +334,31 @@ def _maybe_init_tracing(config: Config) -> None:
     Laminar.initialize(project_api_key=api_key, base_url=base_url)
 
 
+def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
+    """Construct the configured embedder; branch on ``config.embedding_provider``.
+
+    Unknown provider names raise ``ValueError`` listing the supported values so
+    a typo in ``slopmortem.toml`` fails loud at startup rather than mid-pipeline.
+    """
+    provider = config.embedding_provider
+    if provider == "fastembed":
+        return FastEmbedEmbeddingClient(
+            model=config.embed_model_id,
+            budget=budget,
+            cache_dir=config.embed_cache_dir,
+        )
+    if provider == "openai":
+        openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        return OpenAIEmbeddingClient(
+            sdk=openai_sdk,
+            budget=budget,
+            model=config.embed_model_id,
+        )
+    valid = ("fastembed", "openai")
+    msg = f"unknown embedding_provider {provider!r}; valid choices: {valid}"
+    raise ValueError(msg)
+
+
 def _build_deps(
     config: Config,
 ) -> tuple[LLMClient, EmbeddingClient, Corpus, Budget]:
@@ -358,12 +384,7 @@ def _build_deps(
         model=config.model_synthesize,
     )
 
-    openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    embedder = OpenAIEmbeddingClient(
-        sdk=openai_sdk,
-        budget=budget,
-        model=config.embed_model_id,
-    )
+    embedder = _make_embedder(config, budget)
 
     qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
     qdrant_port = int(os.environ.get("QDRANT_PORT", "6333"))
@@ -439,12 +460,7 @@ def _build_ingest_deps(
         model=config.model_facet,  # ingest uses the cheap model
     )
 
-    openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    embedder = OpenAIEmbeddingClient(
-        sdk=openai_sdk,
-        budget=budget,
-        model=config.embed_model_id,
-    )
+    embedder = _make_embedder(config, budget)
 
     corpus = _build_ingest_corpus(config, post_mortems_root)
     journal = _build_journal(post_mortems_root)
@@ -514,6 +530,35 @@ async def _replay(dataset: str) -> None:
             progress=_make_progress(),
         )
         typer.echo(render(report))
+
+
+# ---------------------------------------------------------------------------
+# embed-prefetch
+# ---------------------------------------------------------------------------
+
+
+@app.command("embed-prefetch")
+def embed_prefetch_cmd() -> None:
+    """Warm the configured embedder's model cache (useful for CI / first-run)."""
+    anyio.run(_embed_prefetch)
+
+
+async def _embed_prefetch() -> None:
+    config = load_config()
+    budget = Budget(cap_usd=0.0)
+    embedder = _make_embedder(config, budget)
+    if not isinstance(embedder, FastEmbedEmbeddingClient):
+        typer.echo(
+            f"slopmortem: provider {config.embedding_provider!r} has no local cache to prefetch",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        await embedder.prefetch()
+    except Exception as exc:
+        typer.echo(f"slopmortem: embed-prefetch failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"slopmortem: prefetched {config.embed_model_id} into the fastembed cache")
 
 
 if __name__ == "__main__":

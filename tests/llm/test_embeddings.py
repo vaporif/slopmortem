@@ -8,9 +8,10 @@ import pytest
 import yaml
 
 from slopmortem.budget import Budget
+from slopmortem.config import Config
 from slopmortem.llm.embedding_client import EmbeddingClient
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient
+from slopmortem.llm.openai_embeddings import EMBED_DIMS, OPENAI_EMBED_MODELS, OpenAIEmbeddingClient
 
 _PRICES_PATH = Path(__file__).resolve().parents[2] / "slopmortem" / "llm" / "prices.yml"
 
@@ -32,14 +33,14 @@ def fake_sdk():
 
 
 def test_unknown_model_raises_with_embed_dims_in_message(fake_sdk):
-    with pytest.raises(ValueError, match="EMBED_DIMS"):
+    with pytest.raises(ValueError, match="does not support model"):
         OpenAIEmbeddingClient(sdk=fake_sdk, budget=Budget(0.01), model="text-embedding-3-xxl")
 
 
 def test_dim_property_matches_embed_dims_for_known_models(fake_sdk):
-    for model, dim in EMBED_DIMS.items():
+    for model in OPENAI_EMBED_MODELS:
         c = OpenAIEmbeddingClient(sdk=fake_sdk, budget=Budget(0.01), model=model)
-        assert c.dim == dim
+        assert c.dim == EMBED_DIMS[model]
 
 
 async def test_embed_returns_vectors_matching_dim(fake_sdk):
@@ -161,3 +162,21 @@ def test_fake_satisfies_embedding_protocol():
 def test_fake_unknown_model_raises_with_embed_dims_in_message():
     with pytest.raises(ValueError, match="EMBED_DIMS"):
         FakeEmbeddingClient(model="text-embedding-3-xxl")
+
+
+async def test_openai_embed_empty_input_returns_empty_without_calling_sdk(fake_sdk):
+    c = OpenAIEmbeddingClient(sdk=fake_sdk, budget=Budget(1.0), model="text-embedding-3-small")
+    r = await c.embed([])
+    assert r.vectors == []
+    assert r.n_tokens == 0
+    assert r.cost_usd == 0.0
+    fake_sdk.embeddings.create.assert_not_called()
+
+
+def test_config_defaults_to_fastembed_with_nomic(tmp_path, monkeypatch):
+    # Run with no slopmortem.toml or env present so we read pure code defaults.
+    monkeypatch.chdir(tmp_path)
+    cfg = Config()
+    assert cfg.embedding_provider == "fastembed"
+    assert cfg.embed_model_id == "nomic-ai/nomic-embed-text-v1.5"
+    assert cfg.embed_cache_dir is None
