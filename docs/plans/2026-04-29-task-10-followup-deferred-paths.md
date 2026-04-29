@@ -582,7 +582,7 @@ Expected: all green; test count = +3 (one model round-trip, one journal reader, 
 
 ### Step-by-step
 
-- [ ] **Step C.1: Read `slopmortem/corpus/reconcile.py:reconcile`'s signature and `ReconcileReport`'s shape.**
+- [x] **Step C.1: Read `slopmortem/corpus/reconcile.py:reconcile`'s signature and `ReconcileReport`'s shape.**
 
 ```
 ./.venv/bin/python -c "
@@ -595,7 +595,7 @@ print(ReconcileReport.model_fields)
 
 If the signature differs from what this plan assumes, adjust the wiring below. Do not modify `reconcile.py` itself.
 
-- [ ] **Step C.2: Write failing CLI test.**
+- [x] **Step C.2: Write failing CLI test.**
 
 `tests/test_cli_reconcile.py`:
 
@@ -669,7 +669,7 @@ def test_cli_reconcile_prints_drift_findings(monkeypatch, tmp_path: Path):
 
 The exact `ReconcileRow` field names should be lifted from the actual `slopmortem/corpus/reconcile.py` source — this plan's example uses `drift_class`, `path`, `action`, but the real shape may vary. Step C.1's grep confirms the schema before writing the test.
 
-- [ ] **Step C.3: Run the tests; confirm they fail.**
+- [x] **Step C.3: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_reconcile.py -v
@@ -677,7 +677,7 @@ The exact `ReconcileRow` field names should be lifted from the actual `slopmorte
 
 Expected: 2 tests fail because the CLI still rejects `--reconcile`.
 
-- [ ] **Step C.4: Wire the CLI path.**
+- [x] **Step C.4: Wire the CLI path.**
 
 In `slopmortem/cli.py`, add the import:
 
@@ -703,18 +703,18 @@ if reconcile_flag:  # rename param to avoid shadowing the imported function
 
 **Note:** Python parameter named `reconcile` in `_run_ingest` shadows the imported function. Either rename the typer Option to a different Python name (e.g. `reconcile_flag: Annotated[bool, typer.Option("--reconcile", ...)]`), or import the function under an alias (`from slopmortem.corpus.reconcile import reconcile as _reconcile`). Pick one and stay consistent in `_run_ingest`.
 
-- [ ] **Step C.5: Update `_run_ingest`'s deferred-flag block.**
+- [x] **Step C.5: Update `_run_ingest`'s deferred-flag block.**
 
 Drop `reconcile` from the rejection condition; only `reclassify` remains deferred until Task D lands. Update the parametrized `test_ingest_deferred_flags_rejected` similarly.
 
-- [ ] **Step C.6: Run the tests; confirm they pass.**
+- [x] **Step C.6: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_reconcile.py -v
 ./.venv/bin/pytest tests/test_cli_ingest.py -v
 ```
 
-- [ ] **Step C.7: Full sweep.**
+- [x] **Step C.7: Full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q

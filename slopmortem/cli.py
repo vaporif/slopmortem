@@ -18,10 +18,10 @@ The ``ingest`` command assembles real :class:`Source` / :class:`Enricher`
 :class:`Config` and env vars and dispatches to
 :func:`slopmortem.ingest.ingest`. ``--list-review`` is a read-only path that
 queries :class:`MergeJournal` for the pending entity-resolution review queue
-and prints it to stdout. The ``--reconcile`` and ``--reclassify`` flags are
-deferred to a follow-up plan and currently exit non-zero with a clear
-message; ``--tavily-enrich`` appends a :class:`TavilyEnricher` to the
-enrichers list.
+and prints it to stdout. ``--reconcile`` runs the six-drift-class scan with
+``repair=True`` and prints the report. The ``--reclassify`` flag is deferred
+to a follow-up plan and currently exits non-zero with a clear message;
+``--tavily-enrich`` appends a :class:`TavilyEnricher` to the enrichers list.
 """
 
 from __future__ import annotations
@@ -42,6 +42,7 @@ from openai import AsyncOpenAI
 from slopmortem.budget import Budget
 from slopmortem.config import load_config
 from slopmortem.corpus.qdrant_store import QdrantCorpus
+from slopmortem.corpus.reconcile import reconcile
 from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource
 from slopmortem.corpus.sources.curated import CuratedSource
 from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
@@ -84,7 +85,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
     force: Annotated[
         bool, typer.Option("--force", help="Bypass the skip_key short-circuit.")
     ] = False,
-    reconcile: Annotated[
+    reconcile_flag: Annotated[
         bool,
         typer.Option(
             "--reconcile",
@@ -140,7 +141,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
             _run_ingest,
             dry_run=dry_run,
             force=force,
-            reconcile=reconcile,
+            reconcile_flag=reconcile_flag,
             reclassify=reclassify,
             list_review=list_review,
             crunchbase_csv=crunchbase_csv,
@@ -155,7 +156,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     *,
     dry_run: bool,
     force: bool,
-    reconcile: bool,
+    reconcile_flag: bool,
     reclassify: bool,
     list_review: bool,
     crunchbase_csv: Path | None,
@@ -164,10 +165,9 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     post_mortems_root: Path,
 ) -> None:
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
-    if reconcile or reclassify:
-        flag_name = "reconcile" if reconcile else "reclassify"
+    if reclassify:
         msg = (
-            f"--{flag_name} is a separate orchestration path "
+            "--reclassify is a separate orchestration path "
             "deferred to a follow-up plan; not implemented in this iteration."
         )
         typer.echo(msg, err=True)
@@ -178,6 +178,21 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
         config, post_mortems_root
     )
+
+    # ``--reconcile`` runs the six-drift-class scan with ``repair=True`` and
+    # exits without touching the ingest orchestrator. Spec: §Atomicity / six
+    # drift classes (a-f); the reconcile pass is the dedicated repair path.
+    if reconcile_flag:
+        report = await reconcile(
+            journal=journal,
+            corpus=corpus,
+            post_mortems_root=post_mortems_root,
+            repair=True,
+        )
+        typer.echo(f"reconcile: {len(report.rows)} drift findings, {len(report.applied)} repaired")
+        for r in report.rows:
+            typer.echo(f"  drift_class={r.drift_class}\t{r.path}\t{r.detail}")
+        return
 
     # ``--list-review`` is a read-only path: query the journal, print the queue,
     # and exit 0. It runs before the orchestrator dispatches so it does not

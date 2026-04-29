@@ -1,0 +1,84 @@
+"""``--reconcile`` dispatches to ``slopmortem.corpus.reconcile.reconcile`` and prints the report."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, MagicMock
+
+from typer.testing import CliRunner
+
+from slopmortem.cli import app
+from slopmortem.corpus.reconcile import ReconcileReport, ReconcileRow
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
+
+
+def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
+    """Return six MagicMock placeholders matching ``_build_ingest_deps``'s tuple shape."""
+    return (
+        MagicMock(name="llm"),
+        MagicMock(name="embed"),
+        MagicMock(name="corpus"),
+        MagicMock(name="budget"),
+        MagicMock(name="journal"),
+        MagicMock(name="slop"),
+    )
+
+
+def test_cli_reconcile_dispatches_with_repair_true(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``--reconcile`` calls ``reconcile()`` with ``repair=True`` and exits 0."""
+    fake_report = ReconcileReport(rows=[], applied=[])
+    fake_reconcile = AsyncMock(return_value=fake_report)
+    monkeypatch.setattr("slopmortem.cli.reconcile", fake_reconcile)
+    monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["ingest", "--reconcile", "--post-mortems-root", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    fake_reconcile.assert_awaited_once()
+    await_args = fake_reconcile.await_args
+    assert await_args is not None
+    assert await_args.kwargs.get("repair") is True
+    assert "reconcile" in result.output.lower()
+
+
+def test_cli_reconcile_prints_drift_findings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When the report has rows, each one shows up in the printed output."""
+    fake_report = ReconcileReport(
+        rows=[
+            ReconcileRow(
+                drift_class="a",
+                canonical_id="canonical/abc",
+                source="hn",
+                source_id="123",
+                path="canonical/abc.md",
+                detail="re-embed",
+            ),
+            ReconcileRow(
+                drift_class="e",
+                canonical_id=None,
+                source=None,
+                source_id=None,
+                path="canonical/abc.md.tmp",
+                detail="orphan tmp file",
+            ),
+        ],
+        applied=["a:canonical/abc.md", "e:canonical/abc.md.tmp"],
+    )
+    monkeypatch.setattr("slopmortem.cli.reconcile", AsyncMock(return_value=fake_report))
+    monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["ingest", "--reconcile", "--post-mortems-root", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "drift_class=a" in result.output or "class=a" in result.output
+    assert "canonical/abc.md.tmp" in result.output
