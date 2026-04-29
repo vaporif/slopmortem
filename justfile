@@ -10,6 +10,9 @@ install:
 test:
     uv run pytest -n auto
 
+coverage:
+    uv run pytest -n auto --cov=slopmortem --cov-report=term-missing --cov-report=html
+
 smoke-live:
     RUN_LIVE=1 uv run pytest tests/smoke -v
 

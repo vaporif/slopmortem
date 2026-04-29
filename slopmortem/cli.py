@@ -1,19 +1,53 @@
 # ruff: noqa: FBT002 — typer signatures are bool flags with False defaults by convention.
-"""Top-level CLI entry point. Currently exposes only ``slopmortem ingest``.
+"""Top-level CLI entry point: ``slopmortem ingest``, ``query``, and ``replay``.
 
-The full CLI surface (query, synthesize, list-review, reconcile, …) lands
-with Task #10. This module ships the ``ingest`` subcommand and a Typer app
-ready for later commands to register.
+The ``query`` command is the production entry point for the synthesis pipeline:
+it loads :class:`Config`, initializes Laminar tracing (gated on the endpoint
+guard in :mod:`slopmortem.tracing` plus an env-var API key), constructs the
+real OpenRouter LLM client, the OpenAI embedding client, and the Qdrant corpus,
+and dispatches to :func:`slopmortem.pipeline.run_query`. Stage progress goes to
+stderr (TTY-gated); the rendered Markdown report goes to stdout.
+
+The ``replay`` command iterates an evals dataset (Task 11 ships the dataset
+format and content); the missing-dataset path exits with code 2 so CI smoke
+tests can probe the wiring without a fixture corpus.
+
+The ``ingest`` command is unchanged from the v1 5b stub — production wiring
+lands in a follow-up.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import sys
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
+from lmnr import Laminar
+from openai import AsyncOpenAI
+
+from slopmortem.budget import Budget
+from slopmortem.config import load_config
+from slopmortem.corpus.qdrant_store import QdrantCorpus
+from slopmortem.corpus.tools_impl import _set_corpus
+from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
+from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.models import InputContext
+from slopmortem.pipeline import run_query
+from slopmortem.render import render
+from slopmortem.tracing import init_tracing
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from slopmortem.config import Config
+    from slopmortem.corpus.store import Corpus
+    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm.embedding_client import EmbeddingClient
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +145,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
 ) -> None:
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
     # Concrete production wiring (sources, qdrant client, embedder, llm, classifier)
-    # arrives in Task #10; for v1 5b the CLI is a thin shim. Surface what flag
+    # arrives in a follow-up; for v1 5b the CLI is a thin shim. Surface what flag
     # combinations the operator chose so they show up in the run log.
     flags = {
         "dry_run": dry_run,
@@ -127,10 +161,198 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     logger.info("slopmortem ingest invoked: %s", flags)
     typer.echo(f"slopmortem ingest invoked: {flags}")
     note = (
-        "production wiring (sources/qdrant/openrouter/openai-embed) lands in Task #10; "
+        "production wiring (sources/qdrant/openrouter/openai-embed) lands in a follow-up; "
         "the orchestrator itself is exercised by the test suite."
     )
     typer.echo(f"{note} flags={flags}")
+
+
+# ---------------------------------------------------------------------------
+# query
+# ---------------------------------------------------------------------------
+
+
+@app.command("query")
+def query_cmd(
+    description: Annotated[
+        str,
+        typer.Argument(help="The pitch text to analyze."),
+    ],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Optional name for the input pitch."),
+    ] = None,
+    years: Annotated[
+        int | None,
+        typer.Option(
+            "--years",
+            help="Only consider candidates whose failure_date falls within this many years.",
+        ),
+    ] = None,
+) -> None:
+    """Run the synthesis pipeline against *description* and print a Markdown report.
+
+    Streams stage progress to stderr (TTY-gated) while the pipeline runs; emits
+    the rendered :class:`Report` to stdout when done. Tracing wiring (Laminar)
+    is gated on ``Config.enable_tracing`` plus a present ``LMNR_PROJECT_API_KEY``;
+    when the API key is missing but tracing is enabled, a one-line warning goes
+    to stderr and the run continues without tracing.
+    """
+    asyncio.run(_query(description=description, name=name, years=years))
+
+
+async def _query(*, description: str, name: str | None, years: int | None) -> None:
+    """Async impl for ``slopmortem query``. Wires production deps and dispatches."""
+    config = load_config()
+    _maybe_init_tracing(config)
+    llm, embedder, corpus, budget = _build_deps(config)
+    _set_corpus(corpus)
+    ctx = InputContext(name=name or "(unnamed)", description=description, years_filter=years)
+    report = await run_query(
+        ctx,
+        llm=llm,
+        embedding_client=embedder,
+        corpus=corpus,
+        config=config,
+        budget=budget,
+        progress=_make_progress(),
+    )
+    typer.echo(render(report))
+
+
+def _maybe_init_tracing(config: Config) -> None:
+    """Run the endpoint guard, then conditionally call ``Laminar.initialize``.
+
+    Always runs the SSRF-style endpoint guard (it's a no-op when
+    ``LMNR_BASE_URL`` is unset). If tracing is enabled in config but the
+    project API key is missing, log to stderr and skip Laminar init — tracing
+    is best-effort.
+    """
+    base_url = os.environ.get("LMNR_BASE_URL")
+    init_tracing(
+        base_url=base_url,
+        allow_remote=bool(os.environ.get("LMNR_ALLOW_REMOTE")),
+    )
+    if not config.enable_tracing:
+        return
+    api_key = os.environ.get("LMNR_PROJECT_API_KEY")
+    if api_key is None or api_key == "":
+        print(  # noqa: T201 — CLI surface; intentional stderr write
+            "slopmortem: LMNR_PROJECT_API_KEY missing; tracing disabled",
+            file=sys.stderr,
+        )
+        return
+    Laminar.initialize(project_api_key=api_key, base_url=base_url)
+
+
+def _build_deps(
+    config: Config,
+) -> tuple[LLMClient, EmbeddingClient, Corpus, Budget]:
+    """Construct production LLM, embedder, corpus, and budget from *config* and env.
+
+    Factored out as a helper so CLI smoke tests can monkeypatch a single symbol.
+    Reads ``OPENROUTER_API_KEY`` / ``OPENAI_API_KEY`` from env; the Qdrant
+    client honors ``QDRANT_HOST`` / ``QDRANT_PORT`` (falling back to
+    ``localhost:6333``) and ``POST_MORTEMS_ROOT`` (falling back to
+    ``./post_mortems``).
+    """
+    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
+
+    budget = Budget(cap_usd=config.max_cost_usd_per_query)
+
+    openrouter_sdk = AsyncOpenAI(
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        base_url=config.openrouter_base_url,
+    )
+    llm = OpenRouterClient(
+        sdk=openrouter_sdk,
+        budget=budget,
+        model=config.model_synthesize,
+    )
+
+    openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    embedder = OpenAIEmbeddingClient(
+        sdk=openai_sdk,
+        budget=budget,
+        model=config.embed_model_id,
+    )
+
+    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
+    qdrant_port = int(os.environ.get("QDRANT_PORT", "6333"))
+    qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
+    corpus = QdrantCorpus(
+        client=qdrant_client,
+        collection=os.environ.get("QDRANT_COLLECTION", "slopmortem"),
+        post_mortems_root=Path(os.environ.get("POST_MORTEMS_ROOT", "./post_mortems")),
+        facet_boost=config.facet_boost,
+        rrf_k=config.rrf_k,
+    )
+
+    return llm, embedder, corpus, budget
+
+
+def _make_progress() -> Callable[[str], None] | None:
+    """Build a stderr progress callback, or ``None`` when stderr is not a TTY."""
+    if not sys.stderr.isatty():
+        return None
+
+    def _p(msg: str) -> None:
+        print(f"slopmortem: {msg}", file=sys.stderr, flush=True)  # noqa: T201 — CLI progress
+
+    return _p
+
+
+# ---------------------------------------------------------------------------
+# replay
+# ---------------------------------------------------------------------------
+
+
+@app.command("replay")
+def replay_cmd(
+    dataset: Annotated[
+        str,
+        typer.Argument(help="Dataset name under tests/evals/datasets/."),
+    ],
+) -> None:
+    """Replay a JSONL evals dataset through the synthesis pipeline.
+
+    Each line is parsed into an :class:`InputContext`; ``run_query`` is invoked
+    with the same dependency wiring as ``query``; the rendered :class:`Report`
+    for each row goes to stdout. The dataset format itself ships with Task 11.
+    """
+    asyncio.run(_replay(dataset))
+
+
+async def _replay(dataset: str) -> None:
+    path = Path("tests/evals/datasets") / f"{dataset}.jsonl"
+    if not path.exists():
+        typer.echo(f"no dataset at {path}; ship Task 11", err=True)
+        raise typer.Exit(code=2)
+
+    config = load_config()
+    _maybe_init_tracing(config)
+    llm, embedder, corpus, budget = _build_deps(config)
+    _set_corpus(corpus)
+
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        # ``json.loads`` returns ``Any`` by design; the per-site ignore narrows
+        # the unknown payload to ``object``, then ``InputContext.model_validate``
+        # is the strict boundary.
+        row: object = json.loads(line)  # pyright: ignore[reportAny]
+        ctx = InputContext.model_validate(row)
+        report = await run_query(
+            ctx,
+            llm=llm,
+            embedding_client=embedder,
+            corpus=corpus,
+            config=config,
+            budget=budget,
+            progress=_make_progress(),
+        )
+        typer.echo(render(report))
 
 
 if __name__ == "__main__":
