@@ -180,6 +180,10 @@ A handful of corners worth knowing. `slopmortem ingest --reconcile` patches drif
 
 Storage defaults to `./post_mortems/{raw,canonical,quarantine}/` with the merge journal at `./journal.sqlite` next to the root. Override with `--post-mortems-root` or the `POST_MORTEMS_ROOT` / `MERGE_JOURNAL_PATH` env vars. The fastembed model lands wherever fastembed defaults unless you point `embed_cache_dir` somewhere in `slopmortem.toml`.
 
+### Configuration
+
+`slopmortem.toml` (tracked) holds the documented defaults — every field has a comment explaining what it does. Don't edit it for personal tweaks; drop a `slopmortem.local.toml` next to it with only the keys you want to override. The loader reads both from the current working directory and `.local.toml` wins. `.local.toml` is gitignored. Env vars (and `.env`) override the tracked defaults too, but `.local.toml` wins over env, so it's the one knob to reach for.
+
 ### Embedding provider
 
 fastembed is the default because it runs offline, costs nothing, and means CI doesn't need an OpenAI key. The model is `nomic-ai/nomic-embed-text-v1.5`, 768d. Switch to OpenAI in `slopmortem.toml`:
