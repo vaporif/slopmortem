@@ -7,72 +7,69 @@ You give it a pitch, it finds dead startups that tried something similar.
 ## Architecture
 
 ```mermaid
-flowchart TB
-    User([you])
-
-    User -->|"slopmortem 'my pitch'"| CLI
-    User -->|"slopmortem ingest"| CLI
-
-    CLI[["CLI: typer + asyncio.run"]]
-
-    CLI --> Q
-    CLI --> I
+flowchart TD
+    User([you]) -->|"slopmortem 'pitch' / ingest"| CLI[["CLI · typer + asyncio.run"]]
+    CLI --> Q1
+    CLI --> I1
 
     subgraph Q["Query pipeline"]
         direction TB
-        Q1["facet_extract · Haiku"]
-        Q2["embed dense + sparse"]
-        Q3["retrieve · Qdrant RRF"]
-        Q4["llm_rerank · Sonnet"]
-        Q5["synthesize × N · Sonnet + tools"]
-        Q6["render markdown"]
-        Q1 --> Q2 --> Q3 --> Q4 --> Q5 --> Q6
+        Q1[facet_extract · Haiku] --> Q2[embed dense + sparse]
+        Q2 --> Q3[retrieve · Qdrant RRF]
+        Q3 --> Q4[llm_rerank · Sonnet]
+        Q4 --> Q5[synthesize × N · Sonnet + tools]
+        Q5 --> Q6[render markdown]
     end
 
     subgraph I["Ingest pipeline"]
         direction TB
-        I1["fetch sources"]
-        I2["facet + summarize<br/>live fan-out, 1h prompt cache"]
-        I3["embed"]
-        I4["entity resolution"]
-        I5["merge: journal → md → qdrant"]
-        I1 --> I2 --> I3 --> I4 --> I5
+        I1[fetch sources] --> I2["facet + summarize<br/>live fan-out · 1h prompt cache"]
+        I2 --> I3[embed]
+        I3 --> I4[entity resolution]
+        I4 --> I5["merge: journal → md → qdrant"]
     end
 
-    subgraph llm["llm/"]
-        LLMC["LLMClient · OpenAI SDK → OpenRouter"]
-        Embed["EmbeddingClient · OpenAI 3-small"]
-        Tools["tools.py"]
-        Prices[("prices.yml")]
+    Q -.-> Internals
+    I -.-> Internals
+
+    subgraph Internals["slopmortem internals"]
+        direction LR
+        subgraph llm["llm/"]
+            direction TB
+            LLMC[LLMClient · OpenRouter]
+            Embed[EmbeddingClient · 3-small]
+            Tools[tools.py]
+            Prices[(prices.yml)]
+        end
+        subgraph corpus["corpus/"]
+            direction TB
+            Qdrant[(Qdrant · dense + sparse)]
+            MD[(on-disk markdown)]
+            Journal[(MergeJournal · sqlite WAL)]
+            Sources[sources/]
+        end
+        subgraph cross["cross-cutting"]
+            direction TB
+            Budget[budget.py]
+            Trace[tracing.py · OTel]
+        end
     end
 
-    subgraph corpus["corpus/"]
-        Qdrant[("Qdrant · dense + sparse")]
-        MD[("on-disk markdown")]
-        Journal[("MergeJournal · sqlite WAL")]
-        Sources["sources/ · curated, HN, Wayback, Crunchbase"]
-    end
-
-    subgraph cross["cross-cutting"]
-        Budget["budget.py"]
-        Trace["tracing.py · Laminar/OTel"]
-    end
-
-    Q -.-> llm
-    Q -.-> corpus
-    I -.-> llm
-    I -.-> corpus
-    Q -.-> cross
-    I -.-> cross
-
-    LLMC --> OR([OpenRouter])
-    OR --> ANT([Anthropic Sonnet/Haiku])
-    Embed --> OAI([OpenAI API])
-    Sources --> Web([HN · curated URLs · Wayback · Crunchbase CSV])
-    TV([Tavily · opt-in enricher])
+    LLMC --> OR
+    Embed --> OAI
+    Sources --> Web
+    Trace --> LMNR
     Q5 -.->|enrich| TV
     I2 -.->|enrich| TV
-    Trace --> LMNR([Laminar collector])
+
+    subgraph Ext["external"]
+        direction LR
+        OR([OpenRouter]) --> ANT([Anthropic Sonnet/Haiku])
+        OAI([OpenAI API])
+        Web([HN · Wayback · Crunchbase])
+        TV([Tavily · opt-in])
+        LMNR([Laminar])
+    end
 ```
 
 The CLI does one `asyncio.run` and that's it. Below that, every stage is `async def`. fastembed is CPU-bound, so it hops onto a thread. The synthesis fan-out goes through `asyncio.gather`. Each SDK keeps one connection pool alive for the whole invocation. You don't think that matters until you watch six sequential LLM calls each pay the TLS handshake tax.
