@@ -1,0 +1,337 @@
+# Curated post-mortem URLs — v0 scaffold (5/sector x 10 sectors = 50 rows).
+#
+# This file ships the schema and a placeholder list. Task 4b (user-owned)
+# replaces every URL with a hand-vetted real post-mortem and computes the
+# `content_sha256_at_review` from the live page at review time. Task 4b also
+# scales the list past 200 rows (target 300-500) under the same schema.
+#
+# Schema (per spec lines 1029-1031 / plan §1903-1914):
+#   url                       (required) full URL of the post-mortem
+#   startup_name              (required) public-facing company name
+#   sector                    (required) value from `slopmortem/corpus/taxonomy.yml`
+#   submitted_by              (required) email of the curator who proposed the row
+#   reviewed_by               (required) email of the second-pair-of-eyes reviewer
+#   content_sha256_at_review  (required) sha256 of the page body at review time;
+#                             "PLACEHOLDER" until Task 4b populates real hashes.
+#
+# CODEOWNERS-protected (per spec line 260) — review on all changes.
+
+# === fintech (5) ===
+- url: https://example.com/fintech/postmortem-1
+  startup_name: "FintechExample1"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/fintech/postmortem-2
+  startup_name: "FintechExample2"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/fintech/postmortem-3
+  startup_name: "FintechExample3"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/fintech/postmortem-4
+  startup_name: "FintechExample4"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/fintech/postmortem-5
+  startup_name: "FintechExample5"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === healthtech (5) ===
+- url: https://example.com/healthtech/postmortem-1
+  startup_name: "HealthtechExample1"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/healthtech/postmortem-2
+  startup_name: "HealthtechExample2"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/healthtech/postmortem-3
+  startup_name: "HealthtechExample3"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/healthtech/postmortem-4
+  startup_name: "HealthtechExample4"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/healthtech/postmortem-5
+  startup_name: "HealthtechExample5"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === edtech (5) ===
+- url: https://example.com/edtech/postmortem-1
+  startup_name: "EdtechExample1"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/edtech/postmortem-2
+  startup_name: "EdtechExample2"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/edtech/postmortem-3
+  startup_name: "EdtechExample3"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/edtech/postmortem-4
+  startup_name: "EdtechExample4"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/edtech/postmortem-5
+  startup_name: "EdtechExample5"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === climate_energy (5) ===
+- url: https://example.com/climate_energy/postmortem-1
+  startup_name: "ClimateEnergyExample1"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/climate_energy/postmortem-2
+  startup_name: "ClimateEnergyExample2"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/climate_energy/postmortem-3
+  startup_name: "ClimateEnergyExample3"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/climate_energy/postmortem-4
+  startup_name: "ClimateEnergyExample4"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/climate_energy/postmortem-5
+  startup_name: "ClimateEnergyExample5"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === biotech (5) ===
+- url: https://example.com/biotech/postmortem-1
+  startup_name: "BiotechExample1"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/biotech/postmortem-2
+  startup_name: "BiotechExample2"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/biotech/postmortem-3
+  startup_name: "BiotechExample3"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/biotech/postmortem-4
+  startup_name: "BiotechExample4"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/biotech/postmortem-5
+  startup_name: "BiotechExample5"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === devtools (5) ===
+- url: https://example.com/devtools/postmortem-1
+  startup_name: "DevtoolsExample1"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/devtools/postmortem-2
+  startup_name: "DevtoolsExample2"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/devtools/postmortem-3
+  startup_name: "DevtoolsExample3"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/devtools/postmortem-4
+  startup_name: "DevtoolsExample4"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/devtools/postmortem-5
+  startup_name: "DevtoolsExample5"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === infra_devops (5) ===
+- url: https://example.com/infra_devops/postmortem-1
+  startup_name: "InfraDevopsExample1"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/infra_devops/postmortem-2
+  startup_name: "InfraDevopsExample2"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/infra_devops/postmortem-3
+  startup_name: "InfraDevopsExample3"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/infra_devops/postmortem-4
+  startup_name: "InfraDevopsExample4"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/infra_devops/postmortem-5
+  startup_name: "InfraDevopsExample5"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === ai_ml_platform (5) ===
+- url: https://example.com/ai_ml_platform/postmortem-1
+  startup_name: "AiMlPlatformExample1"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/ai_ml_platform/postmortem-2
+  startup_name: "AiMlPlatformExample2"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/ai_ml_platform/postmortem-3
+  startup_name: "AiMlPlatformExample3"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/ai_ml_platform/postmortem-4
+  startup_name: "AiMlPlatformExample4"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/ai_ml_platform/postmortem-5
+  startup_name: "AiMlPlatformExample5"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === data_analytics (5) ===
+- url: https://example.com/data_analytics/postmortem-1
+  startup_name: "DataAnalyticsExample1"
+  sector: "data_analytics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/data_analytics/postmortem-2
+  startup_name: "DataAnalyticsExample2"
+  sector: "data_analytics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/data_analytics/postmortem-3
+  startup_name: "DataAnalyticsExample3"
+  sector: "data_analytics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/data_analytics/postmortem-4
+  startup_name: "DataAnalyticsExample4"
+  sector: "data_analytics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/data_analytics/postmortem-5
+  startup_name: "DataAnalyticsExample5"
+  sector: "data_analytics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === security (5) ===
+- url: https://example.com/security/postmortem-1
+  startup_name: "SecurityExample1"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/security/postmortem-2
+  startup_name: "SecurityExample2"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/security/postmortem-3
+  startup_name: "SecurityExample3"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/security/postmortem-4
+  startup_name: "SecurityExample4"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://example.com/security/postmortem-5
+  startup_name: "SecurityExample5"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"

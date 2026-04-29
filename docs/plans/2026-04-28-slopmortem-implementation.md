@@ -1858,9 +1858,9 @@ Expected: all green (with Qdrant running for the integration tests).
 
 ### Step-by-step
 
-- [ ] **Step 4a.1: `Source` and `Enricher` Protocols (in `base.py`)** — match spec lines 354–356 verbatim.
+- [x] **Step 4a.1: `Source` and `Enricher` Protocols (in `base.py`)** — match spec lines 354–356 verbatim.
 
-- [ ] **Step 4a.2: HTML sanitization test** (the load-bearing security test):
+- [x] **Step 4a.2: HTML sanitization test** (the load-bearing security test):
 
 ```python
 async def test_extract_strips_html_comments_and_hidden():
@@ -1886,11 +1886,11 @@ async def test_extract_strips_html_comments_and_hidden():
 
 Implementation uses `lxml.html` or `bs4` to strip the listed nodes/attributes before handing the cleaned HTML to `trafilatura.extract`.
 
-- [ ] **Step 4a.3: Length floor + platform blocklist test**
+- [x] **Step 4a.3: Length floor + platform blocklist test**
 
 Reject docs <500 chars or whose registrable_domain is in `platform_domains.yml` from the curated source. Log + metric, do not embed.
 
-- [ ] **Step 4a.4: Robots + throttle test**
+- [x] **Step 4a.4: Robots + throttle test**
 
 ```python
 async def test_per_host_throttle_caps_one_rps():
@@ -1898,9 +1898,9 @@ async def test_per_host_throttle_caps_one_rps():
     ...
 ```
 
-- [ ] **Step 4a.5: HN Algolia adapter** — endpoint pinned to `https://hn.algolia.com/api/v1/search_by_date` (chronological; `/search` is relevance-ranked and would re-surface the same long-tail threads on every ingest — see spec line 242). Use `safe_get` from `slopmortem/http.py`, identify UA as `slopmortem/<version> (+<repo>)`. Query params: `tags=story`, `query=<term>`, `numericFilters=created_at_i>=<since-epoch>` for incremental ingest (state stored on the source's last-run watermark), paginate via `page=` until `nbPages` exhausted. Map results into `RawEntry`. Add a unit test asserting the constructed URL begins with `https://hn.algolia.com/api/v1/search_by_date?` so an accidental swap to `/search` fails loudly.
+- [x] **Step 4a.5: HN Algolia adapter** — endpoint pinned to `https://hn.algolia.com/api/v1/search_by_date` (chronological; `/search` is relevance-ranked and would re-surface the same long-tail threads on every ingest — see spec line 242). Use `safe_get` from `slopmortem/http.py`, identify UA as `slopmortem/<version> (+<repo>)`. Query params: `tags=story`, `query=<term>`, `numericFilters=created_at_i>=<since-epoch>` for incremental ingest (state stored on the source's last-run watermark), paginate via `page=` until `nbPages` exhausted. Map results into `RawEntry`. Add a unit test asserting the constructed URL begins with `https://hn.algolia.com/api/v1/search_by_date?` so an accidental swap to `/search` fails loudly.
 
-- [ ] **Step 4a.6: Curated v0 YAML**
+- [x] **Step 4a.6: Curated v0 YAML**
 
 `slopmortem/corpus/sources/curated/post_mortems_v0.yml` ships ~50 hand-vetted URLs. Per spec lines 1029–1031, each row carries `submitted_by`, `reviewed_by`, `content_sha256_at_review`. Schema:
 
@@ -1915,7 +1915,7 @@ async def test_per_host_throttle_caps_one_rps():
 
 This v0 list is enough for end-to-end smoke and eval seed; Task #4b scales it to ≥200 (user-owned).
 
-- [ ] **Step 4a.7: Verify**
+- [x] **Step 4a.7: Verify**
 
 Run: `uv run pytest tests/sources/ -v`
 Expected: all green.
