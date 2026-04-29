@@ -10,7 +10,7 @@ _TEXT_ID_RE = re.compile(r"^[0-9a-f]{16}$")
 _CONTENT_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 
-Kind = Literal["raw", "canonical", "quarantine"]
+type Kind = Literal["raw", "canonical", "quarantine"]
 
 
 def _raw_candidate(base: Path, text_id: str | None, source: str | None) -> Path:
@@ -55,16 +55,16 @@ def safe_path(
     base = Path(base).resolve()
     # Cast lets us inspect at runtime — callers may pass an unknown string and
     # we want a friendly ValueError rather than a Literal-typing assert.
-    kind_str = cast("str", kind)
-    if kind_str == "raw":
-        candidate = _raw_candidate(base, text_id, source)
-    elif kind_str == "canonical":
-        candidate = _canonical_candidate(base, text_id, source)
-    elif kind_str == "quarantine":
-        candidate = _quarantine_candidate(base, content_sha256)
-    else:
-        msg = f"unknown kind: {kind!r}"
-        raise ValueError(msg)
+    match cast("str", kind):
+        case "raw":
+            candidate = _raw_candidate(base, text_id, source)
+        case "canonical":
+            candidate = _canonical_candidate(base, text_id, source)
+        case "quarantine":
+            candidate = _quarantine_candidate(base, content_sha256)
+        case _:
+            msg = f"unknown kind: {kind!r}"
+            raise ValueError(msg)
 
     resolved = candidate.resolve()
     if not resolved.is_relative_to(base):

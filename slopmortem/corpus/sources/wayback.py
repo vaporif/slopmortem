@@ -108,7 +108,7 @@ class WaybackEnricher:
                 "dict[str, Any]",  # pyright: ignore[reportExplicitAny]
                 resp.json(),
             )
-        except (ValueError, TypeError) as _exc:
+        except ValueError, TypeError:
             return None
         return payload
 

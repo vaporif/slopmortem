@@ -1,9 +1,9 @@
 """Synthesize stage: per-candidate post-mortem generation with cache-warm fan-out.
 
 One candidate per ``synthesize`` call; ``synthesize_all`` fronts the cache-warm
-pattern (first call alone, then ``asyncio.gather`` on the rest with
-``return_exceptions=True``) so the per-candidate failure-tolerance promised in
-the design's failure-handling section is preserved.
+pattern (first call alone, then :func:`gather_resilient` on the rest) so the
+per-candidate failure-tolerance promised in the design's failure-handling
+section is preserved.
 
 The OpenRouter client (``slopmortem/llm/openrouter.py``) drives the tool-call
 loop, wraps tool results in ``<untrusted_document>`` tags, and enforces the
@@ -14,12 +14,12 @@ hook is a no-op stub until that orchestration ships.
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from lmnr import Laminar
 
+from slopmortem.concurrency import gather_resilient
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
 from slopmortem.llm.tools import synthesis_tools, to_strict_response_schema
 from slopmortem.models import Synthesis
@@ -146,14 +146,13 @@ async def synthesize_all(
     *,
     model: str | None = None,
 ) -> list[Synthesis | BaseException]:
-    """Cache-warm synthesize fan-out: one warm call, then ``asyncio.gather`` on the rest.
+    """Cache-warm synthesize fan-out: one warm call, then :func:`gather_resilient`.
 
     The first call runs alone so the prompt cache is populated before the
     parallel fan-out hits it (avoiding a pile-up of cache-write races). The
-    remaining calls run via ``asyncio.gather(..., return_exceptions=True)``
-    so a single failed candidate does not cancel its siblings — the
-    reporting path filters exceptions out and notes the gap on
-    ``Report.candidates``.
+    remaining calls run via :func:`gather_resilient` so a single failed
+    candidate does not cancel its siblings — the reporting path filters
+    exceptions out and notes the gap on ``Report.candidates``.
 
     Args:
         candidates: All candidates to synthesize. May be empty.
@@ -176,8 +175,7 @@ async def synthesize_all(
     except Exception as exc:  # noqa: BLE001 — record the failure as a list entry, not a raise
         first = exc
 
-    rest_results = await asyncio.gather(
+    rest_results = await gather_resilient(
         *(synthesize(c, ctx, llm, config, model=model) for c in candidates[1:]),
-        return_exceptions=True,
     )
     return [first, *rest_results]

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import yaml
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Closed-enum facet fields whose values MUST appear in ``taxonomy.yml``.
 # Free-form fields (sub_sector, product_type, price_point, founding_year,
@@ -133,7 +133,7 @@ class Candidate(BaseModel):
     canonical_id: str
     score: float
     payload: CandidatePayload
-    alias_canonicals: list[str] = []
+    alias_canonicals: list[str] = Field(default_factory=list)
 
 
 class InputContext(BaseModel):
@@ -195,8 +195,8 @@ class ToolSpec(BaseModel):
     name: str
     description: str
     args_model: type[BaseModel]
-    fn: Callable[..., Awaitable[Any]]  # type: ignore[explicit-any]  # tools return varied payloads
-    model_config = {"arbitrary_types_allowed": True}
+    fn: Callable[..., Awaitable[Any]]  # pyright: ignore[reportExplicitAny]  # tools return varied payloads
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class RawEntry(BaseModel):

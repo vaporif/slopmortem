@@ -7,11 +7,11 @@ always goes through :func:`safe_path`: no concatenation, no traversal.
 
 from __future__ import annotations
 
-import asyncio
 import secrets
 from typing import TYPE_CHECKING
 
 import yaml
+from anyio import to_thread
 
 from slopmortem.corpus.paths import safe_path
 
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 # Front-matter values are JSON-y (str / int / float / bool / list / dict / None).
 # Pyright's `reportExplicitAny` blocks the obvious `Any` annotation, so we use
 # `object` and round-trip through `yaml.safe_dump` which accepts anything.
-FrontMatter = dict[str, object]
+type FrontMatter = dict[str, object]
 
 
 def _render(body: str, front_matter: FrontMatter) -> str:
@@ -55,7 +55,7 @@ async def write_canonical_atomic(
     """Atomically write the canonical merged markdown for *text_id*."""
     path = safe_path(base, kind="canonical", text_id=text_id)
     contents = _render(body, front_matter or {})
-    await asyncio.to_thread(_write_sync, path, contents)
+    await to_thread.run_sync(_write_sync, path, contents)
 
 
 async def write_raw_atomic(
@@ -69,7 +69,7 @@ async def write_raw_atomic(
     """Atomically write the per-source raw markdown for *text_id*."""
     path = safe_path(base, kind="raw", text_id=text_id, source=source)
     contents = _render(body, front_matter or {})
-    await asyncio.to_thread(_write_sync, path, contents)
+    await to_thread.run_sync(_write_sync, path, contents)
 
 
 def read_canonical(base: Path, text_id: str) -> str:

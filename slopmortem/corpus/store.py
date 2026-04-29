@@ -42,6 +42,6 @@ class Corpus(Protocol):
 
     async def search_corpus(
         self, q: str, facets: dict[str, str] | None = None
-    ) -> list[dict[str, Any]]:  # type: ignore[explicit-any]  # Protocol — implementations vary
+    ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]  # Protocol — implementations vary
         """Plain-text search the corpus for additional candidates, optionally filtered by facets."""
         ...

@@ -72,7 +72,6 @@ each candidate's own payload sources via the private in-memory corpus.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import json
 import sys
@@ -81,6 +80,8 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
+
+import anyio
 
 from slopmortem.budget import Budget
 from slopmortem.config import Config
@@ -272,7 +273,7 @@ class _EvalCorpus:
         self.queries.append(
             {
                 "dense_dim": len(dense),
-                "sparse_keys": list(sparse.keys()),
+                "sparse_keys": list(sparse),
                 "facets": facets.model_dump(),
                 "cutoff_iso": cutoff_iso,
                 "strict_deaths": strict_deaths,
@@ -290,7 +291,7 @@ class _EvalCorpus:
 
     async def search_corpus(
         self, q: str, facets: dict[str, str] | None = None
-    ) -> list[dict[str, Any]]:  # type: ignore[explicit-any]  # Corpus Protocol — values vary
+    ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]  # Corpus Protocol — values vary
         del q, facets
         return [
             {
@@ -684,9 +685,9 @@ def main(argv: list[str] | None = None) -> None:
     row_ids = _verify_unique_row_ids(rows)
 
     if live:
-        results = asyncio.run(_run_live(rows, row_ids))
+        results = anyio.run(_run_live, rows, row_ids)
     else:
-        results = asyncio.run(_run_deterministic(rows, row_ids))
+        results = anyio.run(_run_deterministic, rows, row_ids)
 
     serialized = _serialize_results(results)
 

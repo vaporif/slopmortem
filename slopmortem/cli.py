@@ -18,7 +18,7 @@ lands in a follow-up.
 
 from __future__ import annotations
 
-import asyncio
+import functools
 import json
 import logging
 import os
@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+import anyio
 import typer
 from lmnr import Laminar
 from openai import AsyncOpenAI
@@ -116,8 +117,9 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
     (slop_threshold, ingest_concurrency, embed_model_id, taxonomy_version,
     reliability_rank_version, etc.) comes from :func:`slopmortem.config.load_config`.
     """
-    asyncio.run(
-        _run_ingest(
+    anyio.run(
+        functools.partial(
+            _run_ingest,
             dry_run=dry_run,
             force=force,
             reconcile=reconcile,
@@ -198,7 +200,7 @@ def query_cmd(
     when the API key is missing but tracing is enabled, a one-line warning goes
     to stderr and the run continues without tracing.
     """
-    asyncio.run(_query(description=description, name=name, years=years))
+    anyio.run(functools.partial(_query, description=description, name=name, years=years))
 
 
 async def _query(*, description: str, name: str | None, years: int | None) -> None:
@@ -320,7 +322,7 @@ def replay_cmd(
     with the same dependency wiring as ``query``; the rendered :class:`Report`
     for each row goes to stdout. The dataset format itself ships with Task 11.
     """
-    asyncio.run(_replay(dataset))
+    anyio.run(_replay, dataset)
 
 
 async def _replay(dataset: str) -> None:
