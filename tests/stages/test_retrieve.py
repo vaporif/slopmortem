@@ -171,6 +171,7 @@ async def test_retrieve_with_facet_boost_outranks_unboosted(qdrant_client, fixtu
         cutoff_iso="2000-01-01T00:00:00Z",
         strict_deaths=False,
         k_retrieve=10,
+        sparse_encoder=lambda _t: {1: 1.0},
     )
 
     ids = [c.canonical_id for c in candidates]
@@ -207,6 +208,7 @@ async def test_recency_branch_C_passthrough_undated(qdrant_client, fixture_corpu
         cutoff_iso="2020-01-01T00:00:00Z",
         strict_deaths=False,
         k_retrieve=10,
+        sparse_encoder=lambda _t: {1: 1.0},
     )
     ids = [c.canonical_id for c in candidates]
     assert "undated" in ids
@@ -252,6 +254,7 @@ async def test_strict_deaths_filters_unknown(qdrant_client, fixture_corpus):
         cutoff_iso="2020-01-01T00:00:00Z",
         strict_deaths=True,
         k_retrieve=10,
+        sparse_encoder=lambda _t: {1: 1.0},
     )
     ids = [c.canonical_id for c in candidates]
     assert "dated" in ids
