@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 
 import pytest
@@ -13,7 +12,6 @@ from slopmortem.corpus.merge import MergeJournal
 from slopmortem.ingest import FakeSlopClassifier, InMemoryCorpus, ingest
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import prompt_template_sha
 from slopmortem.models import RawEntry
 
 _HAIKU = "anthropic/claude-haiku-4.5"
@@ -23,23 +21,10 @@ def _stub_sparse(_text: str) -> dict[int, float]:
     return {0: 1.0}
 
 
-def _facets() -> str:
-    return json.dumps(
-        {
-            "sector": "retail_ecommerce",
-            "business_model": "b2b_marketplace",
-            "customer_type": "smb",
-            "geography": "us",
-            "monetization": "transaction_fee",
-        }
-    )
-
-
-def _canned() -> dict[tuple[str, str], FakeResponse]:
-    return {
-        (prompt_template_sha("facet_extract"), _HAIKU): FakeResponse(text=_facets()),
-        (prompt_template_sha("summarize"), _HAIKU): FakeResponse(text="x"),
-    }
+def _canned() -> dict[tuple[str, str, str], FakeResponse]:
+    # dry_run exits before any LLM call, so the canned dict is unused at runtime.
+    # Empty is valid; we keep the function for parity with the non-dry-run files.
+    return {}
 
 
 def _entry(i: int) -> RawEntry:

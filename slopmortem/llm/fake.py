@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from slopmortem.llm.cassettes import llm_cassette_key
 from slopmortem.llm.client import CompletionResult
 
 if TYPE_CHECKING:
@@ -14,8 +15,8 @@ if TYPE_CHECKING:
 class NoCannedResponseError(KeyError):
     """Raised when FakeLLMClient can't find a canned reply for the given key.
 
-    The error message names the missing ``(template_sha, model)`` so you don't
-    need a repro to find what's missing.
+    The error message names the missing ``(template_sha, model, prompt_hash)``
+    so you don't need a repro to find what's missing.
     """
 
 
@@ -50,18 +51,23 @@ class _Call:
     cache: bool
     response_format: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
     extra_body: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
+    prompt_hash: str | None = None
 
 
 @dataclass
 class FakeLLMClient:
-    """In-memory LLMClient stub keyed on ``(prompt_template_sha, model)``.
+    """In-memory LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
 
     Callers pass the template SHA via ``extra_body['prompt_template_sha']``;
     stage tests load it from ``slopmortem.llm.prompts.prompt_template_sha(name)``
     so any drift in the prompt text forces the fixture key to drift along with it.
+    The ``prompt_hash`` slot is the first 16 hex chars of
+    ``sha256(system + '\\x1f' + prompt)`` (computed via
+    :func:`slopmortem.llm.cassettes.llm_cassette_key`); tests may override it
+    by passing ``extra_body['prompt_hash']`` directly.
     """
 
-    canned: Mapping[tuple[str, str], FakeResponse | CompletionResult]
+    canned: Mapping[tuple[str, str, str], FakeResponse | CompletionResult]
     default_model: str
     calls: list[_Call] = field(default_factory=list)
 
@@ -76,16 +82,35 @@ class FakeLLMClient:
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> CompletionResult:
-        """Look up a canned response keyed by ``(prompt_template_sha, model)``."""
+        """Look up a canned response keyed by ``(prompt_template_sha, model, prompt_hash)``."""
         eff_model = model or self.default_model
         template_sha: str | None = None
         if extra_body and "prompt_template_sha" in extra_body:
             template_sha = str(extra_body["prompt_template_sha"])  # pyright: ignore[reportAny]
+        if template_sha is None:
+            msg = (
+                "FakeLLMClient requires extra_body['prompt_template_sha']; "
+                f"none supplied for model {eff_model!r}"
+            )
+            raise NoCannedResponseError(msg)
+        # Compute prompt_hash from prompt+system; allow override via extra_body
+        # so tests that want to pin a specific hash can do so.
+        prompt_hash: str
+        if extra_body and "prompt_hash" in extra_body:
+            prompt_hash = str(extra_body["prompt_hash"])  # pyright: ignore[reportAny]
+        else:
+            _, _, prompt_hash = llm_cassette_key(
+                prompt=prompt,
+                system=system,
+                template_sha=template_sha,
+                model=eff_model,
+            )
         self.calls.append(
             _Call(
                 prompt=prompt,
                 model=eff_model,
                 template_sha=template_sha,
+                prompt_hash=prompt_hash,
                 system=system,
                 tools=tools,
                 cache=cache,
@@ -93,17 +118,10 @@ class FakeLLMClient:
                 extra_body=extra_body,
             )
         )
-        if template_sha is None:
-            msg = (
-                "FakeLLMClient requires extra_body['prompt_template_sha']; "
-                f"none supplied for model {eff_model!r}"
-            )
-            raise NoCannedResponseError(msg)
-        key = (template_sha, eff_model)
+        key = (template_sha, eff_model, prompt_hash)
         if key not in self.canned:
             msg = (
-                f"no canned response for prompt_template_sha={template_sha!r}, "
-                f"model={eff_model!r}; recorded keys: {sorted(self.canned)}"
+                f"no canned response for key={key!r}; recorded keys: {sorted(self.canned)}"
             )
             raise NoCannedResponseError(msg)
         item = self.canned[key]

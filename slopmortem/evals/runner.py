@@ -231,18 +231,33 @@ def _synthesis_payload(canonical_id: str) -> str:
 
 def _build_canned(
     *, candidate_ids: list[str]
-) -> Mapping[tuple[str, str], FakeResponse | CompletionResult]:
-    """Build the FakeLLMClient canned-response map for the deterministic run."""
-    canned: dict[tuple[str, str], FakeResponse | CompletionResult] = {
-        (prompt_template_sha("facet_extract"), _DETERMINISTIC_FACET_MODEL): FakeResponse(
-            text=_facet_extract_payload(), cost_usd=0.0
-        ),
-        (prompt_template_sha("llm_rerank"), _DETERMINISTIC_RERANK_MODEL): FakeResponse(
-            text=_rerank_payload(candidate_ids), cost_usd=0.0
-        ),
-        (prompt_template_sha("synthesize"), _DETERMINISTIC_SYNTH_MODEL): FakeResponse(
-            text=_synthesis_payload("acme"), cost_usd=0.0, cache_creation_tokens=10
-        ),
+) -> Mapping[tuple[str, str, str], FakeResponse | CompletionResult]:
+    """Build the FakeLLMClient canned-response map for the deterministic run.
+
+    Note: Task 6 of the eval-cassettes plan deletes this helper and replaces
+    the deterministic runner with cassette-backed replay. This function still
+    keys on a placeholder ``prompt_hash`` so the type matches
+    ``FakeLLMClient.canned`` (now 3-tuple) and the codebase compiles in
+    lock-step with Task 1; the live eval runner is exercised end-to-end
+    through Task 6, not from this stub.
+    """
+    placeholder_hash = "0" * 16
+    canned: dict[tuple[str, str, str], FakeResponse | CompletionResult] = {
+        (
+            prompt_template_sha("facet_extract"),
+            _DETERMINISTIC_FACET_MODEL,
+            placeholder_hash,
+        ): FakeResponse(text=_facet_extract_payload(), cost_usd=0.0),
+        (
+            prompt_template_sha("llm_rerank"),
+            _DETERMINISTIC_RERANK_MODEL,
+            placeholder_hash,
+        ): FakeResponse(text=_rerank_payload(candidate_ids), cost_usd=0.0),
+        (
+            prompt_template_sha("synthesize"),
+            _DETERMINISTIC_SYNTH_MODEL,
+            placeholder_hash,
+        ): FakeResponse(text=_synthesis_payload("acme"), cost_usd=0.0, cache_creation_tokens=10),
     }
     return canned
 

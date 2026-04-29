@@ -4,7 +4,8 @@ import tiktoken
 
 from slopmortem.corpus.summarize import summarize_for_rerank
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import prompt_template_sha, render_prompt
+from conftest import llm_canned_key
 
 _HAIKU = "anthropic/claude-haiku-4.5"
 _SUMMARY_TEXT = (
@@ -14,16 +15,19 @@ _SUMMARY_TEXT = (
 )
 
 
-def _fake_llm_for_summarize(text: str) -> FakeLLMClient:
+def _fake_llm_for_summarize(text: str, *, body: str) -> FakeLLMClient:
+    rendered = render_prompt("summarize", body=body, source_id="")
     return FakeLLMClient(
-        canned={(prompt_template_sha("summarize"), _HAIKU): FakeResponse(text=text)},
+        canned={
+            llm_canned_key("summarize", model=_HAIKU, prompt=rendered): FakeResponse(text=text),
+        },
         default_model=_HAIKU,
     )
 
 
 async def test_summarize_under_400_tokens():
     long_text = "Acme failed because... " * 500
-    llm = _fake_llm_for_summarize(_SUMMARY_TEXT)
+    llm = _fake_llm_for_summarize(_SUMMARY_TEXT, body=long_text)
     summary = await summarize_for_rerank(long_text, llm)
     assert isinstance(summary, str)
     assert summary.strip()
@@ -32,7 +36,7 @@ async def test_summarize_under_400_tokens():
 
 
 async def test_summarize_uses_llm_via_protocol():
-    llm = _fake_llm_for_summarize(_SUMMARY_TEXT)
+    llm = _fake_llm_for_summarize(_SUMMARY_TEXT, body="startup body text")
     summary = await summarize_for_rerank("startup body text", llm)
     assert summary
     assert len(llm.calls) == 1
@@ -43,6 +47,6 @@ async def test_summarize_uses_llm_via_protocol():
 
 
 async def test_summarize_strips_whitespace():
-    llm = _fake_llm_for_summarize("   final summary text\n\n")
+    llm = _fake_llm_for_summarize("   final summary text\n\n", body="body")
     summary = await summarize_for_rerank("body", llm)
     assert summary == "final summary text"

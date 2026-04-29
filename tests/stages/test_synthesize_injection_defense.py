@@ -10,11 +10,12 @@ import pytest
 
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages import synthesize as synth_module
 from slopmortem.stages.synthesize import synthesize
 from slopmortem.tracing.events import SpanEvent
+from conftest import llm_canned_key
 
 _DEFAULT_MODEL = "test-synth-model"
 _FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "injection"
@@ -114,11 +115,17 @@ async def test_synthesize_ignores_injected_instructions(
 ) -> None:
     del fixture_name  # only used for parametrize id generation
     cand = _candidate(body=body)
+    rendered = render_prompt(
+        "synthesize",
+        pitch=_ctx().description,
+        candidate_id=cand.canonical_id,
+        candidate_name=cand.payload.name,
+        candidate_body=cand.payload.body,
+    )
     fake_llm = FakeLLMClient(
         canned={
-            (prompt_template_sha("synthesize"), _DEFAULT_MODEL): FakeResponse(
-                text=_injection_synthesis_payload()
-            )
+            llm_canned_key("synthesize", model=_DEFAULT_MODEL, prompt=rendered):
+                FakeResponse(text=_injection_synthesis_payload()),
         },
         default_model=_DEFAULT_MODEL,
     )

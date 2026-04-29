@@ -34,21 +34,23 @@ This is a quick read pass before any code lands. Output is documented inline in 
 **Files:**
 - Read: `slopmortem/llm/prompts/facet_extract.j2`, `slopmortem/llm/prompts/llm_rerank.j2`, `slopmortem/llm/prompts/synthesize.j2`, `slopmortem/llm/prompts/summarize.j2`, `slopmortem/llm/prompts/tier3_tiebreaker.j2`, `slopmortem/llm/prompts/__init__.py`, `slopmortem/corpus/taxonomy.yml`.
 
-- [ ] **Step 1: Grep all five `.j2` files for non-deterministic primitives**
+- [x] **Step 1: Grep all five `.j2` files for non-deterministic primitives**
 
 Run: `grep -nE "now\(|today\(|utcnow|datetime|random|uuid|os\.urandom|time\." slopmortem/llm/prompts/*.j2 slopmortem/llm/prompts/__init__.py`
 Expected: empty match. If anything matches, stop and document the offending line below before coding.
+**Result:** zero matches across all 5 .j2 templates + __init__.py.
 
-- [ ] **Step 2: Grep for unstable iteration**
+- [x] **Step 2: Grep for unstable iteration**
 
 Run: `grep -nE "for .* in .*\\.(items|keys|values)\\(\\)" slopmortem/llm/prompts/*.j2`
 Expected: matches only over fixtures whose ordering is stable (Pydantic models, deterministic YAML). Inspect each and confirm.
+**Result:** zero matches across all 5 .j2 templates.
 
-- [ ] **Step 3: Confirm `_env.globals["taxonomy"]` is loaded once at import time**
+- [x] **Step 3: Confirm `_env.globals["taxonomy"]` is loaded once at import time**
 
 Verified at `slopmortem/llm/prompts/__init__.py:21`: `_env.globals["taxonomy"] = yaml.safe_load(_TAXONOMY_PATH.read_text())`. Result: PyYAML preserves insertion order; same file → same globals → stable rendering.
 
-- [ ] **Step 4: Record audit result inline (this plan, no file changes)**
+- [x] **Step 4: Record audit result inline (this plan, no file changes)**
 
 Audit result for the record: all five `.j2` templates render deterministically given the same `InputContext` + `Config`. The only date-like input is `cutoff_iso`, which flows from `InputContext.years_filter` and pins to `date()` (floor) inside `pipeline._cutoff_iso`. No template invokes `now()`, `today()`, or `random`. No mutable global state seeps in. **No fixes required before recording.**
 
@@ -86,7 +88,7 @@ This task widens the `FakeLLMClient.canned` key shape from a 2-tuple to a 3-tupl
 
 ### 1A — Cassette key derivation, error types, slugifier
 
-- [ ] **Step 1: Write the failing test for `template_sha` covering source + tools + response_format**
+- [x] **Step 1: Write the failing test for `template_sha` covering source + tools + response_format**
 
 Add to `tests/test_cassettes.py`:
 
@@ -176,12 +178,12 @@ def test_slugify_model_replaces_slash_colon_at() -> None:
     assert _slugify_model("plain-name_v1.5") == "plain-name_v1.5"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail with import errors**
+- [x] **Step 2: Run the tests to verify they fail with import errors**
 
 Run: `uv run pytest tests/test_cassettes.py -v`
 Expected: collection error or `ImportError: cannot import name ... from slopmortem.evals.cassettes`.
 
-- [ ] **Step 3a: Implement `slopmortem/llm/cassettes.py` — pure key derivation (P17 fix)**
+- [x] **Step 3a: Implement `slopmortem/llm/cassettes.py` — pure key derivation (P17 fix)**
 
 Cassette **key derivation** is a property of the LLM call's identity (prompt, system, tools, response schema, model), so it lives next to the LLM contract — not under `evals/`. This way `FakeLLMClient.complete()` imports from a sibling module (`slopmortem.llm.cassettes`) instead of needing a lazy import to dodge an `evals → llm` cycle.
 
@@ -254,7 +256,7 @@ def embed_cassette_key(*, text: str, model: str) -> tuple[str, str]:
     return (model, h[:_TEXT_HASH_LEN])
 ```
 
-- [ ] **Step 3b: Implement `slopmortem/evals/cassettes.py` — error types, slugifier, schema versioning**
+- [x] **Step 3b: Implement `slopmortem/evals/cassettes.py` — error types, slugifier, schema versioning**
 
 The on-disk format, error types, slug helper, and schema-version policy live under `evals/`. Format-level concerns belong with the persistence layer (loaders/writers added in 1B).
 
@@ -345,14 +347,14 @@ def _check_schema_version(version: object, *, path: Path) -> None:
         raise CassetteSchemaError(msg)
 ```
 
-- [ ] **Step 4: Run the tests to verify the slugifier + key derivation tests pass**
+- [x] **Step 4: Run the tests to verify the slugifier + key derivation tests pass**
 
 Run: `uv run pytest tests/test_cassettes.py -v`
 Expected: every test in 1A passes (loaders/error-type tests not yet added).
 
 ### 1B — Cassette JSON dataclasses, loaders, dispatch by model
 
-- [ ] **Step 5: Write failing tests for round-trip serialization, malformed JSON, schema-version, duplicate-key, dim-mismatch**
+- [x] **Step 5: Write failing tests for round-trip serialization, malformed JSON, schema-version, duplicate-key, dim-mismatch**
 
 Append to `tests/test_cassettes.py`:
 
@@ -503,12 +505,12 @@ def test_duplicate_key_is_fatal(tmp_path: Path) -> None:
         load_llm_cassettes(tmp_path)
 ```
 
-- [ ] **Step 6: Run the tests to verify they fail**
+- [x] **Step 6: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_cassettes.py -v`
 Expected: tests fail with `ImportError` or `AttributeError` for `LlmCassette` / `load_llm_cassettes` / etc.
 
-- [ ] **Step 7: Implement loaders, writers, and Pydantic envelope models in `cassettes.py`**
+- [x] **Step 7: Implement loaders, writers, and Pydantic envelope models in `cassettes.py`**
 
 Cassettes are written as flat JSON with a nested envelope (`schema_version` / `key` / `response` / `request_debug`). The consumer-facing types are flat Pydantic models (P16: validated via `TypeAdapter`, not `# pyright: ignore`-coerced). Read-side envelope models use `extra="ignore"` so future minor schema bumps that add fields do not require a re-record (P12 forward-compat).
 
@@ -810,14 +812,14 @@ def load_embedding_cassettes(
     return dense, sparse
 ```
 
-- [ ] **Step 8: Run cassette tests**
+- [x] **Step 8: Run cassette tests**
 
 Run: `uv run pytest tests/test_cassettes.py -v`
 Expected: all tests pass.
 
 ### 1C — Widen `FakeLLMClient.canned` key to 3-tuple, strict no-fallback lookup
 
-- [ ] **Step 9: Add a failing test for the new 3-tuple lookup**
+- [x] **Step 9: Add a failing test for the new 3-tuple lookup**
 
 Add to `tests/test_cassettes.py`:
 
@@ -861,12 +863,12 @@ async def test_fake_llm_client_strict_no_wildcard_fallback() -> None:
 
 The project's `pyproject.toml` sets `asyncio_mode = "auto"`; bare `async def test_…` functions are collected automatically. No `anyio` marker, no `anyio_backend` fixture.
 
-- [ ] **Step 10: Run the test to verify it fails**
+- [x] **Step 10: Run the test to verify it fails**
 
 Run: `uv run pytest tests/test_cassettes.py::test_fake_llm_client_keys_on_three_tuple tests/test_cassettes.py::test_fake_llm_client_strict_no_wildcard_fallback -v`
 Expected: FAIL — `FakeLLMClient.canned` is currently typed `Mapping[tuple[str, str], ...]`.
 
-- [ ] **Step 11: Widen `FakeLLMClient.canned` to 3-tuple in `slopmortem/llm/fake.py`**
+- [x] **Step 11: Widen `FakeLLMClient.canned` to 3-tuple in `slopmortem/llm/fake.py`**
 
 Modify `slopmortem/llm/fake.py`:
 
@@ -937,7 +939,7 @@ async def complete(
 
 Add `prompt_hash: str | None` to `_Call` (default `None`).
 
-- [ ] **Step 12: Run the FakeLLMClient tests**
+- [x] **Step 12: Run the FakeLLMClient tests**
 
 Run: `uv run pytest tests/test_cassettes.py -k fake_llm_client -v`
 Expected: PASS.
@@ -948,7 +950,7 @@ Approach: introduce a tiny per-test helper `_three(template_name, model, prompt)
 
 For tests where the same canned response should match every prompt (e.g. `tests/test_ingest_orchestration.py:206-223` runs the same template for every fan-out), expand the canned dict at construction time by enumerating every prompt the run will make. The test already knows the fixture inputs, so the rendered prompt is computable at fixture-build time.
 
-- [ ] **Step 13: Add a small shared helper in tests/conftest.py**
+- [x] **Step 13: Add a small shared helper in tests/conftest.py**
 
 Add to `tests/conftest.py` (verify it doesn't exist first; if a `conftest.py` exists, append; otherwise create):
 
@@ -973,7 +975,7 @@ def llm_canned_key(
 
 Note: we expose this as a regular Python helper rather than a pytest fixture so test modules can call it from `_canned()` builders that aren't fixtures themselves.
 
-- [ ] **Step 14: Update each existing `_canned()`/`_build_canned()` site**
+- [x] **Step 14: Update each existing `_canned()`/`_build_canned()` site**
 
 Per file, replace the 2-tuple key with a 3-tuple. The pattern is the same in each:
 
@@ -1004,19 +1006,19 @@ Per file:
 
 For each file, after editing, run only that file's tests to verify the rewrite (parallel-safe).
 
-- [ ] **Step 15: Run each migrated file individually**
+- [x] **Step 15: Run each migrated file individually**
 
 Run: `uv run pytest tests/stages/test_facet_extract.py tests/stages/test_llm_rerank.py tests/stages/test_synthesize.py tests/test_ingest_idempotency.py tests/test_ingest_dry_run.py tests/test_ingest_orchestration.py tests/test_observe_redaction.py tests/test_pipeline_e2e.py -v`
 Expected: all green.
 
-- [ ] **Step 16: Run the full test suite to verify no other site broke**
+- [x] **Step 16: Run the full test suite to verify no other site broke**
 
 Run: `just test`
 Expected: green. Any red site we missed has the symptom `Mapping[tuple[str, str], ...]` vs `Mapping[tuple[str, str, str], ...]` — fix in place.
 
 ### 1E — `FakeEmbeddingClient` optional canned dict
 
-- [ ] **Step 17: Write failing tests for `FakeEmbeddingClient` strict-canned + sha-fallthrough**
+- [x] **Step 17: Write failing tests for `FakeEmbeddingClient` strict-canned + sha-fallthrough**
 
 Add to `tests/test_cassettes.py`:
 
@@ -1043,12 +1045,12 @@ async def test_fake_embedding_client_sha_fallthrough_when_canned_none() -> None:
     assert a.vectors == b.vectors  # deterministic sha-derived path preserved
 ```
 
-- [ ] **Step 18: Run the tests**
+- [x] **Step 18: Run the tests**
 
 Run: `uv run pytest tests/test_cassettes.py -k fake_embedding -v`
 Expected: FAIL.
 
-- [ ] **Step 19: Add optional `canned` parameter to `FakeEmbeddingClient`**
+- [x] **Step 19: Add optional `canned` parameter to `FakeEmbeddingClient`**
 
 Modify `slopmortem/llm/fake_embeddings.py`:
 
@@ -1124,14 +1126,14 @@ class FakeEmbeddingClient:
         )
 ```
 
-- [ ] **Step 20: Run the embedding tests**
+- [x] **Step 20: Run the embedding tests**
 
 Run: `uv run pytest tests/test_cassettes.py -k fake_embedding -v`
 Expected: PASS.
 
 ### 1F — Recording wrappers
 
-- [ ] **Step 21: Write failing tests for `RecordingLLMClient`, `RecordingEmbeddingClient`, `RecordingSparseEncoder`**
+- [x] **Step 21: Write failing tests for `RecordingLLMClient`, `RecordingEmbeddingClient`, `RecordingSparseEncoder`**
 
 Create `tests/test_recording.py`:
 
@@ -1259,12 +1261,12 @@ async def test_recording_sparse_writes_qdrant_bm25_cassette(tmp_path: Path) -> N
     assert sorted(zip(idx, vals)) == [(1, 0.5), (2, 0.25)]
 ```
 
-- [ ] **Step 22: Run the failing tests**
+- [x] **Step 22: Run the failing tests**
 
 Run: `uv run pytest tests/test_recording.py -v`
 Expected: import errors / fail.
 
-- [ ] **Step 23: Implement `slopmortem/evals/recording.py`**
+- [x] **Step 23: Implement `slopmortem/evals/recording.py`**
 
 ```python
 """Recording wrappers: forward to a real client, write a cassette on success.
@@ -1431,15 +1433,15 @@ class RecordingSparseEncoder:
         return result
 ```
 
-- [ ] **Step 24: Run the recording tests**
+- [x] **Step 24: Run the recording tests**
 
 Run: `uv run pytest tests/test_recording.py -v`
 Expected: PASS.
 
-- [ ] **Step 25: Run the entire suite + typecheck**
+- [x] **Step 25: Run the entire suite + typecheck**
 
 Run: `just test && just typecheck`
-Expected: green.
+Expected: green. **Note:** the helper `llm_canned_key` was moved to the **rootdir** `conftest.py` (not `tests/conftest.py`) to avoid shadowing the rootdir conftest's `_scrub_body` (which `tests/llm/test_secrets_scrub.py` imports). All 13 test files import via `from conftest import llm_canned_key`. `extraPaths = ["."]` in `pyproject.toml`'s basedpyright config makes that resolvable. `tests/conftest.py` does not exist.
 
 ---
 

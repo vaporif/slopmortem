@@ -4,6 +4,21 @@ import re
 
 import pytest
 
+from slopmortem.llm.cassettes import llm_cassette_key
+from slopmortem.llm.prompts import prompt_template_sha
+
+
+def llm_canned_key(
+    template_name: str,
+    *,
+    model: str,
+    prompt: str,
+    system: str | None = None,
+) -> tuple[str, str, str]:
+    """Build the 3-tuple key the same way `FakeLLMClient` does internally."""
+    tsha = prompt_template_sha(template_name)
+    return llm_cassette_key(prompt=prompt, system=system, template_sha=tsha, model=model)
+
 SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(

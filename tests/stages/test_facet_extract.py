@@ -10,8 +10,9 @@ import pytest
 import yaml
 
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.stages.facet_extract import extract_facets
+from conftest import llm_canned_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -27,10 +28,14 @@ def taxonomy() -> Mapping[str, list[str]]:
 _DEFAULT_MODEL = "test-model"
 
 
-def _canned(text: str) -> dict[tuple[str, str], FakeResponse]:
+def _canned(text: str, *, description: str) -> dict[tuple[str, str, str], FakeResponse]:
     # ``extract_facets`` is called without an explicit model, so
     # ``FakeLLMClient`` keys lookups on its ``default_model``.
-    return {(prompt_template_sha("facet_extract"), _DEFAULT_MODEL): FakeResponse(text=text)}
+    rendered = render_prompt("facet_extract", description=description)
+    return {
+        llm_canned_key("facet_extract", model=_DEFAULT_MODEL, prompt=rendered):
+            FakeResponse(text=text),
+    }
 
 
 async def test_facet_extract_returns_taxonomy_valid_facets(
@@ -50,9 +55,12 @@ async def test_facet_extract_returns_taxonomy_valid_facets(
             "failure_year": 2021,
         }
     )
-    fake_llm = FakeLLMClient(canned=_canned(payload), default_model=_DEFAULT_MODEL)
+    description = "marketplace for industrial scrap metal"
+    fake_llm = FakeLLMClient(
+        canned=_canned(payload, description=description), default_model=_DEFAULT_MODEL
+    )
 
-    facets = await extract_facets("marketplace for industrial scrap metal", fake_llm)
+    facets = await extract_facets(description, fake_llm)
 
     assert facets.sector in taxonomy["sector"]
     assert facets.business_model in taxonomy["business_model"]
@@ -71,9 +79,12 @@ async def test_facet_extract_uses_other_when_unclear() -> None:
             "monetization": "other",
         }
     )
-    fake_llm = FakeLLMClient(canned=_canned(payload), default_model=_DEFAULT_MODEL)
+    description = "we sell things"
+    fake_llm = FakeLLMClient(
+        canned=_canned(payload, description=description), default_model=_DEFAULT_MODEL
+    )
 
-    facets = await extract_facets("we sell things", fake_llm)
+    facets = await extract_facets(description, fake_llm)
 
     assert facets.sector == "other"
     assert facets.business_model == "other"

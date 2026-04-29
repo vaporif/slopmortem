@@ -7,9 +7,10 @@ from datetime import date
 
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages.synthesize import synthesize, synthesize_all
+from conftest import llm_canned_key
 
 _DEFAULT_MODEL = "test-synth-model"
 
@@ -93,23 +94,37 @@ def _synthesis_payload(
     )
 
 
-def _canned(
-    text: str,
+def _synthesize_canned(
+    candidates: list[Candidate],
+    ctx: InputContext,
     *,
-    model: str = _DEFAULT_MODEL,
+    text: str,
     cache_creation_tokens: int | None = None,
-) -> dict[tuple[str, str], FakeResponse]:
-    return {
-        (prompt_template_sha("synthesize"), model): FakeResponse(
+    model: str = _DEFAULT_MODEL,
+) -> dict[tuple[str, str, str], FakeResponse]:
+    """Build one canned entry per rendered synthesize prompt for ``candidates``."""
+    out: dict[tuple[str, str, str], FakeResponse] = {}
+    for cand in candidates:
+        rendered = render_prompt(
+            "synthesize",
+            pitch=ctx.description,
+            candidate_id=cand.canonical_id,
+            candidate_name=cand.payload.name,
+            candidate_body=cand.payload.body,
+        )
+        out[llm_canned_key("synthesize", model=model, prompt=rendered)] = FakeResponse(
             text=text, cache_creation_tokens=cache_creation_tokens
         )
-    }
+    return out
 
 
 async def test_synthesize_returns_filled_synthesis() -> None:
     cand = _candidate()
     payload = _synthesis_payload(candidate_id=cand.canonical_id)
-    fake_llm = FakeLLMClient(canned=_canned(payload), default_model=_DEFAULT_MODEL)
+    fake_llm = FakeLLMClient(
+        canned=_synthesize_canned([cand], _ctx(), text=payload),
+        default_model=_DEFAULT_MODEL,
+    )
 
     s = await synthesize(cand, _ctx(), fake_llm, Config(), model=_DEFAULT_MODEL)
 
@@ -123,9 +138,10 @@ async def test_synthesize_all_warms_cache_before_gather() -> None:
     """First call asserted as cache-warm; remaining run via asyncio.gather."""
     cands = [_candidate(canonical_id=f"cand-{i}") for i in range(3)]
     payload = _synthesis_payload(candidate_id="cand-0")
-    # Same canned response for every (template_sha, model); fine for this test.
+    # One canned entry per rendered (template_sha, model, prompt_hash); the
+    # 3-tuple lookup is strict so each candidate's prompt needs its own key.
     fake_llm = FakeLLMClient(
-        canned=_canned(payload, cache_creation_tokens=10),
+        canned=_synthesize_canned(cands, _ctx(), text=payload, cache_creation_tokens=10),
         default_model=_DEFAULT_MODEL,
     )
 

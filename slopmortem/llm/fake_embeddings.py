@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from slopmortem.evals.cassettes import NoCannedEmbeddingError
+from slopmortem.llm.cassettes import embed_cassette_key
 from slopmortem.llm.embedding_client import EmbeddingResult
 from slopmortem.llm.openai_embeddings import EMBED_DIMS
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 @dataclass
@@ -18,9 +24,11 @@ class _EmbedCall:
 class FakeEmbeddingClient:
     """Deterministic in-memory EmbeddingClient for tests.
 
-    Vectors come from sha256(text), so the same input always produces the
-    same vector across runs and processes. Fixtures stay stable without
-    needing to record anything.
+    When ``canned`` is None (default) vectors come from sha256(text), so the
+    same input always produces the same vector across runs and processes.
+    When ``canned`` is supplied, lookups are strict on
+    ``(model, text_hash)`` (matching :func:`embed_cassette_key`); a miss
+    raises :class:`NoCannedEmbeddingError`.
     """
 
     def __init__(
@@ -28,6 +36,7 @@ class FakeEmbeddingClient:
         *,
         model: str,
         cost_per_call: float = 0.0,
+        canned: Mapping[tuple[str, str], list[float]] | None = None,
         calls: list[_EmbedCall] | None = None,
     ) -> None:
         """Bind the model dim and a per-call cost; ``calls`` is a record of invocations."""
@@ -36,6 +45,7 @@ class FakeEmbeddingClient:
             raise ValueError(msg)
         self.model = model
         self.cost_per_call = cost_per_call
+        self._canned = canned
         self.calls: list[_EmbedCall] = calls if calls is not None else []
 
     @property
@@ -44,9 +54,22 @@ class FakeEmbeddingClient:
         return EMBED_DIMS[self.model]
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        """Return deterministic sha256-derived vectors for *texts*."""
+        """Return canned vectors when configured; otherwise sha256-derived deterministic vectors."""
         eff_model = model or self.model
         self.calls.append(_EmbedCall(texts=list(texts), model=eff_model))
+        if self._canned is not None:
+            vectors: list[list[float]] = []
+            for text in texts:
+                key = embed_cassette_key(text=text, model=eff_model)
+                if key not in self._canned:
+                    msg = (
+                        f"no canned embedding for key={key!r}; "
+                        f"recorded keys: {sorted(self._canned)}"
+                    )
+                    raise NoCannedEmbeddingError(msg)
+                vectors.append(list(self._canned[key]))
+            return EmbeddingResult(vectors=vectors, n_tokens=0, cost_usd=0.0)
+        # sha fallback (today's behavior)
         dim = EMBED_DIMS[eff_model] if model is not None else self.dim
         vectors = [_sha_vector(t, dim) for t in texts]
         return EmbeddingResult(

@@ -21,14 +21,16 @@ from slopmortem.ingest import (
 )
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import RawEntry
 from slopmortem.tracing.events import SpanEvent
+from conftest import llm_canned_key
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 _HAIKU = "anthropic/claude-haiku-4.5"
+_ENTRY_BODY = "Acme was a startup that sold widgets and ran out of money in 2021. " * 30
 
 
 def _stub_sparse(_text: str) -> dict[int, float]:
@@ -64,24 +66,35 @@ def _canned_for_run(
     cache_creation_warm: int = 1234,
     cache_read_fanout: int = 5000,
     cache_creation_fanout: int = 0,
-) -> dict[tuple[str, str], FakeResponse]:
+    body: str = _ENTRY_BODY,
+) -> dict[tuple[str, str, str], FakeResponse]:
+    """Build canned entries for ingest of any number of entries that share ``body``.
+
+    All ``_entry(...)`` instances in this module share the same default
+    markdown_text, so the rendered prompts collapse to one (template, model,
+    prompt_hash) per stage regardless of fan-out width: one cache-warm
+    summarize prompt, one fan-out summarize prompt, one facet_extract
+    prompt. Multiple calls to the same key all return the same response.
+    """
     facets_text = facets_json or _fake_facets_json()
     sum_text = summary_text or _summary_text()
-    # Same key (template_sha, model); FakeLLMClient returns this for every call.
-    # The orchestrator runs cache-warm serially first, then fans out. We don't
-    # differentiate per-call in the canned table — tests that need per-call
-    # differentiation use a CountingFakeLLM subclass.
+    facet_resp = FakeResponse(
+        text=facets_text,
+        cache_read_tokens=cache_read_fanout,
+        cache_creation_tokens=cache_creation_warm,
+    )
+    summarize_resp = FakeResponse(
+        text=sum_text,
+        cache_read_tokens=cache_read_fanout,
+        cache_creation_tokens=cache_creation_fanout,
+    )
+    facet_prompt = render_prompt("facet_extract", description=body)
+    summarize_warm_prompt = render_prompt("summarize", body=body[:1000], source_id="warm")
+    summarize_fanout_prompt = render_prompt("summarize", body=body, source_id="")
     return {
-        (prompt_template_sha("facet_extract"), _HAIKU): FakeResponse(
-            text=facets_text,
-            cache_read_tokens=cache_read_fanout,
-            cache_creation_tokens=cache_creation_warm,
-        ),
-        (prompt_template_sha("summarize"), _HAIKU): FakeResponse(
-            text=sum_text,
-            cache_read_tokens=cache_read_fanout,
-            cache_creation_tokens=cache_creation_fanout,
-        ),
+        llm_canned_key("facet_extract", model=_HAIKU, prompt=facet_prompt): facet_resp,
+        llm_canned_key("summarize", model=_HAIKU, prompt=summarize_warm_prompt): summarize_resp,
+        llm_canned_key("summarize", model=_HAIKU, prompt=summarize_fanout_prompt): summarize_resp,
     }
 
 
@@ -256,17 +269,19 @@ async def test_ingest_cache_warm_records_creation_tokens(tmp_path, cfg):
     # needs cache_creation_tokens > 0 to satisfy the warm check. The same
     # canned entry gets reused for fan-out; this test only asserts warm
     # bookkeeping, so reuse is fine.
-    canned: dict[tuple[str, str], FakeResponse] = {
-        (prompt_template_sha("facet_extract"), _HAIKU): FakeResponse(
-            text=_fake_facets_json(),
-            cache_creation_tokens=0,
-            cache_read_tokens=8000,
-        ),
-        (prompt_template_sha("summarize"), _HAIKU): FakeResponse(
-            text=_summary_text(),
-            cache_creation_tokens=2048,
-            cache_read_tokens=8000,
-        ),
+    facet_resp = FakeResponse(
+        text=_fake_facets_json(), cache_creation_tokens=0, cache_read_tokens=8000,
+    )
+    summarize_resp = FakeResponse(
+        text=_summary_text(), cache_creation_tokens=2048, cache_read_tokens=8000,
+    )
+    facet_prompt = render_prompt("facet_extract", description=_ENTRY_BODY)
+    summarize_warm_prompt = render_prompt("summarize", body=_ENTRY_BODY[:1000], source_id="warm")
+    summarize_fanout_prompt = render_prompt("summarize", body=_ENTRY_BODY, source_id="")
+    canned: dict[tuple[str, str, str], FakeResponse] = {
+        llm_canned_key("facet_extract", model=_HAIKU, prompt=facet_prompt): facet_resp,
+        llm_canned_key("summarize", model=_HAIKU, prompt=summarize_warm_prompt): summarize_resp,
+        llm_canned_key("summarize", model=_HAIKU, prompt=summarize_fanout_prompt): summarize_resp,
     }
     llm = FakeLLMClient(canned=canned, default_model=_HAIKU)
 
