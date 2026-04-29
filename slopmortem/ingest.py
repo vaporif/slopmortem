@@ -504,7 +504,7 @@ class _FanoutResult:
 
 
 async def _facet_summarize_fanout(
-    entries: list[tuple[RawEntry, str]],
+    entries: Sequence[tuple[RawEntry, str]],
     *,
     llm: LLMClient,
     config: Config,
