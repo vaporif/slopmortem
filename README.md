@@ -2,7 +2,7 @@
 
 You give it a pitch, it finds dead startups that tried something similar.
 
-`slopmortem` runs locally. LLM calls go through OpenRouter, which sends them to Anthropic's Sonnet and Haiku by default. Embeddings come from OpenAI. Qdrant runs in Docker.
+`slopmortem` runs locally. LLM calls go through OpenRouter, which sends them to Anthropic's Sonnet and Haiku by default. Embeddings run locally via fastembed (ONNX); flip to OpenAI if you'd rather. Qdrant runs in Docker.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ flowchart TD
         subgraph llm["llm/"]
             direction TB
             LLMC[LLMClient · OpenRouter]
-            Embed[EmbeddingClient · 3-small]
+            Embed[EmbeddingClient · fastembed nomic-v1.5]
             Tools[tools.py]
             Prices[(prices.yml)]
         end
@@ -56,7 +56,7 @@ flowchart TD
     end
 
     LLMC --> OR
-    Embed --> OAI
+    Embed -.->|"opt-in"| OAI
     Sources --> Web
     Trace --> LMNR
     Q5 -.->|enrich| TV
@@ -79,7 +79,7 @@ The CLI does one `asyncio.run` and that's it. Below that, every stage is `async 
 You type `slopmortem "we're building a marketplace for industrial scrap metal"`. Here's what runs.
 
 1. **Facets.** Haiku reads the pitch and slaps structured fields on it: sector, business model, stage, that kind of thing. These narrow what we retrieve and feed the rerank rubric later.
-2. **Embeddings.** Dense via OpenAI `text-embedding-3-small`. Sparse via fastembed BM25. Two vectors per query, both cheap.
+2. **Embeddings.** Dense via fastembed `nomic-ai/nomic-embed-text-v1.5` (local ONNX, 768d). Sparse via fastembed BM25. Two vectors per query, both free.
 3. **Retrieve.** Qdrant runs three prefetches in parallel (dense, sparse, and one filtered by your facets), then fuses them server-side with Reciprocal Rank Fusion. Top 30 come back. No HyDE, no query rewriting. We skipped HyDE because Haiku has a known habit of rewriting pitches as post-mortem openings stuffed with its favorite failure tropes ("ran out of runway", "scaled too fast"), and that would bias retrieval toward generic-failure clusters. Rerank at K=30 → N=5 should absorb the modality gap. Revisit in v2 if real-pitch recall measures poorly.
 4. **Rerank.** One Sonnet call scores all 30 against a multi-perspective rubric. Output is JSON via OpenRouter's `response_format=json_schema`, which routes to Anthropic's grammar-constrained sampling on the backend. No tools, no corpus reads, nothing to parse out of prose. Top 5 survive.
 5. **Synthesize.** The first call runs alone, on purpose. It writes the prompt cache so the other four don't race to write the same prefix. We assert `cache_creation_tokens > 0` on that warm response, because Anthropic's cache is eventually consistent across regions and a 200 OK doesn't actually mean the prefix replicated yet. One re-warm retry if it didn't. Then the rest fan out under `anyio.CapacityLimiter(N)` with `asyncio.gather(..., return_exceptions=True)`, so one flaky candidate drops one report instead of killing all five. The model can hit `get_post_mortem` or `search_corpus` mid-generation if it wants more context. Final text parses straight into the `Synthesis` Pydantic model.
@@ -93,7 +93,7 @@ A default query runs around $0.45–0.60 and 21–43 seconds. Turn on Tavily syn
 
 1. **Fetch.** Plain HTTP. trafilatura strips nav and cookie banners. A length floor drops the obviously empty pages.
 2. **LLM fan-out.** Two calls per doc, one for facets and one for the rerank summary. All ~1000 run live under `anyio.CapacityLimiter(20)`. No Batches discount here because OpenRouter doesn't proxy that API. The shared system block sets `cache_control={"ttl":"1h"}`, and we fire one sync call right before the fan-out so workers hit a populated cache instead of racing to write it. The first five responses sample `cache_read_tokens / (cache_read + cache_creation)`. If the read ratio is under 80% we know before spending the rest of the budget. The 1-hour TTL recovers most of what Batches would have saved.
-3. **Embed.** Dense via OpenAI. Sparse on the local CPU. The line item never showed up large enough to fight over.
+3. **Embed.** Dense and sparse both on the local CPU. fastembed downloads a 550 MB ONNX model on first use and caches it under `~/.cache/fastembed`. CI runs `slopmortem embed-prefetch` once so the first ingest doesn't pay the download tax.
 4. **Entity resolution.** Three tiers. Domain match first, then embedding similarity, then a Haiku tiebreaker for the actually ambiguous pairs. The point of all this is to stop "Crunchbase obituary + founder's farewell blog post" from showing up as two separate dead startups.
 5. **Merge.** Journal flips the row to `pending`, markdown lands via `os.replace`, Qdrant gets upserted, then the journal flips to `complete`. If something dies in the middle (Ctrl-C, OOM, bad network, whatever), `slopmortem ingest --reconcile` walks the three stores and patches whatever drifted.
 
@@ -110,7 +110,10 @@ slopmortem/
   llm/
     client.py            # LLMClient Protocol + OpenRouterClient (openai SDK pointed
                          #   at openrouter.ai/api/v1) + FakeLLMClient
-    embedding_client.py  # OpenAI + Fake variants
+    embedding_client.py  # EmbeddingClient Protocol + EmbeddingResult
+    fastembed_client.py  # local ONNX (default; nomic-embed-text-v1.5)
+    openai_embeddings.py # OpenAI variant (text-embedding-3-{small,large})
+    fake_embeddings.py   # deterministic Fake variant for tests
     tools.py             # synthesis_tools(config) factory; Pydantic → OpenAI-shape
                          #   tool schema (OpenRouter forwards to Anthropic backends)
     prices.yml           # source of truth for $$
@@ -136,16 +139,28 @@ tests/
 
 ## Running it
 
-`OPENROUTER_API_KEY` and `OPENAI_API_KEY` go in `.env`. Tavily is optional. Qdrant runs in Docker.
+`OPENROUTER_API_KEY` goes in `.env`. `OPENAI_API_KEY` only if you flipped `embedding_provider` to OpenAI. Tavily is optional. Qdrant runs in Docker.
 
 ```
 uv sync
 docker-compose up -d qdrant
+slopmortem embed-prefetch            # one-time ~550 MB ONNX download
 slopmortem ingest --source curated   # ~$7.50, run this once
 slopmortem "your pitch here"         # ~$0.50, run whenever
 ```
 
 Two corners worth knowing about. `slopmortem ingest --reconcile` patches drift between the journal, the markdown tree, and Qdrant. `slopmortem replay --dataset <name>` re-runs a saved input through current code, which is what you want when you're iterating on prompts and don't feel like reburning the LLM bill on the same examples.
+
+### Embedding provider
+
+fastembed is the default because it runs offline, costs nothing, and means CI doesn't need an OpenAI key. The model is `nomic-ai/nomic-embed-text-v1.5`, 768d. Switch to OpenAI in `slopmortem.toml`:
+
+```toml
+embedding_provider = "openai"
+embed_model_id = "text-embedding-3-small"   # or text-embedding-3-large
+```
+
+Bringing a different model? Add a row to `EMBED_DIMS` in `slopmortem/llm/openai_embeddings.py`. Qdrant reads it to size the collection.
 
 ## Testing
 

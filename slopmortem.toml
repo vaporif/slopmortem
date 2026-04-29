@@ -15,8 +15,8 @@ model_summarize = "anthropic/claude-haiku-4.5"
 model_rerank = "anthropic/claude-sonnet-4.6"
 model_synthesize = "anthropic/claude-sonnet-4.6"
 
-embedding_provider = "openai"
-embed_model_id = "text-embedding-3-small"
+embedding_provider = "fastembed"
+embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 retry_max_attempts = 3
 retry_initial_backoff = 1.0
 

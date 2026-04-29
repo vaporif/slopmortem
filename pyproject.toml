@@ -44,6 +44,7 @@ asyncio_mode = "auto"
 addopts = "-ra"
 markers = [
   "requires_qdrant: integration test that requires a live Qdrant on localhost:6333",
+  "slow: test loads heavy assets (e.g., a ~550MB ONNX model). Excluded with -m 'not slow'.",
 ]
 
 [tool.ruff]
