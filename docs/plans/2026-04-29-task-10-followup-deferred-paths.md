@@ -1030,7 +1030,7 @@ async def reclassify_quarantined(
 
 The exact `MergeJournal` reader / writer method names are placeholders. Step D.7 fills in the missing ones.
 
-- [ ] **Step D.7: Add `MergeJournal.list_quarantine_journal`, `drop_quarantine_row`, and `write_pending_merge_row` if not already present.**
+- [x] **Step D.7: Add `MergeJournal.list_quarantine_journal`, `drop_quarantine_row`, and `write_pending_merge_row` if not already present.**
 
 These three methods may or may not exist on `MergeJournal` today. Run:
 
@@ -1042,7 +1042,7 @@ For each that does not exist, add it next to existing analogous methods (`_write
 
 If `list_quarantine_journal` already exists under a different name (e.g. `_iter_quarantine`), use that; do not invent a duplicate. Document the chosen name in `reclassify.py`.
 
-- [ ] **Step D.8: Wire the CLI path.**
+- [x] **Step D.8: Wire the CLI path.**
 
 In `slopmortem/cli.py`:
 
@@ -1067,15 +1067,15 @@ if reclassify:
     return
 ```
 
-- [ ] **Step D.9: Update `test_ingest_deferred_flags_rejected`** — drop `--reclassify` from the parametrize. The test now has zero parameters; delete it and any companion deferred-flag tests entirely.
+- [x] **Step D.9: Update `test_ingest_deferred_flags_rejected`** — drop `--reclassify` from the parametrize. The test now has zero parameters; delete it and any companion deferred-flag tests entirely.
 
-- [ ] **Step D.10: Run the tests.**
+- [x] **Step D.10: Run the tests.**
 
 ```
 ./.venv/bin/pytest tests/test_reclassify.py tests/test_cli_reclassify.py tests/test_cli_ingest.py -v
 ```
 
-- [ ] **Step D.11: Full sweep.**
+- [x] **Step D.11: Full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
