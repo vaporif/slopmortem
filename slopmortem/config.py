@@ -55,6 +55,8 @@ class Config(BaseSettings):
     enable_tracing: bool = False
     strict_deaths: bool = False
 
+    tavily_calls_per_synthesis: int = 2  # spec line 1005
+
     openrouter_api_key: SecretStr = SecretStr("")
     openai_api_key: SecretStr = SecretStr("")
     tavily_api_key: SecretStr = SecretStr("")
