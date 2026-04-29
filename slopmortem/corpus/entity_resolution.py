@@ -56,9 +56,7 @@ if TYPE_CHECKING:
 
 # ─── Module-level constants ────────────────────────────────────────────────────
 
-_PLATFORM_DOMAINS_YAML = (
-    Path(__file__).resolve().parent / "sources" / "platform_domains.yml"
-)
+_PLATFORM_DOMAINS_YAML = Path(__file__).resolve().parent / "sources" / "platform_domains.yml"
 _CORPORATE_HIERARCHY_YAML = (
     Path(__file__).resolve().parent / "sources" / "corporate_hierarchy_overrides.yml"
 )
@@ -191,7 +189,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def _pair_key(canonical_a: str, canonical_b: str) -> str:
-    """Deterministic tier-3 cache key: lex-sorted pair joined by ``\\u0001``."""
+    """Tier-3 cache key: lex-sorted pair joined by a U+0001 SOH separator."""
     lo, hi = sorted((canonical_a, canonical_b))
     return f"{lo}{hi}"
 
@@ -461,6 +459,29 @@ def _looks_tier1(canonical_id: str) -> bool:
     return "::" not in canonical_id
 
 
+async def _is_parent_subsidiary_suspect(journal: MergeJournal, domain: str, new_name: str) -> bool:
+    """Heuristic: tier-1 hit on *domain* + new name carries a corporate suffix.
+
+    Without per-row display-name persistence, we conservatively flag suffix-delta
+    cases when (a) the bare domain is already journal-resident in pending or
+    complete state, and (b) the new entry's name carries a known corporate
+    suffix. The :file:`corporate_hierarchy_overrides.yml` file is also consulted
+    for explicit parent/subsidiary pairs (ships empty in v1).
+    """
+    if domain in _HIERARCHY_OVERRIDES:
+        return True
+    rows = await journal.fetch_all()
+    domain_present = any(
+        row["canonical_id"] == domain
+        and row["merge_state"] in (MergeState.COMPLETE.value, MergeState.PENDING.value)
+        for row in rows
+    )
+    if not domain_present:
+        return False
+    _, new_suffix = _strip_corporate_suffix(new_name)
+    return new_suffix is not None
+
+
 # ─── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -533,53 +554,17 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     # Recycled-domain check: same registrable_domain + founding_year delta > 10.
     if not use_tier2 and founding_year is not None:
         cached_year = await asyncio.to_thread(_read_founding_year_sync, db_path, domain)
-        if cached_year is not None and abs(founding_year - cached_year) > _RECYCLED_DOMAIN_YEAR_DELTA:
+        if (
+            cached_year is not None
+            and abs(founding_year - cached_year) > _RECYCLED_DOMAIN_YEAR_DELTA
+        ):
             use_tier2 = True
 
     # Parent/subsidiary suffix-delta: tier-1 hit but the existing canonical's
     # name differs from the new name only by a corporate suffix.
-    if not use_tier2:
-        existing_rows = await journal.fetch_all()
-        existing_names = {
-            row["canonical_id"]: row.get("display_name") or row["canonical_id"]
-            for row in existing_rows
-            if row["canonical_id"] == domain
-        }
-        # The journal does not currently store display_name — fall back to checking
-        # whether an existing row's canonical_id matches the bare domain AND the
-        # new name has a corporate suffix that's different from this entry's.
-        # Without per-row name persistence, suffix-delta detection requires the
-        # caller to pass the existing canonical's name. For v1 we rely on
-        # comparing the new name's stem against itself + a heuristic: if the
-        # *new* name has a corporate suffix and the bare domain is already
-        # journal-resident, demote conservatively when an override matches.
-        del existing_names
-        if domain in _HIERARCHY_OVERRIDES:
-            use_tier2 = True
-            span_events.append(SpanEvent.PARENT_SUBSIDIARY_SUSPECTED.value)
-        else:
-            # Heuristic: compare the new name to the bare-stem form. If the
-            # journal already has a canonical with id == domain AND the new
-            # name carries a corporate suffix that doesn't match the *implied*
-            # bare-domain canonical, this is likely a parent/subsidiary case.
-            domain_already_present = any(
-                row["canonical_id"] == domain
-                and row["merge_state"]
-                in (MergeState.COMPLETE.value, MergeState.PENDING.value)
-                for row in existing_rows
-            )
-            if domain_already_present:
-                # Compare the existing canonical's section text head and the new
-                # name's stem-and-suffix form. We approximate "existing name" by
-                # joining the journal display via fetch_aliases not being
-                # populated; instead rely on `_suffix_delta_demotes(new_name, X)`
-                # where X is reconstructed from the entry's URL path slug or
-                # the journaled rows' source_id. As a conservative heuristic:
-                # if the new name has a known corporate suffix, demote.
-                _, new_suffix = _strip_corporate_suffix(name)
-                if new_suffix is not None:
-                    use_tier2 = True
-                    span_events.append(SpanEvent.PARENT_SUBSIDIARY_SUSPECTED.value)
+    if not use_tier2 and await _is_parent_subsidiary_suspect(journal, domain, name):
+        use_tier2 = True
+        span_events.append(SpanEvent.PARENT_SUBSIDIARY_SUSPECTED.value)
 
     if use_tier2:
         candidate_id = _tier2_canonical(name, sector)
@@ -668,8 +653,7 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
         for row in rows
         if str(row["canonical_id"]).endswith(same_sector_suffix)
         and row["canonical_id"] != candidate_id
-        and row["merge_state"]
-        in (MergeState.COMPLETE.value, MergeState.PENDING.value)
+        and row["merge_state"] in (MergeState.COMPLETE.value, MergeState.PENDING.value)
     ]
     if not siblings:
         return candidate_id

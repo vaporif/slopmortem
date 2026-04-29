@@ -49,9 +49,7 @@ def embed_client():
 
 async def _seed_complete(journal, *, canonical_id: str, source: str, source_id: str) -> None:
     """Seed the journal with a complete row for this (canonical_id, source, source_id)."""
-    await journal.upsert_pending(
-        canonical_id=canonical_id, source=source, source_id=source_id
-    )
+    await journal.upsert_pending(canonical_id=canonical_id, source=source, source_id=source_id)
     await journal.mark_complete(
         canonical_id=canonical_id,
         source=source,
