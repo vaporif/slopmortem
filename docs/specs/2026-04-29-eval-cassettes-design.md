@@ -39,11 +39,21 @@ This spec closes that gap. After implementation:
 
 Seven structural pieces:
 
-1. **Cassette key.** `(template_sha, model, prompt_hash)` for LLM cassettes; `(model, text_hash)` for embedding cassettes. `prompt_hash = sha256((system or "") + "\x1f" + prompt).hexdigest()[:16]`. The `\x1f` (ASCII unit separator) avoids any chance of the system/prompt boundary aliasing in real prompts. Tools and `response_format` don't go in the key — they're either constant per template or runtime-derived from constants. Captured in `request_debug` for diagnosis.
+1. **Cassette key.** `(template_sha, model, prompt_hash)` for LLM cassettes; `(model, text_hash)` for embedding cassettes (dense and sparse share the schema; sparse uses `model="Qdrant/bm25"`). `prompt_hash = sha256((system or "") + "\x1f" + prompt).hexdigest()[:16]`. The `\x1f` (ASCII unit separator) avoids any chance of the system/prompt boundary aliasing in real prompts.
 
-2. **`FakeLLMClient` widening.** The existing `canned` map keys on `(template_sha, model)`. The new key is `(template_sha, model, prompt_hash)`. Backward-compat: a 2-tuple key in the dict is treated as "match any prompt_hash" so the budget/cancel/stage tests that don't care about input variance keep working without changes. Lookup tries 3-tuple first, falls back to 2-tuple.
+   **`template_sha` is a structural hash, not just template text.** It folds together: (a) the Jinja template source, (b) the JSON-serialized `tools` list passed to `OpenRouterClient.complete()` (deterministically ordered; empty string when the call passes no tools), and (c) the JSON-serialized `response_format` Pydantic schema (`Synthesis.model_json_schema()` etc.; empty string when absent). Editing a tool description, the `Synthesis` schema, or the tool list invalidates every cassette under that template — exactly what we want. `corpus/taxonomy.yml` flows into the rendered prompt as a Jinja global, so taxonomy edits already invalidate `prompt_hash` and need no extra dimension. `template_sha` is captured verbatim in the cassette JSON and `request_debug`.
 
-3. **`RecordingLLMClient` / `RecordingEmbeddingClient`.** Wrap a real client. Each `complete()` or `embed()` call forwards to the inner client; on success, writes one cassette JSON file derived from the call. On inner-client error: do not write, propagate.
+2. **`FakeLLMClient` widening.** The existing `canned` map keys on `(template_sha, model)`. The new key is `(template_sha, model, prompt_hash)`. **No wildcard fallback.** Lookup is strict 3-tuple → `NoCannedResponseError` on miss. A wildcard fallback would silently fail-open (a real cassette miss would resolve to the wildcard entry from a colocated test), violating the §"Cassette miss is loud" invariant. Commit 1 widens every existing 2-tuple call site in the same change — `tests/test_pipeline_e2e.py`, `tests/test_observe_redaction.py`, `tests/test_ingest_idempotency.py`, `tests/test_ingest_dry_run.py`, `tests/test_ingest_orchestration.py`, `tests/stages/test_synthesize.py`, `tests/stages/test_llm_rerank.py`, `tests/stages/test_facet_extract.py` — so the type stays consistent across the tree.
+
+3. **`RecordingLLMClient` / `RecordingEmbeddingClient` / `RecordingSparseEncoder`.** Wrap a real client (or, for sparse, the live fastembed BM25 encoder). Each `complete()`, `embed()`, or `encode()` call forwards to the inner; on success, writes one cassette JSON file *per text* (LLM and sparse are 1:1 calls; `embed()` accepts a list and is split). On inner error: do not write, propagate.
+
+   **Cost ceiling (`RecordingLLMClient` only).** Constructor takes `max_cost_usd: float | None = None`. When non-None, the wrapper accumulates each call's `response.cost_usd` and raises `RecordingBudgetExceededError(spent=..., limit=...)` *before* invoking the inner if the next call would push past the limit. On overrun the wrapper does not write the in-flight cassette; tmp_dir cleanup is the caller's responsibility (already handled per the recording flow). Default ceiling at the `just eval-record` call site is **`$2.00`** (≈2× the current full-record estimate of $0.50–$1) — runaway tool loops or model-upgrade surprises hit this before they hit OpenRouter's rate limits. Operator overrides via `--max-cost-usd <float>` if a re-record legitimately needs more. Sparse and embedding wrappers don't carry a ceiling because their cost is dominated by the LLM tool-loop side.
+
+   **Embedding batch split.** `OpenAIEmbeddingsClient.embed(texts)` is N-in / N-out / one HTTP roundtrip / one `cost_usd` / one `n_tokens` ([slopmortem/llm/openai_embeddings.py:74-90](../../slopmortem/llm/openai_embeddings.py)). `RecordingEmbeddingClient.embed(texts)` iterates `zip(texts, response.vectors)` and writes one cassette per text keyed `(model, text_hash)`. Cost / token totals are **not** stored on cassettes — the OpenAI API doesn't return per-input token counts, and today's `FakeEmbeddingClient` already returns `cost_usd=0.0, n_tokens=0` ([slopmortem/llm/fake_embeddings.py:54](../../slopmortem/llm/fake_embeddings.py)). The eval doesn't assert on embedding cost. Recording's aggregate cost still flows to the budget tracker via the inner real client (its normal path).
+
+   **Embedding batch reassembly.** On replay, `FakeEmbeddingClient.embed([t1, t2, ...])` performs N independent per-text cassette lookups, returning the vectors in input order with `cost_usd=0.0, n_tokens=0`. The same cassette is reused across batches (a text appearing in two different queries hits one file), which is the main reason for per-text granularity over a batch-shaped cassette.
+
+   The sparse wrapper writes embedding-shaped cassette JSON keyed `(model="Qdrant/bm25", text_hash)` with a sparse `response` payload (see "Sparse-embedding cassette JSON" below). Replay constructs a `CassetteSparseEncoder` from the same dir; production code path through `retrieve.py` is unchanged when no encoder is injected.
 
 4. **Cassette directory layout.** Per-scope, per-call. Each scope (one eval row, one e2e test, one custom-test setup) owns a directory; LLM and embedding cassettes coexist there with prefixed filenames:
 
@@ -52,6 +62,7 @@ tests/fixtures/cassettes/
   evals/
     <row_id>/
       embed__text-embedding-3-small__<text_hash>.json
+      embed__Qdrant_bm25__<text_hash>.json
       facet_extract__anthropic__claude-sonnet-4-6__<prompt_hash>.json
       llm_rerank__anthropic__claude-sonnet-4-6__<prompt_hash>.json
       synthesize__anthropic__claude-sonnet-4-6__<prompt_hash>.json
@@ -67,7 +78,7 @@ tests/fixtures/cassettes/
 
 Filenames use the full 16-char hash (no truncation) so collision risk is negligible. The repeated `embed__text-embedding-3-small__<hash>.json` per scope (same text re-embedded across scopes) is intentional duplication — keeping every cassette inside its scope is what makes the atomic-swap-per-scope guarantee work.
 
-**Model slug in filenames.** OpenRouter model ids contain `/` (e.g. `anthropic/claude-sonnet-4-6`), which would be interpreted as a path separator and silently nest cassettes one level deeper. Filenames replace `/` with `__` (no other characters need escaping — model ids are otherwise `[a-z0-9._-]`). The original unescaped model id stays in the JSON `key.model` field; the filename slug is purely a filesystem concern and is never parsed back. A single helper `_slugify_model(model: str) -> str` in `slopmortem/evals/cassettes.py` does the substitution; both recording wrappers and replay loaders import it.
+**Model slug in filenames.** OpenRouter model ids contain `/` (e.g. `anthropic/claude-sonnet-4-6`) and may carry suffixes like `:beta`, `:nitro`, `:free` — `:` is forbidden on Windows filesystems, `/` is interpreted as a path separator. Filenames replace any character not in `[A-Za-z0-9._-]` with `_` (single regex covers `/`, `:`, `@`, and any future surprises). The original unescaped model id stays in the JSON `key.model` field; the filename slug is purely a filesystem concern and is never parsed back. A single helper `_slugify_model(model: str) -> str` in `slopmortem/evals/cassettes.py` does the substitution; both recording wrappers and replay loaders import it.
 
 5. **Corpus fixture.** `tests/fixtures/corpus_fixture.jsonl` (~30 documents). Each line:
 
@@ -95,7 +106,8 @@ Generated once by `just eval-record-corpus` running real ingest against the seed
 ```
 JSONL fixture → ephemeral Qdrant collection
                       ↓
-InputContext → FakeEmbeddingClient (cassette) → Qdrant query → top K candidates
+InputContext → FakeEmbeddingClient (dense cassette) ┐
+              CassetteSparseEncoder (sparse cassette) ┘ → Qdrant query → top K candidates
                       ↓
               FakeLLMClient (cassette) — facet, rerank, synthesize × N
                       ↓
@@ -105,13 +117,14 @@ InputContext → FakeEmbeddingClient (cassette) → Qdrant query → top K candi
 ### Data flow at record time
 
 ```
-InputContext → RecordingEmbeddingClient → real OpenAI → cassette file
+InputContext → RecordingEmbeddingClient → real OpenAI → dense cassette file
+              RecordingSparseEncoder    → live fastembed BM25 → sparse cassette file
                       ↓
                  Qdrant query (real fixture)
                       ↓
               RecordingLLMClient → real OpenRouter → cassette file
                       ↓
-                 results → baseline.json
+                 results → baseline.json (v2 with corpus_fixture_sha256 + recording_metadata)
 ```
 
 ## Component breakdown
@@ -120,17 +133,19 @@ InputContext → RecordingEmbeddingClient → real OpenAI → cassette file
 
 | Path | Purpose |
 |------|---------|
-| `slopmortem/llm/recording.py` | `RecordingLLMClient`, `RecordingEmbeddingClient`. Forward to a real client; write cassettes on success. |
-| `slopmortem/evals/cassettes.py` | Loaders, key derivation (`llm_cassette_key`, `embed_cassette_key`), error types (`CassetteFormatError`, `CassetteSchemaError`, `DuplicateCassetteError`). |
+| `slopmortem/evals/recording.py` | `RecordingLLMClient`, `RecordingEmbeddingClient`. Forward to a real client; write cassettes on success. Lives under `evals/` because it imports `evals.cassettes` (key derivation, slug helper) — keeps the layering one-way (`evals → llm`, never `llm → evals`). |
+| `slopmortem/evals/cassettes.py` | Loaders, key derivation (`llm_cassette_key`, `embed_cassette_key`), slugifier, error types (`CassetteFormatError`, `CassetteSchemaError`, `DuplicateCassetteError`, `NoCannedEmbeddingError`, `RecordingBudgetExceededError`). |
+| `slopmortem/evals/qdrant_setup.py` | `setup_ephemeral_qdrant()` async context manager. Imported by `runner.py` and `recording_helper.py`; no helper-to-runner edge. |
 | `slopmortem/evals/corpus_fixture.py` | `dump_collection_to_jsonl`, `restore_jsonl_to_collection`, `compute_fixture_sha256`. |
 | `slopmortem/evals/recording_helper.py` | `record_cassettes_for_inputs()` — Layer 2 reusable orchestration. |
 | `tests/fixtures/corpus_fixture_inputs.yml` | Hand-curated seed-input list (~30 entries) — committed source of truth. |
-| `tests/fixtures/corpus_fixture.jsonl` | Generated artifact (~1.5MB) — committed but regenerable. |
+| `tests/fixtures/corpus_fixture.jsonl` | Generated artifact (~1.5MB) — committed via Git LFS (regenerable, opaque vector floats). |
+| `.gitattributes` | LFS filter line for `tests/fixtures/corpus_fixture.jsonl` only. Cassettes stay in regular git so per-file diffs survive. |
 | `tests/fixtures/cassettes/evals/<row_id>/*.json` | Per-row LLM + embedding cassettes. Generated. |
 | `tests/fixtures/cassettes/e2e/test_full_pipeline_with_fake_clients/*.json` | Cassettes for the migrated e2e test. Generated. |
 | `tests/fixtures/cassettes/custom/.gitkeep` | Reserved subtree for ad-hoc cassette sets. |
 | `tests/test_cassettes.py` | Loader + key derivation unit tests. |
-| `tests/test_recording.py` | Recording wrapper unit tests with `FakeLLMClient` as inner. |
+| `tests/test_recording.py` | Recording wrapper unit tests with `FakeLLMClient` as inner; covers LLM, dense embedding, and sparse encoder wrappers. |
 | `tests/evals/test_corpus_fixture.py` | JSONL dump/restore round-trip tests (`requires_qdrant`). |
 | `tests/evals/test_recording_helper.py` | Atomic-swap, tmp_dir cleanup, scope-dir lifecycle. |
 | `tests/evals/test_runner_replay.py` | Runner-level integration tests (`requires_qdrant`). |
@@ -141,18 +156,19 @@ InputContext → RecordingEmbeddingClient → real OpenAI → cassette file
 
 | Path | Change |
 |------|--------|
-| `slopmortem/llm/fake.py` | Widen `canned` key to `(template_sha, model, prompt_hash)`. Add backward-compat 2-tuple fallback. |
-| `slopmortem/llm/fake_embeddings.py` | Add optional `canned: Mapping[(text_hash, model), list[float]]`. Default behavior unchanged. |
-| `slopmortem/evals/runner.py` | Replace `_build_canned()` and canned helpers with cassette loading. Replace `_EvalCorpus` with `setup_ephemeral_qdrant` context. Add `--scope` arg. Wire `--record` to actually record. Add corpus fixture SHA mismatch warning. |
+| `slopmortem/llm/fake.py` | Widen `canned` key to `(template_sha, model, prompt_hash)`. Strict lookup — no wildcard fallback. |
+| `slopmortem/llm/fake_embeddings.py` | Add optional `canned: Mapping[(text_hash, model), list[float]]`. When `canned is not None`, lookup is strict and raises `NoCannedEmbeddingError` on miss (no sha-derived fallthrough). When `canned is None`, today's sha-derived behavior is preserved. Symmetric with the LLM rule. |
+| `slopmortem/pipeline.py` | `run_query` accepts an optional `sparse_encoder: SparseTextEncoder \| None` and forwards it to `retrieve()`. Default `None` keeps the existing fastembed lazy-load. Eval/recording paths inject a `RecordingSparseEncoder` (record) or a cassette-backed encoder (replay) so sparse vectors don't require live fastembed at replay time. |
+| `slopmortem/stages/retrieve.py` | Trivial — already accepts `sparse_encoder` parameter; this row is kept for visibility because the production lazy-load is no longer the only path. |
+| `slopmortem/evals/runner.py` | Replace `_build_canned()` and canned helpers with cassette loading. Replace `_EvalCorpus` with `setup_ephemeral_qdrant` context. Add `--scope` arg (applies to both record and replay). Wire `--record` to actually record. Add corpus fixture SHA mismatch warning. Bump `_BASELINE_VERSION = 2`; teach `_serialize_results`, `_diff_against_baseline`, and `--write-baseline` to round-trip `corpus_fixture_sha256` + `recording_metadata` without clobbering. Import `NoCannedResponseError`; pre-check cassette dir existence; wrap `run_query` per row in `try/except NoCannedResponseError` and record a sentinel result + emit `FAIL <row_id>: …`. |
 | `tests/test_pipeline_e2e.py` | Migrate `test_full_pipeline_with_fake_clients` to cassettes + ephemeral Qdrant. Mark `requires_qdrant`. Other two tests unchanged. |
 | `tests/evals/baseline.json` | Add `version: 2`, `corpus_fixture_sha256`, `recording_metadata` fields. Existing `rows` shape unchanged. |
-| `justfile` | `eval-record` becomes a real recording command. New `eval-record-corpus` target. |
-| `slopmortem/llm/__init__.py` | Re-export `RecordingLLMClient`, `RecordingEmbeddingClient`. |
+| `justfile` | Rewire existing `eval-record` recipe (already in `justfile:24-25`) to drive the new recording flow. Add new `eval-record-corpus` target. |
+| `flake.nix` | Add `git-lfs` to the dev shell `packages` list (currently `flake.nix:100-121` does not include it). Without this, contributors who follow the existing onboarding flow get an LFS pointer file on clone instead of the corpus fixture. |
 
 ### Files NOT touched
 
-- `slopmortem/stages/*.py` — cassette mechanism is invisible to stages
-- `slopmortem/pipeline.py` — same
+- `slopmortem/stages/*.py` — cassette mechanism is invisible to stages (other than `retrieve.py` which already accepts the sparse encoder, see Modified files)
 - `slopmortem/cli.py` — `_build_deps` reused for `--live` mode
 - `slopmortem/corpus/qdrant_store.py` — existing `QdrantCorpus` used as-is
 - `tests/stages/*`, `tests/corpus/*`, `tests/smoke/*` — keep canned `FakeLLMClient` setups (testing plumbing, not realism)
@@ -161,12 +177,21 @@ InputContext → RecordingEmbeddingClient → real OpenAI → cassette file
 ### Module dependency direction (no cycles)
 
 ```
-runner.py ──→ cassettes.py ──→ fake.py
-   │              │
-   ├──→ recording.py ──→ openrouter.py / openai_embeddings.py
-   │
-   └──→ corpus_fixture.py ──→ qdrant_store.py
+slopmortem/evals/
+  runner.py ──→ cassettes.py ──→ slopmortem/llm/fake.py, fake_embeddings.py
+     │              ▲
+     │              └── recording.py ──→ slopmortem/llm/openrouter.py
+     │                                    slopmortem/llm/openai_embeddings.py
+     │                                    slopmortem/corpus/sparse.py (BM25 encoder)
+     │
+     ├──→ recording_helper.py ──→ recording.py + qdrant_setup.py
+     │
+     ├──→ qdrant_setup.py ──→ slopmortem/corpus/qdrant_store.py
+     │
+     └──→ corpus_fixture.py ──→ slopmortem/corpus/qdrant_store.py
 ```
+
+Imports are one-way `evals → llm` and `evals → corpus`. Recording wrappers live in `slopmortem/evals/recording.py` (not `slopmortem/llm/`) so the production LLM surface stays free of test infrastructure and `llm` never imports from `evals`.
 
 ## Data shapes
 
@@ -220,6 +245,29 @@ runner.py ──→ cassettes.py ──→ fake.py
 }
 ```
 
+### Sparse-embedding cassette JSON
+
+```json
+{
+  "schema_version": 1,
+  "key": {
+    "model": "Qdrant/bm25",
+    "text_hash": "<16 hex chars>"
+  },
+  "response": {
+    "indices": [12, 47, 392, ...],
+    "values": [0.341, 0.118, 0.067, ...]
+  },
+  "request_debug": {
+    "text_preview": "first 200 chars",
+    "nnz": 14,
+    "recorded_at": "..."
+  }
+}
+```
+
+Same envelope as the dense embedding cassette (`schema_version`, `key`, `response`, `request_debug`); discriminator is the `key.model` value (`"Qdrant/bm25"` for sparse, `"text-embedding-3-small"` etc. for dense). Loaders dispatch by model, so a single `load_embedding_cassettes()` call returns one map of dense vectors and one of sparse `(indices, values)` tuples — both keyed `(model, text_hash)`.
+
 ### Corpus fixture JSONL
 
 One JSON object per line, schema described under Architecture overview. ~50KB per document, ~1.5MB total for 30 docs. Committed.
@@ -248,6 +296,17 @@ Loader supports both versions. Missing `corpus_fixture_sha256` (v1) skips the SH
 ### Cassette key derivation
 
 ```python
+def template_sha(template_text: str, tools: list[dict] | None, response_format: type[BaseModel] | None) -> str:
+    """Structural hash of a template: source + tools list + response_format schema.
+    Any of the three changing invalidates every cassette under the template."""
+    parts = [
+        template_text,
+        json.dumps(tools or [], sort_keys=True, separators=(",", ":")),
+        json.dumps(response_format.model_json_schema() if response_format else {},
+                   sort_keys=True, separators=(",", ":")),
+    ]
+    return sha256("\x1e".join(parts).encode("utf-8")).hexdigest()  # full hex, not truncated
+
 def llm_cassette_key(prompt: str, system: str | None, template_sha: str, model: str) -> tuple[str, str, str]:
     h = sha256(((system or "") + "\x1f" + prompt).encode("utf-8")).hexdigest()[:16]
     return (template_sha, model, h)
@@ -257,7 +316,7 @@ def embed_cassette_key(text: str, model: str) -> tuple[str, str]:
     return (model, h)
 ```
 
-Both functions live in `slopmortem/evals/cassettes.py` and are imported by both recording wrappers and replay loaders. Single source of truth.
+`embed_cassette_key` is shared by dense and sparse embedding cassettes; the discriminator is `model` (`"text-embedding-3-small"` for dense, `"Qdrant/bm25"` for sparse). All three functions live in `slopmortem/evals/cassettes.py` and are imported by both recording wrappers and replay loaders. Single source of truth.
 
 ## Recording flow
 
@@ -282,13 +341,25 @@ Both functions live in `slopmortem/evals/cassettes.py` and are imported by both 
 2. Spin ephemeral Qdrant collection slopmortem_eval_<pid>_<uuid4>
    restore_jsonl_to_collection from corpus_fixture.jsonl
 
-3. For each scope (filtered by --scope or all):
-   a. tmp_dir = <scope_dir>.recording/  (mkdir, fail if exists)
-   b. Build real LLMClient + EmbeddingClient (via _build_deps)
-   c. Wrap in RecordingLLMClient + RecordingEmbeddingClient (out_dir=tmp_dir)
-   d. Run pipeline.run_query for that input → cassettes accumulate in tmp_dir
-   e. On success: shutil.rmtree(real_dir, ignore_errors=True);
-                  os.replace(tmp_dir, real_dir)
+3. Sweep stale tmp dirs:
+   for d in <cassettes_root>.glob("**/*.recording"):
+       if d.stat().st_mtime < now - 24h: shutil.rmtree(d, ignore_errors=True)
+   (only orphaned `.recording` siblings are touched; live runs use unique names — see step 4a)
+
+4. For each scope (filtered by --scope or all):
+   a. tmp_dir = <scope_dir>.{pid}.{uuid4().hex}.recording/  (mkdir; uniqueness avoids cross-process collisions, so no "already exists" refusal needed)
+   b. Build real LLMClient + EmbeddingClient + sparse encoder (via _build_deps)
+   c. Wrap in RecordingLLMClient + RecordingEmbeddingClient + RecordingSparseEncoder (out_dir=tmp_dir)
+   d. Run pipeline.run_query(..., sparse_encoder=recording_sparse) for that input
+      → cassettes accumulate in tmp_dir
+   e. On success — two-step rename (POSIX rename(2) requires empty dest):
+        if real_dir.exists(): os.replace(real_dir, real_dir + ".old")
+        os.replace(tmp_dir, real_dir)
+        shutil.rmtree(real_dir + ".old", ignore_errors=True)  # best-effort
+      A SIGKILL between the two replaces leaves either the old dir intact under
+      ".old" or the new dir under real_dir; no window in which real_dir is a
+      half-populated tmp_dir under the canonical name. Leftover ".old" dirs are
+      idempotently cleaned next run.
    f. On failure: shutil.rmtree(tmp_dir); re-raise; real_dir untouched
 
 4. Build new baseline.json with corpus_fixture_sha256 + recording_metadata + rows
@@ -306,9 +377,10 @@ Both functions live in `slopmortem/evals/cassettes.py` and are imported by both 
 | Inner LLM/embed call raises | No cassette written. Propagate. tmp_dir cleaned up. Real dir untouched. |
 | Cassette write fails (disk, permission) | Propagate. tmp_dir cleaned up. |
 | Pipeline raises mid-scope | tmp_dir cleaned up. Real dir untouched. Operator re-runs. |
-| `tmp_dir` already exists at start | Refuse to start. Tell operator a previous run crashed and to inspect/remove. |
-| Process killed | tmp_dir orphaned. Caught by next run's "tmp_dir exists" check. Operator removes manually. |
-| Ephemeral Qdrant collection leak | `try/finally` drops it. Startup sweep removes only `slopmortem_eval_<pid>_*` / `slopmortem_corpus_record_<pid>_*` collections whose embedded pid is no longer alive (xdist-safe — see Risk 4). |
+| `RecordingLLMClient` cost ceiling exceeded | `RecordingBudgetExceededError(spent, limit)` raised before next inner call. tmp_dir cleaned up. Real dir untouched. Operator re-runs with `--max-cost-usd <larger>` if intentional, or investigates a runaway tool loop / model upgrade. |
+| Process killed mid-scope | tmp_dir orphaned. Cleaned by next run's startup sweep of `*.recording` older than 24 h. The unique pid+uuid suffix means a sibling worker's live tmp_dir is never younger than 24 h, so the sweep is xdist-safe. |
+| Process killed between the two `os.replace` calls | `<scope_dir>.old` stays on disk; next run's atomic-swap step idempotently retries `shutil.rmtree(real_dir + ".old")` before its own swap. No half-populated canonical dir window. |
+| Ephemeral Qdrant collection leak | `try/finally` drops it. No startup sweep — see Risk 4 for why a prefix-wide sweep is unsafe. Orphans from `kill -9` are identifiable by the embedded pid+uuid in the collection name and dropped manually. |
 
 Atomicity is per-scope, not global: if rows 1–6 succeed and row 7 fails, rows 1–6 swapped in cleanly; row 7's tmp_dir cleaned up; rows 8–10 never started. Operator re-runs `--scope evals/<row7>` to fix.
 
@@ -330,13 +402,18 @@ Recording does NOT compare against baseline — it writes a fresh one.
 3. Spin ephemeral Qdrant collection, restore from corpus_fixture.jsonl
 
 4. Load dataset → list[InputContext]
+   If --scope was passed (e.g. evals/<row_id>), filter the list to rows whose
+   scope matches. An unknown --scope (no row matches) is a fatal "unknown
+   scope" error with the list of valid scopes. Without --scope, run all rows.
 
 5. For each row:
    - cassette_dir = tests/fixtures/cassettes/evals/<row_id>/
    - if missing or empty: log "FAIL <row_id>: no cassettes", record regression, continue
    - load_llm_cassettes + load_embedding_cassettes from cassette_dir
-   - Build FakeLLMClient + FakeEmbeddingClient with the canned maps
-   - try: report = await run_query(...)
+     (the embedding loader returns a dense map and a sparse map; the dense map
+     feeds FakeEmbeddingClient, the sparse map feeds CassetteSparseEncoder)
+   - Build FakeLLMClient + FakeEmbeddingClient + CassetteSparseEncoder with the canned maps
+   - try: report = await run_query(..., sparse_encoder=cassette_sparse)
    - except NoCannedResponseError as exc: log "FAIL <row_id>: cassette miss",
                                           record regression, continue
    - score_report(report) → assertion results
@@ -344,6 +421,9 @@ Recording does NOT compare against baseline — it writes a fresh one.
 6. Drop ephemeral Qdrant collection (try/finally)
 
 7. Diff results vs baseline → emit per-row PASS/FAIL, regressions to stderr
+   When --scope was passed, diff only the filtered rows. --write-baseline (if
+   set) updates only those rows' entries in baseline.json and preserves the
+   rest of the v2 metadata + the un-touched rows verbatim.
 
 8. Exit 0 if no regressions; 1 if any regression. SHA mismatch is warning only.
 ```
@@ -362,6 +442,8 @@ Critical behavior: if a row's cassette directory is missing or a specific casset
 
 ### Shared `setup_ephemeral_qdrant()` helper
 
+Lives in `slopmortem/evals/qdrant_setup.py` (its own module, not `runner.py`) — `runner.py` and `recording_helper.py` both import it; co-locating it in `runner.py` would force `recording_helper.py → runner.py`, which violates the layering rule.
+
 ```python
 @asynccontextmanager
 async def setup_ephemeral_qdrant(
@@ -373,9 +455,9 @@ async def setup_ephemeral_qdrant(
     """Spin a uniquely-named collection, populate from JSONL, drop on exit.
 
     Collection name: f"{collection_prefix}{os.getpid()}_{uuid4().hex}".
-    No startup sweep — the per-pid prefix plus the try/finally drop is the
-    only cleanup. See "Risk 4" for why a prefix-wide sweep is unsafe under
-    pytest-xdist.
+    No startup sweep — uniquely-named collections are dropped via try/finally;
+    orphans from process kills require manual cleanup. See "Risk 4" for why a
+    prefix-wide sweep is unsafe under pytest-xdist.
     """
 ```
 
@@ -388,11 +470,11 @@ The recording machinery is exposed as three layers so test authors can pick the 
 ### Layer 1 — primitives
 
 ```python
-from slopmortem.llm.recording import RecordingLLMClient, RecordingEmbeddingClient
+from slopmortem.evals.recording import RecordingLLMClient, RecordingEmbeddingClient, RecordingSparseEncoder
 from slopmortem.evals.cassettes import load_llm_cassettes, load_embedding_cassettes
 ```
 
-For tests that want full control: build your own clients, wrap them, run your pipeline, write cassettes wherever you want.
+For tests that want full control: build your own clients, wrap them, run your pipeline, write cassettes wherever you want. **Layer-1 callers are responsible for setting `config.enable_tavily_synthesis=False` themselves** — the recording wrappers don't override config, so a Layer-1 caller that records with Tavily on will silently bake live-web content into cassettes (see Risk 6).
 
 ### Layer 2 — orchestration helper
 
@@ -402,8 +484,12 @@ from slopmortem.evals.recording_helper import record_cassettes_for_inputs
 await record_cassettes_for_inputs(
     inputs=[InputContext(name="my_scenario", description="...")],
     output_dir=Path("tests/fixtures/cassettes/custom/my_scenario/"),
+    corpus_fixture_path=Path("tests/fixtures/cassettes/custom/my_scenario/corpus.jsonl"),
+    max_cost_usd=2.0,  # default; raise for runs that legitimately need more
 )
 ```
+
+`corpus_fixture_path` is required (no default). Test authors choose: commit a per-test corpus JSONL fixture (focused; cassettes invalidate only when *that* fixture changes), or pass the canonical eval fixture (`tests/fixtures/corpus_fixture.jsonl`) and accept that custom-test cassettes go stale every time the eval seed regenerates. Coupling custom-test cassettes to "whatever the eval corpus happens to be today" is the same trap that motivated the cassette layer — making the path explicit forces the choice. Layer 2 also forces `enable_tavily_synthesis=False` on the `Config` it builds, so Layer-2 callers don't have to think about Risk 6.
 
 Handles ephemeral Qdrant setup, real client construction, recording wrappers, atomic dir swap. Use for ad-hoc test scenarios, exploratory recording, reproducing bug reports.
 
@@ -413,11 +499,12 @@ Calls Layer 2 internally but is strict about layout (writes only to `tests/fixtu
 
 ### Author workflow for a custom test
 
-1. Write the test scaffold using `load_llm_cassettes` + `setup_ephemeral_qdrant` + `FakeLLMClient`. It will fail at first because no cassettes exist yet.
-2. Run a one-off recording script (or `python -c`, or a justfile target) that calls `record_cassettes_for_inputs()` with their input set and `output_dir=tests/fixtures/cassettes/custom/<test_name>/`.
-3. Cassettes appear. Commit them along with the test.
-4. From now on, the test runs offline (Docker Qdrant required, no API keys).
-5. When prompts later change → cassette miss → `NoCannedResponseError` with the missing key. Re-run the recording script. New cassettes commit.
+1. Decide the corpus fixture: either reuse `tests/fixtures/corpus_fixture.jsonl` (cassettes will invalidate when the eval seed regenerates) or `dump_collection_to_jsonl()` a focused per-test fixture into `tests/fixtures/cassettes/custom/<test_name>/corpus.jsonl` (cassettes only invalidate when that file changes). Commit the chosen fixture.
+2. Write the test scaffold using `load_llm_cassettes` + `setup_ephemeral_qdrant(corpus_fixture_path=...)` + `FakeLLMClient`. It will fail at first because no cassettes exist yet.
+3. Run a one-off recording script (or `python -c`, or a justfile target) that calls `record_cassettes_for_inputs(inputs=..., output_dir=tests/fixtures/cassettes/custom/<test_name>/, corpus_fixture_path=<chosen path>)`.
+4. Cassettes appear. Commit them along with the test.
+5. From now on, the test runs offline (Docker Qdrant required, no API keys).
+6. When prompts later change → cassette miss → `NoCannedResponseError` with the missing key. Re-run the recording script. New cassettes commit.
 
 ## Error handling
 
@@ -426,11 +513,12 @@ Calls Layer 2 internally but is strict about layout (writes only to `tests/fixtu
 | Condition | Behavior |
 |-----------|----------|
 | Cassette directory missing for a row | Log `FAIL <row_id>: no cassettes`. Mark regression. Continue. |
-| Cassette key not found during `complete()`/`embed()` | `NoCannedResponseError` caught per-row. Log. Mark regression. Continue. |
+| Cassette key not found during `complete()` | `NoCannedResponseError` caught per-row. Log. Mark regression. Continue. |
+| Cassette key not found during `embed()` (when `canned is not None`) | `NoCannedEmbeddingError` caught per-row, same handling as `NoCannedResponseError`. Symmetric with the LLM rule. When `canned is None`, today's sha-derived behavior is preserved (no error). |
+| Cassette key not found during sparse `encode()` (when `canned is not None`) | `NoCannedEmbeddingError` (same class — the sparse encoder is a thin embedding-shaped wrapper). |
 | Cassette JSON malformed | `CassetteFormatError`. **Fatal** — operator must fix before runs. |
 | Schema version unknown | `CassetteSchemaError`. Fatal. |
 | Two files with the same key in one scope | `DuplicateCassetteError` naming both paths. Fatal. |
-| `tmp_dir` already exists at recording start | Refuse. Fatal. Tell operator to inspect/remove. |
 | Cassette write fails mid-recording | Propagate. tmp_dir cleaned up. |
 
 ### Corpus-side
@@ -442,7 +530,7 @@ Calls Layer 2 internally but is strict about layout (writes only to `tests/fixtu
 | Qdrant unreachable | Fatal. Print pointer to `docker compose up -d qdrant`. Exit 2. |
 | `corpus_fixture_sha256` mismatch | **Warning only.** Print WARN line. Don't exit. Operator decides. |
 | Ephemeral collection name collision | Re-roll UUID once; if collision repeats raise (≈10⁻³⁸). |
-| Leaked ephemeral collection from prior crash | Auto-deleted by startup sweep. |
+| Leaked ephemeral collection from prior crash | No startup sweep (see Risk 4). The collection's embedded pid+uuid identifies it as a leak; operator drops it manually via Qdrant UI or `qdrant_client.delete_collection`. |
 
 ### Loud vs warning rule
 
@@ -468,6 +556,8 @@ This is the cheapest correct mitigation. Alternatives considered:
 - Disable tools in synthesis during eval: loses fidelity, eval no longer exercises the tool-call path.
 - Capture intermediate tool round-trips in cassettes: significant complexity (cassette becomes a list of round-trips, replay simulates the loop). Overkill for eval purposes.
 
+**Cost / cache fields are tool-loop sums.** `OpenRouterClient.complete()` accumulates `cost_usd`, `cache_read_tokens`, and `cache_creation_tokens` across every turn of the tool loop ([slopmortem/llm/openrouter.py:128-133](../../slopmortem/llm/openrouter.py)). The cassette's `response.cost_usd` etc. reflect the *aggregate* over all turns, not a single API call. Replay assertions and any baseline-tracked cost field therefore measure aggregate behavior — fine for "did total cost regress?" but not for "which turn was expensive". Documenting it here so the cassette schema reader doesn't mistake the field for per-turn semantics.
+
 ### Risk 2: prompt template non-determinism
 
 **The risk.** Cassettes are useless if the rendered prompt drifts between record and replay. Any Jinja template that embeds `today`, `now`, a random UUID, or non-stable dict iteration produces a fresh `prompt_hash` every run → 100% cassette miss.
@@ -486,17 +576,29 @@ If non-determinism is found in a template, fix it (parameterize the value, freez
 
 **The risk.** If the runner or recorder dies mid-run (SIGINT, SIGKILL, OOM), the per-run collection isn't dropped. Collections accumulate in the local Qdrant indefinitely.
 
-**Mitigation.** Two layers:
-1. Collection names embed the live process id: `slopmortem_eval_<pid>_<uuid4>` (and `slopmortem_corpus_record_<pid>_<uuid4>`). On entry, the helper sweeps only collections whose embedded pid is no longer running on the host (`os.kill(pid, 0)` raises `ProcessLookupError`). Live siblings are left alone.
-2. `setup_ephemeral_qdrant()` is an async context manager with `try/finally` that drops its own collection on exit.
+**Mitigation.** Single layer:
 
-**Why the per-pid scope.** CI runs `pytest -n auto` (pytest-xdist), and developers occasionally run two evals against the same local Qdrant. A blanket `slopmortem_eval_*` sweep on entry would delete a sibling worker's live collection mid-run, producing flaky "collection not found" errors. The pid filter keeps the belt-and-suspenders cleanup without racing live workers.
+1. `setup_ephemeral_qdrant()` is an async context manager with `try/finally` that drops its own collection on exit. Collection names embed `pid + uuid4` (`slopmortem_eval_<pid>_<uuid4>` / `slopmortem_corpus_record_<pid>_<uuid4>`) so a leak from `kill -9` is identifiable and droppable manually.
 
-### Risk 5: fastembed BM25 model load cost
+**No startup sweep.** Two sweep designs were considered and rejected: (a) blanket `slopmortem_eval_*` deletion on entry — under `pytest -n auto` would race sibling workers and silently drop their live collections mid-run; (b) "delete collections whose embedded pid is no longer alive" — pid reuse on long-lived hosts (CI runners, dev workstations) means a recycled pid masquerades as a live owner forever, so leaks accumulate anyway. With the per-pid+uuid name we accept manual cleanup of orphans (rare) in exchange for never racing live siblings. The Qdrant UI makes orphans visible, and the cost per orphan is a few KB of collection metadata.
 
-**The risk.** Sparse encoding currently uses `_no_op_sparse_encoder` in eval mode. With real Qdrant + real retrieval, we need real sparse vectors at query time. fastembed BM25 model is ~30MB and takes ~2s to load on first use. CI cost.
+**Future escalation path.** If manual cleanup ever becomes painful, skip pid-based sweep entirely (it can't beat reuse) and add time-based GC: at helper entry, drop `slopmortem_eval_*` / `slopmortem_corpus_record_*` collections whose creation timestamp is older than 24 h. No liveness signal required; the only invariant is "no run takes more than 24 h," which is trivially true. Until that escalation is justified, manual cleanup wins on simplicity.
 
-**Mitigation.** Cache the model in `~/.cache/fastembed` in CI (already a fastembed default). 2s warmup acceptable. Sparse vectors for *stored* documents come precomputed in the JSONL fixture — only the *query* needs live encoding, which happens once per row.
+### Risk 5: fastembed BM25 model load cost and replay determinism
+
+**The risk.** Sparse encoding currently uses `_no_op_sparse_encoder` in eval mode. The original sketch had eval-replay running real fastembed at query time. fastembed BM25 model is ~150 MB on disk (per `slopmortem/stages/retrieve.py:67` docstring) and takes seconds to load on first use. Two costs: (a) CI bandwidth + cold-start latency on every replay, (b) replay no longer offline-pure if fastembed touches the network for first download.
+
+**Mitigation.** Treat sparse encoding as a recordable surface. `RecordingSparseEncoder` wraps the live BM25 encoder during `eval-record`, writing one sparse-embedding cassette per query text (key `(model="Qdrant/bm25", text_hash)`). `pipeline.run_query` accepts an optional `sparse_encoder` parameter — replay injects a `CassetteSparseEncoder` backed by the loaded cassettes; record injects the recording wrapper; production paths pass nothing and keep the existing fastembed lazy-load. Stored-document sparse vectors come precomputed in the JSONL fixture (same as today). Net effect: replay does zero fastembed work and zero network I/O; CI cost is only sparse cassette load (microseconds per row).
+
+### Risk 6: Tavily live-web tools are unfixtured
+
+**The risk.** When `config.enable_tavily_synthesis=True`, `slopmortem/llm/tools.py:80-131` registers `tavily_search` / `tavily_extract` and the OpenRouter tool loop runs them inline during synthesis. `RecordingLLMClient` only sees the final assistant text, so the cassette captures whatever the live web returned the day we recorded. `corpus_fixture_sha256` covers Qdrant only — there's no machinery to detect that today's Tavily would contradict the recorded synthesis. Without a guardrail the eval silently bakes in time-stamped web content.
+
+**Mitigation.** `record_cassettes_for_inputs()` and `just eval-record` force `config.enable_tavily_synthesis=False` for the duration of recording (override applied at the `Config` level before `_build_deps` constructs the LLM client; restored on exit). Replay reads the recorded cassettes with the same flag off — the LLM's recorded `tools_present` field never includes Tavily entries by construction. The eval validates the no-web synthesis path; the production-with-Tavily path is not eval-tested (see "Out of scope"). If a future eval row needs to exercise Tavily, lift this constraint into a per-row override and add a `RecordingTavilyClient` then.
+
+This is the cheapest correct mitigation. Alternatives considered:
+- `RecordingTavilyClient` + per-call cassettes: full fidelity, but doubles the wrapper surface for an optional production feature; not justified by current eval scope.
+- Allow Tavily during recording with a "tools_present contains tavily" assertion gate on replay: punts staleness detection to operator vigilance; doesn't actually prevent the silent-staleness failure mode.
 
 ### Invariants list (cassette stability)
 
@@ -514,39 +616,61 @@ Violating any invariant produces non-reproducible `prompt_hash` values → 100% 
 One PR, eight commits with internal ordering. Each commit leaves `just test` and `just eval` green.
 
 ### Commit 1 — Cassette infrastructure
-**Adds:** `slopmortem/llm/recording.py`, `slopmortem/evals/cassettes.py`, `tests/test_cassettes.py`, `tests/test_recording.py`.
-**Modifies:** `slopmortem/llm/fake.py` (key widening + 2-tuple fallback), `slopmortem/llm/fake_embeddings.py` (optional canned param keyed on `(text_hash, model)`).
+**Adds:** `slopmortem/evals/recording.py`, `slopmortem/evals/cassettes.py`, `tests/test_cassettes.py`, `tests/test_recording.py`.
+**Modifies:**
+- `slopmortem/llm/fake.py` — widen `canned` key to 3-tuple, strict lookup (no wildcard fallback).
+- `slopmortem/llm/fake_embeddings.py` — optional `canned: Mapping[(text_hash, model), list[float]]` (strict on miss when supplied; sha-derived when `None`).
+- All existing test sites that build the `canned` dict with 2-tuple keys: `tests/test_pipeline_e2e.py`, `tests/test_observe_redaction.py`, `tests/test_ingest_idempotency.py`, `tests/test_ingest_dry_run.py`, `tests/test_ingest_orchestration.py`, `tests/stages/test_synthesize.py`, `tests/stages/test_llm_rerank.py`, `tests/stages/test_facet_extract.py`. Each call site adds the third element (compute `prompt_hash` from the rendered prompt the test expects, or use a fixture-derived constant). `Mapping`'s key invariance under `basedpyright strict` makes this unavoidable in one commit.
 **Note:** `NoCannedResponseError` message format updates to include `prompt_hash` in the missing-key tuple. Any test that greps the error message wording needs updating in the same commit. Plan should `grep -rn 'no canned response for' tests/` and adjust.
-**Validation:** `just test` green. `just eval` still passes via canned. No production code paths altered.
+**Validation:** `just test` green. `just eval` still passes via canned. The runner's behavior is unchanged; only test scaffolding and `FakeLLMClient`/`FakeEmbeddingClient` shape change.
 
 ### Commit 2 — Corpus fixture machinery
 **Adds:** `slopmortem/evals/corpus_fixture.py`, `tests/evals/test_corpus_fixture.py`, `tests/fixtures/corpus_fixture_inputs.yml`.
 **Validation:** `just test` green (new tests run under `requires_qdrant`). Eval untouched.
 
 ### Commit 3 — Recording helper + ephemeral Qdrant
-**Adds:** `slopmortem/evals/recording_helper.py`, `setup_ephemeral_qdrant()` (in `runner.py` or `qdrant_setup.py`), `tests/evals/test_recording_helper.py`.
+**Adds:** `slopmortem/evals/qdrant_setup.py` (the `setup_ephemeral_qdrant()` async context manager, decided at spec time — see "Open questions"), `slopmortem/evals/recording_helper.py`, `tests/evals/test_recording_helper.py`.
+**Implementation note:** `record_cassettes_for_inputs()` constructs its `Config` with `enable_tavily_synthesis=False` (override applied before `_build_deps`, restored on exit) — see Risk 6. Test list covers: helper records expected scope dirs, helper restores Tavily flag on exit even when `run_query` raises.
 **Validation:** `just test` green. Helper callable but unused by the rest of the repo.
 
 ### Commit 4 — Justfile + runner argparse (no behavior change)
-**Modifies:** `justfile` (new targets), `slopmortem/evals/runner.py` (add `--scope` arg, wire `--record` to actually record).
+**Adds:** `.gitattributes` containing the single line `tests/fixtures/corpus_fixture.jsonl filter=lfs diff=lfs merge=lfs -text`. Lands here (before commit 5 generates the JSONL) so the file is captured as LFS on first add.
+**Modifies:**
+- `justfile` — rewire the existing `eval-record` recipe (currently `--live --record`, see `justfile:24-25`) to drive the new recording flow; add a new `eval-record-corpus` target.
+- `flake.nix` — add `git-lfs` to the dev shell `packages` list. Verify with `nix develop -c which git-lfs`.
+- `slopmortem/evals/runner.py` — add `--scope` arg (recording + replay symmetric); add `--max-cost-usd <float>` (default `2.0`, only consulted in record mode); wire `--record` to call `record_cassettes_for_inputs(..., max_cost_usd=args.max_cost_usd)` instead of the deferred-stub message.
+- `tests/test_eval_runner.py` — `test_runner_record_flag_is_deferred` asserts `--record` exits 0 with a "deferred" message. Rewrite it to assert real recording behavior under `RUN_LIVE`-gated patching (or split into a `requires_live` test plus a unit test that checks argparse wires `--record` to the new entry point). The "deferred" assertion is no longer truthful after this commit.
 **Note:** the existing `eval` justfile comment on line 19 already (incorrectly) says "Default eval runs against cassettes via FakeLLMClient + FakeEmbeddingClient". That comment is currently a lie. Do NOT correct it here — defer the comment fix to commit 6 (when the runner default actually flips). Editing the comment in commit 4 would create a false-precondition window between commits 4 and 6 where the comment claims cassettes but the runner still uses canned.
 **Validation:** `just test` green. `just eval` still uses canned by default. `just eval-record` would now write cassettes if invoked, but default replay path doesn't read them yet.
 
 ### Commit 5 — Generate fixtures (operator runs once)
+**Preconditions (one-time per machine):**
+- `git lfs install` (idempotent; the flake.nix change in commit 4 makes `git-lfs` available in the dev shell).
+- `.gitattributes` from commit 4 is in place so the JSONL is captured as LFS on first add.
+
 **Operator runs:**
 ```bash
 docker compose up -d qdrant
 RUN_LIVE=1 just eval-record-corpus    # ~$3-5
-RUN_LIVE=1 just eval-record           # ~$0.50-$1
+RUN_LIVE=1 just eval-record           # ~$0.50-$1, ceiling --max-cost-usd=2.0
 ```
-**Adds:** `tests/fixtures/corpus_fixture.jsonl` (~1.5MB), `tests/fixtures/cassettes/evals/<row_id>/*.json` (10 dirs, ~70 files), updated `tests/evals/baseline.json` (v2).
-**Validation:** committed fixtures pass `git diff` review; operator spot-checks ~5 random `request_debug.prompt_preview` fields.
+**Adds:** `tests/fixtures/corpus_fixture.jsonl` (~1.5MB, stored via LFS — `git diff` shows the LFS pointer, not the float arrays), `tests/fixtures/cassettes/evals/<row_id>/*.json` (10 dirs, ~70 files; regular git), updated `tests/evals/baseline.json` (v2).
+**Validation:** `git lfs ls-files` shows the JSONL is tracked by LFS; cassette files appear as regular git diffs; operator spot-checks ~5 random `request_debug.prompt_preview` fields.
 
 ### Commit 6 — Switch runner default to cassettes
-**Modifies:** `slopmortem/evals/runner.py` — replace `_build_canned()` and helpers with cassette loading; replace `_EvalCorpus` with `setup_ephemeral_qdrant`; replace `FakeEmbeddingClient(model=...)` with canned-aware version; add SHA mismatch check.
+**Modifies:** `slopmortem/evals/runner.py`:
+- Replace `_build_canned()` and helpers with cassette loading.
+- Replace `_EvalCorpus` with `setup_ephemeral_qdrant`.
+- Replace `FakeEmbeddingClient(model=...)` with canned-aware version (dense + sparse).
+- Add SHA mismatch check (warn-only).
+- Bump `_BASELINE_VERSION` from `1` to `2`.
+- `_serialize_results(...)` now takes `corpus_fixture_sha256: str` and `recording_metadata: dict` and writes `{"version": 2, "corpus_fixture_sha256": ..., "recording_metadata": ..., "rows": ...}`.
+- `_diff_against_baseline(...)` reads v1 and v2 transparently (v1: skip SHA check; v2: emit WARN on mismatch). Tolerates v1→v2 upgrade.
+- `--write-baseline` preserves v2 metadata when present and only refreshes the rows it produced this run; with `--scope` it merges new row entries into the existing v2 baseline rather than clobbering.
+- Import `NoCannedResponseError` (and `NoCannedEmbeddingError`); pre-check `cassette_dir.exists() and any(cassette_dir.iterdir())` per row, log `FAIL <row_id>: no cassettes` and continue if not; wrap `await run_query(...)` in `try/except (NoCannedResponseError, NoCannedEmbeddingError)`, log `FAIL <row_id>: cassette miss`, mark regression, continue. Both paths yield a sentinel result so `_diff_against_baseline` shows the row as failed in the per-row output.
 **Modifies:** `justfile` — update the comment on line 19 to accurately reflect cassette-default behavior (deferred from commit 4).
 **Removes:** `_build_canned`, `_facet_extract_payload`, `_rerank_payload`, `_synthesis_payload`, `_payload`, `_candidate`, `_facets`, `_DETERMINISTIC_*_MODEL`, `_EvalCorpus`, `_no_op_sparse_encoder`.
-**Adds:** `tests/evals/test_runner_replay.py`, `tests/evals/test_fixtures/`.
+**Adds:** `tests/evals/test_runner_replay.py`, `tests/evals/test_fixtures/`. Test list must cover: passes with recorded cassettes, fails on missing cassette dir, fails on key miss, warns on SHA mismatch, **v1 baseline upgrades cleanly to v2 on next `--write-baseline`**, **v2 round-trip preserves `corpus_fixture_sha256` + `recording_metadata`**, `--scope` filtering applies to row loop and to baseline merge, unknown scope fails loudly.
 **Validation:** `just test` green. `just eval` passes against committed cassettes from commit 5.
 
 ### Commit 7 — Migrate the e2e test
@@ -555,7 +679,7 @@ RUN_LIVE=1 just eval-record           # ~$0.50-$1
 **Validation:** `just test` green including the migrated e2e test running offline.
 
 ### Commit 8 — Documentation
-**Modifies:** `README.md` or new `docs/cassettes.md` — section "Recording cassettes for custom tests" with the marketplace-scrap walkthrough.
+**Modifies:** `README.md` or new `docs/cassettes.md` — section "Recording cassettes for custom tests" with the marketplace-scrap walkthrough. Onboarding section calls out the LFS dependency: contributors clone with `git lfs` available (the flake's dev shell handles this automatically; non-Nix contributors install it manually). CI checkout step needs `lfs: true` (e.g. `actions/checkout@v4` with `lfs: true` for GitHub Actions).
 **Modifies:** `slopmortem/evals/runner.py` docstring — update mode list to reflect cassette-default behavior.
 **Adds:** `tests/fixtures/cassettes/custom/.gitkeep`.
 
@@ -571,14 +695,14 @@ Order optimized so each commit is independently reviewable, the eval stays green
 
 ### New unit tests (pure Python, no Qdrant)
 
-- `tests/test_cassettes.py` — key derivation stability, key changes on prompt drift, system/prompt separator works, round-trip serialization, schema version rejection, malformed-JSON rejection, duplicate-key detection, embedding cassette round-trip, dim mismatch.
-- `tests/test_recording.py` — writes cassette on success, skips on inner error, uses full hash in filename, overwrites same-key, includes `request_debug` metadata.
+- `tests/test_cassettes.py` — key derivation stability, key changes on prompt drift, system/prompt separator works, `template_sha` changes on tools/schema edit (B2), round-trip serialization for LLM + dense embedding + sparse embedding cassettes, schema version rejection, malformed-JSON rejection, duplicate-key detection, dim mismatch, `_slugify_model` covers `/`, `:beta`, `:nitro` (F23). Test sites that build `canned` dicts now use 3-tuple keys (M16); strict no-fallback lookup raises on miss (B4).
+- `tests/test_recording.py` — writes cassette on success, skips on inner error, uses full hash in filename, overwrites same-key, includes `request_debug` metadata. Covers all three wrappers (LLM, dense embedding, sparse). Includes a batch round-trip: 3-text `embed()` produces 3 cassette files; replay through `FakeEmbeddingClient.embed([t1,t2,t3])` returns the vectors in input order with `cost_usd=0.0, n_tokens=0` (G8); a single cassette is reused when the same text appears in two batches. Cost ceiling test (F20): `RecordingLLMClient(max_cost_usd=0.50)` with mocked inner returning `cost_usd=0.30` per call — third call raises `RecordingBudgetExceededError`, no cassette written for that call, accumulator carries previous calls' cost.
 
 ### New integration tests (require Qdrant)
 
 - `tests/evals/test_corpus_fixture.py` — dump-then-restore yields same query results, SHA stable, SHA changes on edit.
-- `tests/evals/test_runner_replay.py` — passes with recorded cassettes, fails on missing cassette dir, fails on key miss, warns on SHA mismatch, v1 baseline skips SHA check, `--scope` filtering, unknown scope fails loudly.
-- `tests/evals/test_recording_helper.py` — uses `FakeLLMClient` as inner; verifies scope dir creation, tmp cleanup on failure, atomic swap removes leftover cassettes.
+- `tests/evals/test_runner_replay.py` — passes with recorded cassettes, fails on missing cassette dir, fails on cassette key miss (LLM and embedding), per-row continuation after `NoCannedResponseError` (G12), warns on SHA mismatch, v1 baseline skips SHA check, v1→v2 baseline upgrade on `--write-baseline` (G11), v2 round-trip preserves `corpus_fixture_sha256` + `recording_metadata`, `--scope` filtering applies to row loop and to baseline merge (G10), unknown scope fails loudly.
+- `tests/evals/test_recording_helper.py` — uses `FakeLLMClient` as inner; verifies scope dir creation, tmp cleanup on failure, two-step atomic swap (B5: process killed between replaces leaves `.old` recoverable, no half-populated canonical dir), unique tmp_dir suffix (`{pid}.{uuid}.recording`) and 24h sweep of stale `.recording` dirs (F21), atomic swap removes leftover cassettes.
 
 ### Modified tests
 
@@ -649,18 +773,19 @@ Order optimized so each commit is independently reviewable, the eval stays green
 - Multi-region cassette consistency (Anthropic's eventual-consistency cache behavior). Not relevant once cassettes are committed.
 - Cassette compression (~1MB total uncompressed, fine).
 - Cassette migration from v1 schema in the future — handled when v2 ships, not pre-emptively.
+- Tavily-driven synthesis fidelity in eval (`enable_tavily_synthesis=True`). Recording forces this flag off; the eval validates the no-web synthesis path only. If a future eval row needs Tavily exercised, add a `RecordingTavilyClient` then; see Risk 6.
 
 ## Open questions for plan-writing
 
 These don't block the spec but need answers during plan-writing:
 
 1. **Prompt template audit.** Confirm `slopmortem/llm/prompts/*.j2` are deterministic. Document the audit result in the plan.
-2. **`setup_ephemeral_qdrant()` location.** Live in `runner.py` or split to `slopmortem/evals/qdrant_setup.py`? Decide based on size; if it grows past ~50 lines, split.
-3. **`recording_helper.py` baseline-write behavior.** Layer 2 helper shouldn't write `baseline.json` (Layer 3 owns that). Confirm wiring in the plan.
+2. **`recording_helper.py` baseline-write behavior.** Layer 2 helper shouldn't write `baseline.json` (Layer 3 owns that). Confirm wiring in the plan.
 
 ### Resolved during spec review
 
-4. **`FakeEmbeddingClient` canned key shape.** Resolved: keys on `(text_hash, model)` to match the cassette key. Lookup chain is `text → sha256 → key → vector`. Symmetric with cassette files. Avoids storing raw text in the canned dict.
+3. **`FakeEmbeddingClient` canned key shape.** Resolved: keys on `(text_hash, model)` to match the cassette key. Lookup chain is `text → sha256 → key → vector`. Symmetric with cassette files. Avoids storing raw text in the canned dict.
+4. **`setup_ephemeral_qdrant()` location.** Resolved: lives in `slopmortem/evals/qdrant_setup.py` (its own module). Avoids the helper-to-runner import edge that would result from co-locating it in `runner.py`.
 
 ## Spec consistency check
 
@@ -668,19 +793,35 @@ Run before merging the implementation:
 
 ```bash
 # Cassette schema version must be 1 everywhere we write
-grep -nE 'schema_version' slopmortem/llm/recording.py slopmortem/evals/cassettes.py slopmortem/evals/recording_helper.py
+grep -nE 'schema_version' slopmortem/evals/recording.py slopmortem/evals/cassettes.py slopmortem/evals/recording_helper.py
 
 # Baseline schema version is 2 in the new write path
-grep -nE '"version": 2' slopmortem/evals/runner.py
+grep -nE '"version": 2|_BASELINE_VERSION = 2' slopmortem/evals/runner.py
 
-# No truncated hash in filenames
-grep -nE 'prompt_hash\[.*:8\]|text_hash\[.*:8\]' slopmortem/
+# No truncated hash in filenames anywhere
+grep -nrE 'prompt_hash\[.*:8\]|text_hash\[.*:8\]' slopmortem/ tests/
 
-# Backward-compat 2-tuple fallback in FakeLLMClient is documented
-grep -nE 'len\(key\) == 2|2-tuple' slopmortem/llm/fake.py
+# No 2-tuple wildcard fallback in FakeLLMClient (B4 - dropped)
+grep -nE 'len\(key\) == 2|2-tuple|wildcard' slopmortem/llm/fake.py    # MUST be empty
+
+# pipeline.run_query exposes sparse_encoder (B1)
+grep -nE 'sparse_encoder' slopmortem/pipeline.py                       # MUST match
+
+# Recording lives under evals/, not llm/ (G14)
+test ! -e slopmortem/llm/recording.py                                  # MUST not exist
+test -e slopmortem/evals/recording.py                                  # MUST exist
+
+# Slugifier handles all non-[A-Za-z0-9._-] (F23)
+grep -nE '_slugify_model|re\.sub.*\[\^A-Za-z0-9' slopmortem/evals/cassettes.py
+
+# tmp_dir uses pid+uuid suffix (F21)
+grep -nE '\.recording.*\{.*pid.*uuid' slopmortem/evals/recording_helper.py
+
+# Sparse cassette uses Qdrant/bm25 model id
+grep -nE '"Qdrant/bm25"' slopmortem/evals/recording.py slopmortem/evals/cassettes.py
 ```
 
-All four should resolve to the expected files; first three should NOT have stale references to truncated hashes or version 1 in new write paths.
+All "MUST match" should resolve to expected hits; "MUST be empty" / "MUST not exist" should produce no output / nonzero exit.
 
 ---
 
