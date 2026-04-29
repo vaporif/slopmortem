@@ -179,7 +179,7 @@ class QdrantCorpus:
         # Free-form (sub_sector, product_type, ...) and integer-typed year
         # facets are intentionally not part of the soft-boost set: closed
         # taxonomy fields are the contract surface (see spec line 605-648).
-        boost_must: list[Any] = []
+        boost_must: list[Any] = []  # type: ignore[explicit-any]
         for fname in ("sector", "business_model", "customer_type", "geography", "monetization"):
             val = getattr(facets, fname)
             if val == "other":
@@ -190,7 +190,7 @@ class QdrantCorpus:
         # boost_must is empty, the Filter matches every doc (a 1.0
         # contribution on every candidate); to keep "no facet boost in play"
         # truly neutral, drop the Mult term entirely in that case.
-        formula_terms: list[Any] = ["$score"]
+        formula_terms: list[Any] = ["$score"]  # type: ignore[explicit-any]
         if boost_must:
             formula_terms.append(MultExpression(mult=[self._facet_boost, Filter(must=boost_must)]))
         formula = FormulaQuery(formula=SumExpression(sum=formula_terms))
