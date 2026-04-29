@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
   "openai>=1.50",
-  "qdrant-client>=1.14",
+  "qdrant-client>=1.17.1",
   "fastembed>=0.4",
   "pydantic>=2.7",
   "pydantic-settings>=2.4",
