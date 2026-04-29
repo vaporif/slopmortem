@@ -41,6 +41,9 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "-ra"
+markers = [
+  "requires_qdrant: integration test that requires a live Qdrant on localhost:6333",
+]
 
 [tool.ruff]
 line-length = 100

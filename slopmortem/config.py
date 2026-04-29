@@ -41,8 +41,12 @@ class Config(BaseSettings):
     model_synthesize: str = "anthropic/claude-sonnet-4.6"
 
     embedding_provider: str = "openai"
+    embed_model_id: str = "text-embedding-3-small"
     retry_max_attempts: int = 3
     retry_initial_backoff: float = 1.0
+
+    taxonomy_version: str = "v1"
+    reliability_rank_version: str = "v1"
 
     enable_tavily_enrich: bool = False
     enable_tavily_synthesis: bool = False
