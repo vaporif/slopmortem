@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from lmnr import Laminar, observe
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -21,6 +23,16 @@ if TYPE_CHECKING:
 type SparseEncoder = Callable[[str], dict[int, float]]
 
 
+# Note: lmnr-python at this version exposes ``ignore_output`` (singular bool) — the
+# plan referenced ``ignore_outputs`` which does not exist. ``ignore_output=True``
+# drops the auto-captured ``Candidate`` output and we re-attach a redacted
+# ``(canonical_id, score, name, facets, slop_score)`` projection via
+# ``Laminar.set_span_attributes``. ``ignore_inputs=["corpus"]`` is also required
+# because the auto-capture serializes the ``Corpus`` argument (test fakes embed
+# their candidate corpus inline; production stores would still serialize the
+# client handle, which is not useful trace content). Body never crosses the
+# trace boundary.
+@observe(name="stage.retrieve", ignore_output=True, ignore_inputs=["corpus"])
 async def retrieve(  # noqa: PLR0913 — every dependency is required at the call site
     *,
     description: str,
@@ -67,7 +79,7 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
     embed_result = await embedding_client.embed([description])
     [dense] = embed_result.vectors
     sparse = sparse_encoder(description)
-    return await corpus.query(
+    candidates = await corpus.query(
         dense=dense,
         sparse=sparse,
         facets=facets,
@@ -75,3 +87,18 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
         strict_deaths=strict_deaths,
         k_retrieve=k_retrieve,
     )
+    Laminar.set_span_attributes(
+        {
+            "candidates": [
+                {
+                    "canonical_id": c.canonical_id,
+                    "score": c.score,
+                    "name": c.payload.name,
+                    "facets": c.payload.facets.model_dump(),
+                    "slop_score": c.payload.slop_score,
+                }
+                for c in candidates
+            ],
+        }
+    )
+    return candidates

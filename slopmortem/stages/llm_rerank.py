@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from lmnr import Laminar, observe
+
 from slopmortem.errors import RerankLengthError
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
 from slopmortem.llm.tools import to_strict_response_schema
@@ -15,6 +17,14 @@ if TYPE_CHECKING:
     from slopmortem.models import Candidate, Facets
 
 
+# ``ignore_inputs=["candidates"]`` matches the top-level parameter name only
+# (lmnr-python's filter is ``k in ignore_inputs`` against
+# ``inspect.signature(func).parameters.keys()``; cf. spec line 919). Dropping the
+# ``Candidate`` list keeps ``payload.body`` out of span attributes; a redacted
+# ``(canonical_id, name)`` projection is re-attached via
+# ``Laminar.set_span_attributes``. Output (``LlmRerankResult``) carries no body
+# and stays auto-captured.
+@observe(name="stage.llm_rerank", ignore_inputs=["candidates"])
 async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the call site
     candidates: list[Candidate],
     pitch: str,
@@ -54,6 +64,13 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
     Raises:
         RerankLengthError: When the LLM returns an array of the wrong length.
     """
+    Laminar.set_span_attributes(
+        {
+            "candidates_meta": [
+                {"canonical_id": c.canonical_id, "name": c.payload.name} for c in candidates
+            ],
+        }
+    )
     prompt = render_prompt(
         "llm_rerank",
         pitch=pitch,

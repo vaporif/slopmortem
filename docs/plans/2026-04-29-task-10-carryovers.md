@@ -310,9 +310,9 @@ The `synthesize` stage is already correctly decorated (`ignore_inputs=["candidat
 
 ### Step-by-step
 
-- [ ] **Step B.1: Read spec lines 914–924 in full.** Especially the wording "matches top-level parameter names only". The `ignore_inputs` filter is `k in ignore_inputs` against `inspect.signature(func).parameters.keys()`, so it has to use the exact parameter name (`candidates`, not `retrieved`).
+- [x] **Step B.1: Read spec lines 914–924 in full.** Especially the wording "matches top-level parameter names only". The `ignore_inputs` filter is `k in ignore_inputs` against `inspect.signature(func).parameters.keys()`, so it has to use the exact parameter name (`candidates`, not `retrieved`).
 
-- [ ] **Step B.2: Verify lmnr-python's `@observe` API.**
+- [x] **Step B.2: Verify lmnr-python's `@observe` API.**
 
 Confirm `ignore_outputs=True` exists and behaves the way the spec implies. Inspect the installed package:
 
@@ -322,7 +322,7 @@ Confirm `ignore_outputs=True` exists and behaves the way the spec implies. Inspe
 
 Expected: signature includes `ignore_inputs`, `ignore_outputs` (or equivalent). If `ignore_outputs` does NOT exist as a kwarg, the fallback is to capture `name` only (no inputs/outputs auto-captured) and re-attach everything manually. Document the choice in the stage's docstring.
 
-- [ ] **Step B.3: Write the regression test (failing — neither file decorated yet).**
+- [x] **Step B.3: Write the regression test (failing — neither file decorated yet).**
 
 Add `tests/test_observe_redaction.py`. The test runs the full pipeline against fakes (lifting the pattern from `tests/test_pipeline_e2e.py`) but inserts a Laminar `InMemorySpanExporter` (or whatever `lmnr-python` ships as its in-memory exporter). After the run, the test scrapes every span attribute value and asserts no candidate `payload.body` substring appears anywhere.
 
@@ -375,7 +375,7 @@ async def test_no_corpus_body_in_laminar_spans(monkeypatch):
 
 If `lmnr-python` does not expose an exporter override hook, fall back to monkeypatching the OTel tracer provider directly via `opentelemetry.trace.set_tracer_provider`. Document the chosen wiring inline.
 
-- [ ] **Step B.4: Run the test; confirm it fails.**
+- [x] **Step B.4: Run the test; confirm it fails.**
 
 ```
 ./.venv/bin/pytest tests/test_observe_redaction.py -v
@@ -383,7 +383,7 @@ If `lmnr-python` does not expose an exporter override hook, fall back to monkeyp
 
 Expected: FAIL. Body sentinel appears in span attributes (because `retrieve` and `llm_rerank` don't have any redaction yet, and `synthesize`'s `ignore_inputs=["candidate"]` only handles its own input, not the upstream stages' captures).
 
-- [ ] **Step B.5: Decorate `extract_facets`.**
+- [x] **Step B.5: Decorate `extract_facets`.**
 
 In `slopmortem/stages/facet_extract.py`, add the import and decorator. No redaction needed.
 
@@ -395,7 +395,7 @@ async def extract_facets(text: str, llm: LLMClient, model: str | None = None) ->
     ...
 ```
 
-- [ ] **Step B.6: Decorate `retrieve` with output redaction.**
+- [x] **Step B.6: Decorate `retrieve` with output redaction.**
 
 In `slopmortem/stages/retrieve.py`:
 
@@ -422,7 +422,7 @@ async def retrieve(*, description, facets, corpus, embedding_client, cutoff_iso,
 
 If lmnr-python does not expose `ignore_outputs`, use `@observe(name="stage.retrieve", ignore_inputs=[<every-param-name>], ignore_outputs=...)` or whatever the SDK supports. Write a one-line note in the docstring documenting the fallback.
 
-- [ ] **Step B.7: Decorate `llm_rerank` with input redaction.**
+- [x] **Step B.7: Decorate `llm_rerank` with input redaction.**
 
 In `slopmortem/stages/llm_rerank.py`:
 
@@ -440,7 +440,7 @@ async def llm_rerank(candidates, pitch, ...) -> LlmRerankResult:
     ...  # existing body
 ```
 
-- [ ] **Step B.8: Run the regression test; confirm it passes.**
+- [x] **Step B.8: Run the regression test; confirm it passes.**
 
 ```
 ./.venv/bin/pytest tests/test_observe_redaction.py -v
@@ -448,7 +448,7 @@ async def llm_rerank(candidates, pitch, ...) -> LlmRerankResult:
 
 Expected: PASS. Sentinel does not appear in any captured span.
 
-- [ ] **Step B.9: Run the existing pipeline e2e tests; confirm they still pass.**
+- [x] **Step B.9: Run the existing pipeline e2e tests; confirm they still pass.**
 
 ```
 ./.venv/bin/pytest tests/test_pipeline_e2e.py -v
@@ -456,7 +456,7 @@ Expected: PASS. Sentinel does not appear in any captured span.
 
 Expected: 8 passed (same as before; decorators are no-ops when Laminar is not initialized).
 
-- [ ] **Step B.10: Run the full sweep.**
+- [x] **Step B.10: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
