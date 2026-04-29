@@ -50,7 +50,7 @@ flowchart TB
         Qdrant[("Qdrant · dense + sparse")]
         MD[("on-disk markdown")]
         Journal[("MergeJournal · sqlite WAL")]
-        Sources["sources/ · curated, HN, Tavily"]
+        Sources["sources/ · curated, HN, Wayback, Crunchbase"]
     end
 
     subgraph cross["cross-cutting"]
@@ -68,7 +68,10 @@ flowchart TB
     LLMC --> OR([OpenRouter])
     OR --> ANT([Anthropic Sonnet/Haiku])
     Embed --> OAI([OpenAI API])
-    Sources --> Web([HN · curated URLs · Tavily])
+    Sources --> Web([HN · curated URLs · Wayback · Crunchbase CSV])
+    TV([Tavily · opt-in enricher])
+    Q5 -.->|enrich| TV
+    I2 -.->|enrich| TV
     Trace --> LMNR([Laminar collector])
 ```
 
@@ -89,7 +92,7 @@ A default query runs around $0.45–0.60 and 21–43 seconds. Turn on Tavily syn
 
 ## Ingest flow
 
-`slopmortem ingest` is the bulk path. Around 500 URLs from a curated YAML, HN's Algolia API, and Tavily if you opt in.
+`slopmortem ingest` is the bulk path. Default sources are a curated YAML and HN's Algolia API; the Wayback Machine and a Crunchbase CSV are opt-in adapters. Tavily is an opt-in enricher (synthesis-time or ingest-time), not a source.
 
 1. **Fetch.** Plain HTTP. trafilatura strips nav and cookie banners. A length floor drops the obviously empty pages.
 2. **LLM fan-out.** Two calls per doc, one for facets and one for the rerank summary. All ~1000 run live under `anyio.CapacityLimiter(20)`. There's no Batches discount here because OpenRouter doesn't proxy that API. The shared system block sets `cache_control={"ttl":"1h"}`, and we fire one sync call right before the fan-out so workers hit a populated cache instead of racing to write it. The first five responses sample `cache_read_tokens / (cache_read + cache_creation)`. If the read ratio is under 80% we know before spending the rest of the budget. The 1-hour TTL recovers most of what Batches would have saved.
