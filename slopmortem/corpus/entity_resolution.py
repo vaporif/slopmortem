@@ -81,9 +81,7 @@ _CORPORATE_SUFFIXES = (
     "sa",
     "sas",
 )
-_CORPORATE_SUFFIXES_RE = re.compile(
-    rf"\s+({'|'.join(_CORPORATE_SUFFIXES)})\b\.?$", re.IGNORECASE
-)
+_CORPORATE_SUFFIXES_RE = re.compile(rf"\s+({'|'.join(_CORPORATE_SUFFIXES)})\b\.?$", re.IGNORECASE)
 
 # Founding-year delta: more than this many years apart → demote (recycled domain).
 _RECYCLED_DOMAIN_YEAR_DELTA = 10
@@ -533,7 +531,10 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         Exception: Any sqlite or LLM exception propagates after the journal
             transaction rolls back (see :meth:`MergeJournal.upsert_alias_blocked`).
     """
-    db_path = journal._db  # noqa: SLF001 — same-package coordination, no public accessor
+    # Same-package coordination: the resolver's tier-3 cache and founding-year
+    # cache live in the same sqlite file as the merge journal. There is no
+    # public accessor by design (merge.py is read-only from this side).
+    db_path = journal._db  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
     await asyncio.to_thread(_ensure_tier3_table_sync, db_path)
 
     span_events: list[str] = []

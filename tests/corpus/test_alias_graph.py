@@ -20,7 +20,7 @@ async def journal(tmp_path):
     return j
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def embed_client():
     return FakeEmbeddingClient(model="text-embedding-3-small")
 
@@ -68,8 +68,8 @@ async def test_alias_blocked_atomic_no_pending_residue(journal, embed_client):
         states.append("alias_blocked")
         await original_alias(**kwargs)
 
-    journal.upsert_pending = trace_pending  # type: ignore[method-assign]
-    journal.upsert_alias_blocked = trace_alias  # type: ignore[method-assign]
+    journal.upsert_pending = trace_pending
+    journal.upsert_alias_blocked = trace_alias
 
     result = await resolve_entity(
         entry,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 import pytest_asyncio
 
 from slopmortem.corpus.entity_resolution import ResolveResult, resolve_entity
@@ -42,7 +43,7 @@ async def journal(tmp_path):
     return j
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def embed_client():
     return FakeEmbeddingClient(model="text-embedding-3-small")
 

@@ -1947,7 +1947,7 @@ Not parallelizable with code; not a v1 software-deliverable blocker (Task #4a's 
 
 ### Step-by-step
 
-- [ ] **Step 5a.1: Tier-1 platform-blocklist test**
+- [x] **Step 5a.1: Tier-1 platform-blocklist test**
 
 ```python
 async def test_tier1_platform_domains_dont_collapse():
@@ -1961,7 +1961,7 @@ async def test_tier1_platform_domains_dont_collapse():
 
 Implementation: tier-1 returns `registrable_domain` (via `tldextract`), but if that domain is in `platform_domains.yml` (loaded from spec line 260), tier-1 skips and demotes to tier-2.
 
-- [ ] **Step 5a.2: Recycled-domain test (founding-year delta)**
+- [x] **Step 5a.2: Recycled-domain test (founding-year delta)**
 
 ```python
 async def test_recycled_domain_demotes_to_tier2():
@@ -1972,7 +1972,7 @@ async def test_recycled_domain_demotes_to_tier2():
 
 Implementation: founding_year cache keyed on `(registrable_domain, content_sha256)`; on tier-1 hit with delta > 10, demote to tier-2.
 
-- [ ] **Step 5a.3: Parent/subsidiary suffix-delta test**
+- [x] **Step 5a.3: Parent/subsidiary suffix-delta test**
 
 ```python
 async def test_parent_subsidiary_suffix_demotes():
@@ -1980,7 +1980,7 @@ async def test_parent_subsidiary_suffix_demotes():
     ...
 ```
 
-- [ ] **Step 5a.4: Alias-graph test (atomic precheck)**
+- [x] **Step 5a.4: Alias-graph test (atomic precheck)**
 
 When tier-1 hits an old domain but the new entry names a NEW canonical entity (founder blog says "we became X"), write an `acquired_by` or `rebranded_to` edge to the `aliases` table and BLOCK the merge (spec line 261).
 
@@ -2003,11 +2003,11 @@ async def test_alias_blocked_crash_recovery(journal, monkeypatch):
     ...
 ```
 
-- [ ] **Step 5a.5: Tier-3 fuzzy + Haiku tiebreaker**
+- [x] **Step 5a.5: Tier-3 fuzzy + Haiku tiebreaker**
 
 Cache decisions per `(canonical_a, canonical_b, haiku_model_id, tiebreaker_prompt_hash)`. When fuzzy similarity falls in `tier3_calibration_band` (default `[0.65, 0.85]`), write a `pending_review` row alongside the auto-applied result.
 
-- [ ] **Step 5a.6: Deterministic merge text test**
+- [x] **Step 5a.6: Deterministic merge text test**
 
 ```python
 async def test_combined_text_deterministic_across_orderings():
@@ -2017,11 +2017,11 @@ async def test_combined_text_deterministic_across_orderings():
 
 Sort sections by `(reliability_rank, source_id)` deterministically.
 
-- [ ] **Step 5a.7: Resolver-flip detection**
+- [x] **Step 5a.7: Resolver-flip detection**
 
 When the journal's `reverse_index[(source, source_id)]` returns a prior canonical_id different from the new one, mark `merge_state="resolver_flipped"`, emit `SpanEvent.RESOLVER_FLIP_DETECTED`, and DO NOT write the new canonical (repair owned by `--reconcile` drift class (f)).
 
-- [ ] **Step 5a.8: Verify**
+- [x] **Step 5a.8: Verify**
 
 Run: `uv run pytest tests/corpus/test_entity_resolution.py tests/corpus/test_merge_deterministic.py tests/corpus/test_alias_graph.py -v`
 Expected: all green.
