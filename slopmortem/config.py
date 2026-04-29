@@ -1,4 +1,4 @@
-"""Pydantic-settings config — TOML + env + secrets, validated on load."""
+"""Config loader: TOML, env, and secrets, validated on load."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ class Config(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Wire up TOML sources after env, before secrets — TOML wins over env at runtime."""
+        """Wire TOML sources after env and before secrets so TOML wins over env at runtime."""
         toml_files: list[Path] = [
             p
             for name in ("slopmortem.toml", "slopmortem.local.toml")
@@ -94,5 +94,5 @@ class Config(BaseSettings):
 
 
 def load_config() -> Config:
-    """Construct a fully-populated ``Config`` from the active TOML + env + dotenv state."""
+    """Build a ``Config`` from the current TOML + env + dotenv state."""
     return Config()
