@@ -499,9 +499,9 @@ For `--reconcile`, `--reclassify`, `--list-review`: these are SEPARATE orchestra
 
 ### Pre-flight
 
-- [ ] **Step C.0: Read `slopmortem/ingest.py:660-720` (`ingest()` orchestrator's full signature and docstring).** Confirm the dependency list. If new fields landed since this plan was written, propagate them in this task's wiring.
+- [x] **Step C.0: Read `slopmortem/ingest.py:660-720` (`ingest()` orchestrator's full signature and docstring).** Confirm the dependency list. If new fields landed since this plan was written, propagate them in this task's wiring.
 
-- [ ] **Step C.0a: Confirm `MergeJournal` constructor signature.**
+- [x] **Step C.0a: Confirm `MergeJournal` constructor signature.**
 
 ```
 grep -n "^class MergeJournal\|def __init__" slopmortem/corpus/journal.py | head -5
@@ -509,7 +509,7 @@ grep -n "^class MergeJournal\|def __init__" slopmortem/corpus/journal.py | head 
 
 Use the result to pin the `MergeJournal(...)` line in Step C.4.
 
-- [ ] **Step C.0b: Confirm whether `Config` has `journal_sqlite_path` or similar.**
+- [x] **Step C.0b: Confirm whether `Config` has `journal_sqlite_path` or similar.**
 
 ```
 grep -n "journal\|sqlite" slopmortem/config.py
@@ -519,7 +519,7 @@ If yes, use it. If no, default to `Path("data/journal.sqlite")` and document inl
 
 ### Step-by-step
 
-- [ ] **Step C.1: Write the CLI ingest test scaffolding (failing — wiring not in place).**
+- [x] **Step C.1: Write the CLI ingest test scaffolding (failing — wiring not in place).**
 
 Add `tests/test_cli_ingest.py`:
 
@@ -618,7 +618,7 @@ def test_ingest_with_crunchbase_csv_appends_source(monkeypatch, tmp_path):
     assert "HNAlgoliaSource" in source_classnames
 ```
 
-- [ ] **Step C.2: Run the tests; confirm they fail.**
+- [x] **Step C.2: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_ingest.py -v
@@ -626,7 +626,7 @@ def test_ingest_with_crunchbase_csv_appends_source(monkeypatch, tmp_path):
 
 Expected: all four tests fail. The first three fail because `_build_ingest_deps` doesn't exist yet and the stub body still echoes flags rather than dispatching. The fourth fails for the same reason.
 
-- [ ] **Step C.3: Add `_build_ingest_deps` helper to `slopmortem/cli.py`.**
+- [x] **Step C.3: Add `_build_ingest_deps` helper to `slopmortem/cli.py`.**
 
 Add next to `_build_deps`:
 
@@ -687,7 +687,7 @@ def _build_ingest_deps(
 
 If `MergeJournal`'s constructor signature differs from `MergeJournal(path)`, adjust per Step C.0a's grep.
 
-- [ ] **Step C.4: Replace `_run_ingest`'s body with real wiring.**
+- [x] **Step C.4: Replace `_run_ingest`'s body with real wiring.**
 
 Replace `slopmortem/cli.py:_run_ingest` (the existing body that just echoes flags) with:
 
@@ -769,7 +769,7 @@ from slopmortem.ingest import ingest
 
 If the actual class names differ (run `grep "^class " slopmortem/corpus/sources/*.py` to confirm), substitute correctly.
 
-- [ ] **Step C.5: Run the CLI ingest tests; confirm they pass.**
+- [x] **Step C.5: Run the CLI ingest tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_cli_ingest.py -v
@@ -777,7 +777,7 @@ If the actual class names differ (run `grep "^class " slopmortem/corpus/sources/
 
 Expected: 6 passed (the four written + two `test_ingest_deferred_flags_rejected` parametrized cases — actually 3 parametrized cases = 6 total).
 
-- [ ] **Step C.6: Update the `cli.py` module docstring.**
+- [x] **Step C.6: Update the `cli.py` module docstring.**
 
 The current docstring at `slopmortem/cli.py` line 15-17 says "The `ingest` command is unchanged from the v1 5b stub — production wiring lands in a follow-up." Update to reflect that the stub is now real:
 
@@ -793,7 +793,7 @@ follow-up plan and currently exit non-zero with a clear message.
 """
 ```
 
-- [ ] **Step C.7: Run the full test suite.**
+- [x] **Step C.7: Run the full test suite.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -804,7 +804,7 @@ follow-up plan and currently exit non-zero with a clear message.
 
 Expected: all green; test count = 229 + 6 = 235.
 
-- [ ] **Step C.8: Smoke-run the CLI surface (no real network).**
+- [x] **Step C.8: Smoke-run the CLI surface (no real network).**
 
 Verify the CLI surface is wired correctly:
 
