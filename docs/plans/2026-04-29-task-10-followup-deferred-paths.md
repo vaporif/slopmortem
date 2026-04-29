@@ -1285,7 +1285,7 @@ Apply the closure-based pattern shown in the "Why a per-synthesis counter" secti
 
 Expected: all 5 cases pass.
 
-- [ ] **Step E.8: Run the existing pipeline e2e tests** — make sure the wrapper does not break anything when Tavily is disabled (default).
+- [x] **Step E.8: Run the existing pipeline e2e tests** — make sure the wrapper does not break anything when Tavily is disabled (default).
 
 ```
 ./.venv/bin/pytest tests/test_pipeline_e2e.py -v
@@ -1293,7 +1293,7 @@ Expected: all 5 cases pass.
 
 Expected: same green count as before, 8 passed.
 
-- [ ] **Step E.9: Full sweep.**
+- [x] **Step E.9: Full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
@@ -1313,7 +1313,7 @@ Expected: all green; test count = +5 (or +4 if the disabled-case test already ex
 
 ## Final verification (after all five tasks land)
 
-- [ ] **Run the full sweep.**
+- [x] **Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -v
@@ -1325,7 +1325,7 @@ Expected: all green; test count = +5 (or +4 if the disabled-case test already ex
 
 Expected: all green; eval runner exits 0.
 
-- [ ] **Confirm the spec invariants still hold.**
+- [x] **Confirm the spec invariants still hold.**
 
 ```
 grep -RIn "deferred to a follow-up" slopmortem/cli.py
@@ -1345,7 +1345,7 @@ grep -n "tavily_calls_per_synthesis" slopmortem/config.py slopmortem/llm/tools.p
 
 Expected: present in both.
 
-- [ ] **Smoke the CLI surface (no real network).**
+- [x] **Smoke the CLI surface (no real network).**
 
 ```
 ./.venv/bin/python -m slopmortem.cli ingest --help
