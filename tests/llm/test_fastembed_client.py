@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
 
 import anyio
+import fastembed
 import pytest
 
 from slopmortem.budget import Budget
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
-
-if TYPE_CHECKING:
-    from pytest import MonkeyPatch
 
 
 def test_dim_matches_embed_dims_registry():
@@ -60,9 +57,8 @@ async def test_concurrent_ensure_loaded_loads_model_only_once():
     assert c._te is sentinel
 
 
-async def test_load_sync_failure_is_wrapped_with_prefetch_hint(monkeypatch: MonkeyPatch):
+async def test_load_sync_failure_is_wrapped_with_prefetch_hint(monkeypatch: pytest.MonkeyPatch):
     """A fastembed load failure surfaces as RuntimeError pointing at embed-prefetch."""
-    import fastembed
 
     def boom(**_kwargs: object) -> object:
         msg = "corrupted model file"
