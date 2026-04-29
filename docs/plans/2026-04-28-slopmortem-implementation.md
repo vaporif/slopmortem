@@ -2325,7 +2325,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 8.1: Failing test for synthesize**
+- [x] **Step 8.1: Failing test for synthesize**
 
 ```python
 async def test_synthesize_returns_filled_synthesis(fake_llm, fixture_candidate):
@@ -2336,7 +2336,7 @@ async def test_synthesize_returns_filled_synthesis(fake_llm, fixture_candidate):
     assert len(s.candidate_id) > 0
 ```
 
-- [ ] **Step 8.2: URL filter test (defense in depth)**
+- [x] **Step 8.2: URL filter test (defense in depth)**
 
 ```python
 async def test_synthesize_drops_off_allowlist_urls(fake_llm_returns_bad_urls,
@@ -2349,7 +2349,7 @@ async def test_synthesize_drops_off_allowlist_urls(fake_llm_returns_bad_urls,
         assert host in allowed_hosts
 ```
 
-- [ ] **Step 8.3: Injection-defense test**
+- [x] **Step 8.3: Injection-defense test**
 
 ```python
 async def test_synthesize_ignores_injected_instructions(fake_llm_replays_injection):
@@ -2359,17 +2359,17 @@ async def test_synthesize_ignores_injected_instructions(fake_llm_replays_injecti
     # And: span event prompt_injection_attempted was emitted
 ```
 
-- [ ] **Step 8.4: Implement synthesize**
+- [x] **Step 8.4: Implement synthesize**
 
 Spec body inlined into prompt; wrap in `<untrusted_document source="{candidate_id}">…</untrusted_document>`; pass `tools=synthesis_tools(config)`; build the `response_format` schema via `to_strict_response_schema(Synthesis)` (idempotent for `Synthesis` — no Optional-default fields — but consistency keeps the call sites uniform and survives future schema changes); pass `extra_body={"provider": {"require_parameters": True}}` to `llm.complete(...)` (the `LLMClient.complete` Protocol exposes `extra_body` since Task 1 — Anthropic-via-OpenRouter requires this for structured output to validate; reference: `2026-04-28-openrouter-api-corrections.md` Issue 5). Tool-loop bound at 5 turns. Tavily ≤2 calls per synthesis (track per-call).
 
 After parse: filter `Synthesis.sources` against `candidate.payload.sources` hosts ∪ `{news.ycombinator.com}` ∪ Tavily-returned hosts (if Tavily was called this turn). Drop off-allowlist URLs and emit span events.
 
-- [ ] **Step 8.5: Cache-warm pattern (called from `pipeline.py` in Task #10, but the per-candidate function lives here)**
+- [x] **Step 8.5: Cache-warm pattern (called from `pipeline.py` in Task #10, but the per-candidate function lives here)**
 
 `synthesize_all(candidates, ctx, llm)` warms with first call (asserting `cache_creation_tokens > 0`), then `asyncio.gather(*rest, return_exceptions=True)` (Blocker B2). Returns `list[Synthesis | Exception]`; the reporting path filters exceptions with logged candidate_id and notes the gap.
 
-- [ ] **Step 8.6: Render test**
+- [x] **Step 8.6: Render test**
 
 ```python
 def test_render_strips_autolinks_and_images(syrupy_snapshot):
@@ -2382,11 +2382,11 @@ def test_render_strips_autolinks_and_images(syrupy_snapshot):
     syrupy_snapshot.assert_match(structural_keys(md))
 ```
 
-- [ ] **Step 8.7: Implement `render`**
+- [x] **Step 8.7: Implement `render`**
 
 Pure function. One section per candidate: heading, similarity scores table, why-similar prose, where-diverged prose, failure causes, lessons, sources (plain text, no markdown links). Footer block with `pipeline_meta` (cost, latency, trace_id). Strip clickable autolinks: bare `http(s)://...` URLs render as plain text; `[...](...)` and `![...](...)` patterns are escaped.
 
-- [ ] **Step 8.8: Verify**
+- [x] **Step 8.8: Verify**
 
 Run: `uv run pytest tests/stages/test_synthesize.py tests/stages/test_synthesize_url_filter.py tests/stages/test_synthesize_injection_defense.py tests/stages/test_render.py -v`
 Expected: all green.
