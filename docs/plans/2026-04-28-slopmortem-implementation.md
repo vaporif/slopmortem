@@ -2043,7 +2043,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 5b.0a: Failing test for `summarize_for_rerank`**
+- [x] **Step 5b.0a: Failing test for `summarize_for_rerank`**
 
 ```python
 import pytest
@@ -2063,7 +2063,7 @@ async def test_summarize_uses_llm_via_protocol(fake_llm):
     assert summary  # non-empty
 ```
 
-- [ ] **Step 5b.0b: Implement `slopmortem/corpus/summarize.py`**
+- [x] **Step 5b.0b: Implement `slopmortem/corpus/summarize.py`**
 
 ```python
 from __future__ import annotations
@@ -2086,11 +2086,11 @@ async def summarize_for_rerank(text: str, llm: LLMClient, *, model: str | None =
 Run: `uv run pytest tests/corpus/test_summarize.py -v`
 Expected: green.
 
-- [ ] **Step 5b.0c: Wire `summarize_for_rerank` into the ingest data flow**
+- [x] **Step 5b.0c: Wire `summarize_for_rerank` into the ingest data flow**
 
 In `slopmortem/ingest.py`, between `facet_extract` and `embed_dense` (per spec lines 369–374, 498), call `summary = await summarize_for_rerank(canonical_body, llm, model=config.model_summarize)` and assign it to `payload.summary` before the chunk-and-embed step. Both the facet call and the summarize call are part of the same fan-out batch (Step 5b.5 limiter). Add an integration test in `tests/test_ingest_orchestration.py` asserting `payload.summary` is non-empty for a fixture URL after ingest.
 
-- [ ] **Step 5b.1: Idempotency test**
+- [x] **Step 5b.1: Idempotency test**
 
 ```python
 async def test_ingest_twice_no_duplicate_qdrant_points(qdrant_client, tmp_path):
@@ -2098,7 +2098,7 @@ async def test_ingest_twice_no_duplicate_qdrant_points(qdrant_client, tmp_path):
     ...
 ```
 
-- [ ] **Step 5b.2: Slop classifier integration**
+- [x] **Step 5b.2: Slop classifier integration**
 
 ```python
 async def test_slop_classified_doc_routes_to_quarantine_journal(tmp_path):
@@ -2109,7 +2109,7 @@ async def test_slop_classified_doc_routes_to_quarantine_journal(tmp_path):
 
 Use Binoculars (small open-source model, ~150 MB). Wrap classifier in `asyncio.to_thread` since it's CPU-bound. Add fastembed model load in startup.
 
-- [ ] **Step 5b.3: `--dry-run` test**
+- [x] **Step 5b.3: `--dry-run` test**
 
 ```python
 async def test_dry_run_no_writes(tmp_path):
@@ -2117,23 +2117,23 @@ async def test_dry_run_no_writes(tmp_path):
     ...
 ```
 
-- [ ] **Step 5b.4: Per-host throttle + rate-limit backoff**
+- [x] **Step 5b.4: Per-host throttle + rate-limit backoff**
 
 `429` from any source backs off that source only; the rest of the run continues. Use `slopmortem/http.py:safe_get` per-host token bucket from Task #4a.
 
-- [ ] **Step 5b.5: Bounded fan-out**
+- [x] **Step 5b.5: Bounded fan-out**
 
 Wrap the facet+summarize fan-out in `anyio.CapacityLimiter(config.ingest_concurrency)` (default 20). Use `OpenRouterClient.gather_with_limit` from Task #2.
 
-- [ ] **Step 5b.6: Cache-warm before fan-out**
+- [x] **Step 5b.6: Cache-warm before fan-out**
 
 One serial `complete(...)` call with the shared system block + `cache=True` runs first; assert `cache_creation_tokens > 0`. After that, fan-out runs cache-hot.
 
-- [ ] **Step 5b.7: Read-ratio probe on first 5 fan-out responses**
+- [x] **Step 5b.7: Read-ratio probe on first 5 fan-out responses**
 
 Per spec line 205: log `cache_read / (cache_read + cache_creation)` for the first 5 responses. If < 0.80, emit a warning span event so the operator notices before spending the full ingest budget.
 
-- [ ] **Step 5b.8: Verify**
+- [x] **Step 5b.8: Verify**
 
 Run: `uv run pytest tests/test_ingest_*.py -v`
 Expected: all green.
