@@ -18,3 +18,8 @@ class SpanEvent(StrEnum):
     CACHE_WARM_FAILED = "cache_warm_failed"
     SSRF_BLOCKED = "ssrf_blocked"
     RESOLVER_FLIP_DETECTED = "resolver_flip_detected"
+    CACHE_READ_RATIO_LOW = "cache_read_ratio_low"
+    SLOP_QUARANTINED = "slop_quarantined"
+    SOURCE_FETCH_FAILED = "source_fetch_failed"
+    INGEST_ENTRY_FAILED = "ingest_entry_failed"
+    RECONCILE_REPAIR_APPLIED = "reconcile_repair_applied"

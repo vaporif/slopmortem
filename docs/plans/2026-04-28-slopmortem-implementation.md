@@ -1947,7 +1947,7 @@ Not parallelizable with code; not a v1 software-deliverable blocker (Task #4a's 
 
 ### Step-by-step
 
-- [ ] **Step 5a.1: Tier-1 platform-blocklist test**
+- [x] **Step 5a.1: Tier-1 platform-blocklist test**
 
 ```python
 async def test_tier1_platform_domains_dont_collapse():
@@ -1961,7 +1961,7 @@ async def test_tier1_platform_domains_dont_collapse():
 
 Implementation: tier-1 returns `registrable_domain` (via `tldextract`), but if that domain is in `platform_domains.yml` (loaded from spec line 260), tier-1 skips and demotes to tier-2.
 
-- [ ] **Step 5a.2: Recycled-domain test (founding-year delta)**
+- [x] **Step 5a.2: Recycled-domain test (founding-year delta)**
 
 ```python
 async def test_recycled_domain_demotes_to_tier2():
@@ -1972,7 +1972,7 @@ async def test_recycled_domain_demotes_to_tier2():
 
 Implementation: founding_year cache keyed on `(registrable_domain, content_sha256)`; on tier-1 hit with delta > 10, demote to tier-2.
 
-- [ ] **Step 5a.3: Parent/subsidiary suffix-delta test**
+- [x] **Step 5a.3: Parent/subsidiary suffix-delta test**
 
 ```python
 async def test_parent_subsidiary_suffix_demotes():
@@ -1980,7 +1980,7 @@ async def test_parent_subsidiary_suffix_demotes():
     ...
 ```
 
-- [ ] **Step 5a.4: Alias-graph test (atomic precheck)**
+- [x] **Step 5a.4: Alias-graph test (atomic precheck)**
 
 When tier-1 hits an old domain but the new entry names a NEW canonical entity (founder blog says "we became X"), write an `acquired_by` or `rebranded_to` edge to the `aliases` table and BLOCK the merge (spec line 261).
 
@@ -2003,11 +2003,11 @@ async def test_alias_blocked_crash_recovery(journal, monkeypatch):
     ...
 ```
 
-- [ ] **Step 5a.5: Tier-3 fuzzy + Haiku tiebreaker**
+- [x] **Step 5a.5: Tier-3 fuzzy + Haiku tiebreaker**
 
 Cache decisions per `(canonical_a, canonical_b, haiku_model_id, tiebreaker_prompt_hash)`. When fuzzy similarity falls in `tier3_calibration_band` (default `[0.65, 0.85]`), write a `pending_review` row alongside the auto-applied result.
 
-- [ ] **Step 5a.6: Deterministic merge text test**
+- [x] **Step 5a.6: Deterministic merge text test**
 
 ```python
 async def test_combined_text_deterministic_across_orderings():
@@ -2017,11 +2017,11 @@ async def test_combined_text_deterministic_across_orderings():
 
 Sort sections by `(reliability_rank, source_id)` deterministically.
 
-- [ ] **Step 5a.7: Resolver-flip detection**
+- [x] **Step 5a.7: Resolver-flip detection**
 
 When the journal's `reverse_index[(source, source_id)]` returns a prior canonical_id different from the new one, mark `merge_state="resolver_flipped"`, emit `SpanEvent.RESOLVER_FLIP_DETECTED`, and DO NOT write the new canonical (repair owned by `--reconcile` drift class (f)).
 
-- [ ] **Step 5a.8: Verify**
+- [x] **Step 5a.8: Verify**
 
 Run: `uv run pytest tests/corpus/test_entity_resolution.py tests/corpus/test_merge_deterministic.py tests/corpus/test_alias_graph.py -v`
 Expected: all green.
@@ -2043,7 +2043,7 @@ Expected: all green.
 
 ### Step-by-step
 
-- [ ] **Step 5b.0a: Failing test for `summarize_for_rerank`**
+- [x] **Step 5b.0a: Failing test for `summarize_for_rerank`**
 
 ```python
 import pytest
@@ -2063,7 +2063,7 @@ async def test_summarize_uses_llm_via_protocol(fake_llm):
     assert summary  # non-empty
 ```
 
-- [ ] **Step 5b.0b: Implement `slopmortem/corpus/summarize.py`**
+- [x] **Step 5b.0b: Implement `slopmortem/corpus/summarize.py`**
 
 ```python
 from __future__ import annotations
@@ -2086,11 +2086,11 @@ async def summarize_for_rerank(text: str, llm: LLMClient, *, model: str | None =
 Run: `uv run pytest tests/corpus/test_summarize.py -v`
 Expected: green.
 
-- [ ] **Step 5b.0c: Wire `summarize_for_rerank` into the ingest data flow**
+- [x] **Step 5b.0c: Wire `summarize_for_rerank` into the ingest data flow**
 
 In `slopmortem/ingest.py`, between `facet_extract` and `embed_dense` (per spec lines 369–374, 498), call `summary = await summarize_for_rerank(canonical_body, llm, model=config.model_summarize)` and assign it to `payload.summary` before the chunk-and-embed step. Both the facet call and the summarize call are part of the same fan-out batch (Step 5b.5 limiter). Add an integration test in `tests/test_ingest_orchestration.py` asserting `payload.summary` is non-empty for a fixture URL after ingest.
 
-- [ ] **Step 5b.1: Idempotency test**
+- [x] **Step 5b.1: Idempotency test**
 
 ```python
 async def test_ingest_twice_no_duplicate_qdrant_points(qdrant_client, tmp_path):
@@ -2098,7 +2098,7 @@ async def test_ingest_twice_no_duplicate_qdrant_points(qdrant_client, tmp_path):
     ...
 ```
 
-- [ ] **Step 5b.2: Slop classifier integration**
+- [x] **Step 5b.2: Slop classifier integration**
 
 ```python
 async def test_slop_classified_doc_routes_to_quarantine_journal(tmp_path):
@@ -2109,7 +2109,7 @@ async def test_slop_classified_doc_routes_to_quarantine_journal(tmp_path):
 
 Use Binoculars (small open-source model, ~150 MB). Wrap classifier in `asyncio.to_thread` since it's CPU-bound. Add fastembed model load in startup.
 
-- [ ] **Step 5b.3: `--dry-run` test**
+- [x] **Step 5b.3: `--dry-run` test**
 
 ```python
 async def test_dry_run_no_writes(tmp_path):
@@ -2117,23 +2117,23 @@ async def test_dry_run_no_writes(tmp_path):
     ...
 ```
 
-- [ ] **Step 5b.4: Per-host throttle + rate-limit backoff**
+- [x] **Step 5b.4: Per-host throttle + rate-limit backoff**
 
 `429` from any source backs off that source only; the rest of the run continues. Use `slopmortem/http.py:safe_get` per-host token bucket from Task #4a.
 
-- [ ] **Step 5b.5: Bounded fan-out**
+- [x] **Step 5b.5: Bounded fan-out**
 
 Wrap the facet+summarize fan-out in `anyio.CapacityLimiter(config.ingest_concurrency)` (default 20). Use `OpenRouterClient.gather_with_limit` from Task #2.
 
-- [ ] **Step 5b.6: Cache-warm before fan-out**
+- [x] **Step 5b.6: Cache-warm before fan-out**
 
 One serial `complete(...)` call with the shared system block + `cache=True` runs first; assert `cache_creation_tokens > 0`. After that, fan-out runs cache-hot.
 
-- [ ] **Step 5b.7: Read-ratio probe on first 5 fan-out responses**
+- [x] **Step 5b.7: Read-ratio probe on first 5 fan-out responses**
 
 Per spec line 205: log `cache_read / (cache_read + cache_creation)` for the first 5 responses. If < 0.80, emit a warning span event so the operator notices before spending the full ingest budget.
 
-- [ ] **Step 5b.8: Verify**
+- [x] **Step 5b.8: Verify**
 
 Run: `uv run pytest tests/test_ingest_*.py -v`
 Expected: all green.

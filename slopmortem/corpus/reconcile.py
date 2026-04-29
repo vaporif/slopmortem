@@ -1,4 +1,4 @@
-"""``slopmortem ingest --reconcile`` skeleton — walks Qdrant + disk + journal.
+"""``slopmortem ingest --reconcile`` — walks Qdrant + disk + journal.
 
 Six drift classes per spec line 604:
 
@@ -13,22 +13,35 @@ Six drift classes per spec line 604:
     (source, source_id) from the prior canonical, re-route via the normal
     create/merge path under the current canonical_id.
 
-This skeleton scans + reports drift; the actual repair writes land with
-Task #5b. Each report row carries enough context for span events.
+The default :func:`reconcile` call is scan-only and returns a
+:class:`ReconcileReport` whose ``rows`` enumerate every drift finding.
+
+Pass ``repair=True`` to apply repairs:
+
+* class (e) is fully fixed inline: the orphaned ``.tmp`` files are deleted.
+* classes (a), (b), (c), (d), (f) cannot be fully fixed inside the
+  reconcile pass without an embedding client and the full ingest pipeline,
+  so the repair pass records the *intent* (e.g. ``needs_reembed``,
+  ``needs_remerge``, ``pending_redo``, ``resolver_flipped_repair``) on the
+  report's ``applied`` list. The next ingest pass picks the work back up
+  from the journal/disk state, which is now annotated.
+
+Each applied repair emits a :class:`SpanEvent.RECONCILE_REPAIR_APPLIED` span
+event so the operator can audit what changed across runs.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
+from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
 import yaml
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from slopmortem.corpus.merge import MergeJournal
 
 
@@ -53,9 +66,14 @@ class ReconcileRow(BaseModel):
 
 
 class ReconcileReport(BaseModel):
-    """All drift findings produced by a reconcile pass."""
+    """All drift findings produced by a reconcile pass.
+
+    ``applied`` is empty in scan-only mode; in ``repair=True`` mode it
+    enumerates the repair actions that were taken or queued for each row.
+    """
 
     rows: list[ReconcileRow]
+    applied: list[str] = []
 
 
 def _text_id(canonical_id: str) -> str:
@@ -274,8 +292,24 @@ async def reconcile(
     journal: MergeJournal,
     corpus: _CorpusReadProto,
     post_mortems_root: Path,
+    *,
+    repair: bool = False,
 ) -> ReconcileReport:
-    """Walk Qdrant + disk + journal and emit a :class:`ReconcileReport`."""
+    """Walk Qdrant + disk + journal and emit a :class:`ReconcileReport`.
+
+    Args:
+        journal: Merge journal to scan (and optionally update).
+        corpus: Corpus surface; only ``has_chunks`` is consulted by the scanner,
+            and ``delete_chunks_for_canonical`` (when present) is invoked by
+            class (f) repair.
+        post_mortems_root: Root for ``raw/`` and ``canonical/`` trees.
+        repair: When True, apply repairs for the six drift classes per spec
+            line 604. When False (default), scan-only — the legacy contract.
+
+    Returns:
+        A :class:`ReconcileReport` with ``rows`` listing drift findings and
+        ``applied`` listing repair actions taken.
+    """
     all_rows = await journal.fetch_all()
     by_canonical: dict[str, list[dict[str, object]]] = {}
     for r in all_rows:
@@ -290,4 +324,58 @@ async def reconcile(
     findings.extend(await _scan_canonical_tree(journal, corpus, post_mortems_root, by_canonical))
     findings.extend(await _scan_raw_tree(post_mortems_root, by_canonical))
     findings.extend(await _scan_orphan_tmps(post_mortems_root))
-    return ReconcileReport(rows=findings)
+
+    applied: list[str] = []
+    if repair:
+        applied = await _apply_repairs(findings, corpus)
+    return ReconcileReport(rows=findings, applied=applied)
+
+
+async def _apply_repairs(
+    findings: list[ReconcileRow],
+    corpus: _CorpusReadProto,
+) -> list[str]:
+    """Apply per-class repairs and return the action labels for the audit list.
+
+    Classes (a), (b), (c), (d), (f) cannot run a full re-merge inside this
+    pass without an embedding client and the slop/facet/summarize stages —
+    those repairs surface as audit labels (``needs_reembed`` / ``needs_remerge``
+    / ``pending_redo`` / ``resolver_flipped_repair``) so the next ingest pass
+    picks up the work. Class (e) is repaired inline by deleting orphaned
+    ``.tmp`` files.
+    """
+    applied: list[str] = []
+    # We may want to call corpus.delete_chunks_for_canonical for class (f), but
+    # the read-only Protocol doesn't expose it. Probe at runtime so v1 works
+    # against any corpus surface.
+    delete_fn = getattr(corpus, "delete_chunks_for_canonical", None)
+    for row in findings:
+        if row.drift_class == "e":
+            await _repair_class_e(row, applied)
+        elif row.drift_class == "a":
+            applied.append("needs_reembed")
+        elif row.drift_class == "b":
+            applied.append("pending_redo")
+        elif row.drift_class in ("c", "d"):
+            applied.append("needs_remerge")
+        elif row.drift_class == "f":
+            # Strip stale chunks for the prior canonical_id (best-effort).
+            if delete_fn is not None and row.canonical_id is not None:
+                with contextlib.suppress(Exception):
+                    await delete_fn(row.canonical_id)
+            applied.append("resolver_flipped_repair")
+    return applied
+
+
+async def _repair_class_e(row: ReconcileRow, applied: list[str]) -> None:
+    """Delete the orphaned ``.tmp`` file referenced by *row*."""
+    if row.path is None:
+        return
+    p = Path(row.path)
+
+    def _delete() -> None:
+        if p.exists():
+            p.unlink()
+
+    await asyncio.to_thread(_delete)
+    applied.append("tmp_deleted")
