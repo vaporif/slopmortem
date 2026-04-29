@@ -1,8 +1,13 @@
-from pathlib import Path
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import pytest
 
 from slopmortem.corpus.paths import safe_path
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_safe_path_canonical(tmp_path: Path):

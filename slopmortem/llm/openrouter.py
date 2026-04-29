@@ -54,10 +54,7 @@ class MidStreamError(Exception):
 _TRANSIENT_MIDSTREAM_CODES = frozenset({"overloaded_error"})
 
 
-T = TypeVar("T")
-
-
-async def gather_with_limit(
+async def gather_with_limit[T](
     coros: Iterable[Coroutine[Any, Any, T]],  # pyright: ignore[reportExplicitAny]
     limit: int,
 ) -> list[T | BaseException]:
