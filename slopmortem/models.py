@@ -218,3 +218,13 @@ class AliasEdge(BaseModel):
     target_canonical_id: str
     evidence_source_id: str
     confidence: float
+
+
+class PendingReviewRow(BaseModel):
+    """A row in the entity-resolution ``pending_review`` queue (spec line 264)."""
+
+    pair_key: str
+    similarity_score: float | None
+    haiku_decision: str | None
+    haiku_rationale: str | None
+    raw_section_heads: str | None

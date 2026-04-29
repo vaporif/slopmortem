@@ -70,9 +70,9 @@ def test_ingest_tavily_enrich_appends_enricher(
     assert "TavilyEnricher" in enricher_classnames
 
 
-@pytest.mark.parametrize("flag", ["--reconcile", "--reclassify", "--list-review"])
+@pytest.mark.parametrize("flag", ["--reconcile", "--reclassify"])
 def test_ingest_deferred_flags_rejected(flag: str, tmp_path: Path) -> None:
-    """--reconcile / --reclassify / --list-review are separate paths, not in this task."""
+    """--reconcile / --reclassify are separate paths, not in this task."""
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", flag, "--post-mortems-root", str(tmp_path)])
     assert result.exit_code != 0

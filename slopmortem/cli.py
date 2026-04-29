@@ -16,10 +16,12 @@ The ``ingest`` command assembles real :class:`Source` / :class:`Enricher`
 / :class:`MergeJournal` / :class:`Corpus` / :class:`LLMClient` /
 :class:`EmbeddingClient` / :class:`SlopClassifier` instances from
 :class:`Config` and env vars and dispatches to
-:func:`slopmortem.ingest.ingest`. The ``--reconcile``, ``--reclassify``,
-and ``--list-review`` flags are deferred to a follow-up plan and currently
-exit non-zero with a clear message; ``--tavily-enrich`` appends a
-:class:`TavilyEnricher` to the enrichers list.
+:func:`slopmortem.ingest.ingest`. ``--list-review`` is a read-only path that
+queries :class:`MergeJournal` for the pending entity-resolution review queue
+and prints it to stdout. The ``--reconcile`` and ``--reclassify`` flags are
+deferred to a follow-up plan and currently exit non-zero with a clear
+message; ``--tavily-enrich`` appends a :class:`TavilyEnricher` to the
+enrichers list.
 """
 
 from __future__ import annotations
@@ -162,8 +164,8 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     post_mortems_root: Path,
 ) -> None:
     """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
-    if reconcile or reclassify or list_review:
-        flag_name = "reconcile" if reconcile else "reclassify" if reclassify else "list-review"
+    if reconcile or reclassify:
+        flag_name = "reconcile" if reconcile else "reclassify"
         msg = (
             f"--{flag_name} is a separate orchestration path "
             "deferred to a follow-up plan; not implemented in this iteration."
@@ -176,6 +178,21 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
         config, post_mortems_root
     )
+
+    # ``--list-review`` is a read-only path: query the journal, print the queue,
+    # and exit 0. It runs before the orchestrator dispatches so it does not
+    # touch the corpus, sources, or enrichers.
+    if list_review:
+        rows = await journal.list_pending_review()
+        if not rows:
+            typer.echo("(no pending_review rows)")
+        for r in rows:
+            score = r.similarity_score
+            decision = r.haiku_decision
+            rationale = r.haiku_rationale
+            typer.echo(f"{r.pair_key}\tscore={score}\tdecision={decision}\trationale={rationale}")
+        return
+
     # The ingest-side Corpus Protocol is wider than the query-side one used by
     # ``_set_corpus``; the underlying ``QdrantCorpus`` instance satisfies both.
     _set_corpus(cast("Corpus", corpus))

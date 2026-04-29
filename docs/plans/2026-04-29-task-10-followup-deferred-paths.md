@@ -369,9 +369,9 @@ Expected: all green; test count = (Plan #1 baseline) + 5 new + 1 test inverted (
 
 ### Step-by-step
 
-- [ ] **Step B.1: Read spec line 264 and the existing `pending_review` table schema in `slopmortem/corpus/merge.py:76`.**
+- [x] **Step B.1: Read spec line 264 and the existing `pending_review` table schema in `slopmortem/corpus/merge.py:76`.**
 
-- [ ] **Step B.2: Define `PendingReviewRow` failing test.**
+- [x] **Step B.2: Define `PendingReviewRow` failing test.**
 
 `tests/test_list_review.py`:
 
@@ -466,7 +466,7 @@ def test_cli_list_review_prints_queue(monkeypatch, tmp_path: Path):
     assert "0.78" in result.output
 ```
 
-- [ ] **Step B.3: Run the tests; confirm they fail.**
+- [x] **Step B.3: Run the tests; confirm they fail.**
 
 ```
 ./.venv/bin/pytest tests/test_list_review.py -v
@@ -474,7 +474,7 @@ def test_cli_list_review_prints_queue(monkeypatch, tmp_path: Path):
 
 Expected: imports fail (`PendingReviewRow` does not exist), or runtime failures (`list_pending_review` does not exist).
 
-- [ ] **Step B.4: Add `PendingReviewRow` to `slopmortem/models.py`.**
+- [x] **Step B.4: Add `PendingReviewRow` to `slopmortem/models.py`.**
 
 ```python
 class PendingReviewRow(BaseModel):
@@ -487,7 +487,7 @@ class PendingReviewRow(BaseModel):
     raw_section_heads: str | None
 ```
 
-- [ ] **Step B.5: Add `MergeJournal.list_pending_review` to `slopmortem/corpus/merge.py`.**
+- [x] **Step B.5: Add `MergeJournal.list_pending_review` to `slopmortem/corpus/merge.py`.**
 
 ```python
 async def list_pending_review(self) -> list[PendingReviewRow]:
@@ -516,7 +516,7 @@ def _list_pending_review_sync(self) -> list[PendingReviewRow]:
 
 The exact private helper signature depends on the existing `MergeJournal` patterns (run `grep "to_thread\|_sync" slopmortem/corpus/merge.py` and follow the existing form).
 
-- [ ] **Step B.6: Wire the CLI path.**
+- [x] **Step B.6: Wire the CLI path.**
 
 In `slopmortem/cli.py:_run_ingest`, find the deferred-flag block Plan #1 added that exits 1 on `list_review` and replace with a real path. Order matters — `list_review` must be checked BEFORE the orchestrator dispatches:
 
@@ -546,7 +546,7 @@ if reconcile or reclassify:
     # ... unchanged rejection until Tasks C / D land ...
 ```
 
-- [ ] **Step B.7: Run the tests; confirm they pass.**
+- [x] **Step B.7: Run the tests; confirm they pass.**
 
 ```
 ./.venv/bin/pytest tests/test_list_review.py -v
@@ -555,7 +555,7 @@ if reconcile or reclassify:
 
 Update `test_ingest_deferred_flags_rejected` from Plan #1 to no longer parametrize over `--list-review` — now only `--reconcile` and `--reclassify` are deferred.
 
-- [ ] **Step B.8: Run the full sweep.**
+- [x] **Step B.8: Run the full sweep.**
 
 ```
 ./.venv/bin/pytest tests/ -q
