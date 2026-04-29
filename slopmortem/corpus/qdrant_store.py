@@ -326,6 +326,7 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
         return None
 
     from datetime import datetime  # noqa: PLC0415
+
     from qdrant_client.models import (  # noqa: PLC0415
         DatetimeRange,
         FieldCondition,
@@ -335,8 +336,9 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
 
     # ``DatetimeRange.gte`` is typed ``datetime | date | None``; the runtime
     # accepts ISO strings via pydantic coercion but the stub is strict.
-    # Parse once here so the rest of this function stays narrow.
-    cutoff_dt = datetime.fromisoformat(cutoff_iso.replace("Z", "+00:00"))
+    # Parse once here so the rest of this function stays narrow. Python 3.11+
+    # ``fromisoformat`` accepts the trailing ``Z`` directly, no replace needed.
+    cutoff_dt = datetime.fromisoformat(cutoff_iso)
 
     branch_a_must: list[Any] = [  # type: ignore[explicit-any]
         FieldCondition(key="failure_date_unknown", match=MatchValue(value=False)),
