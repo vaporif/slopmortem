@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 import anyio
 
