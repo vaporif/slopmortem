@@ -65,9 +65,9 @@ tests/fixtures/cassettes/
     <row_id>/
       embed__nomic-ai_nomic-embed-text-v1.5__<text_hash>.json
       embed__Qdrant_bm25__<text_hash>.json
-      facet_extract__anthropic__claude-sonnet-4-6__<prompt_hash>.json
-      llm_rerank__anthropic__claude-sonnet-4-6__<prompt_hash>.json
-      synthesize__anthropic__claude-sonnet-4-6__<prompt_hash>.json
+      facet_extract__anthropic__claude-sonnet-4.6__<prompt_hash>.json
+      llm_rerank__anthropic__claude-sonnet-4.6__<prompt_hash>.json
+      synthesize__anthropic__claude-sonnet-4.6__<prompt_hash>.json
       ... (one file per fan-out branch)
   e2e/
     test_full_pipeline_with_fake_clients/
@@ -78,18 +78,18 @@ tests/fixtures/cassettes/
       ...
 ```
 
-Dense-embedding filenames reflect whichever model was active at record time: `nomic-ai_nomic-embed-text-v1.5` under the default `fastembed` provider, `text-embedding-3-small` (or `-large`) under `openai`. The slugifier (see "Model slug in filenames" below) handles all of `/`, `:`, `@` uniformly, so `nomic-ai/nomic-embed-text-v1.5` → `nomic-ai_nomic-embed-text-v1.5` falls out of the same rule that produces `Qdrant_bm25` and `anthropic_claude-sonnet-4-6_beta`.
+Dense-embedding filenames reflect whichever model was active at record time: `nomic-ai_nomic-embed-text-v1.5` under the default `fastembed` provider, `text-embedding-3-small` (or `-large`) under `openai`. The slugifier (see "Model slug in filenames" below) handles all of `/`, `:`, `@` uniformly, so `nomic-ai/nomic-embed-text-v1.5` → `nomic-ai_nomic-embed-text-v1.5` falls out of the same rule that produces `Qdrant_bm25` and `anthropic_claude-sonnet-4.6_beta`.
 
 Filenames use the full 16-char hash (no truncation) so collision risk is negligible. The repeated `embed__<model>__<hash>.json` per scope (same text re-embedded across scopes) is intentional duplication — keeping every cassette inside its scope is what makes the atomic-swap-per-scope guarantee work.
 
-**Model slug in filenames.** OpenRouter model ids contain `/` (e.g. `anthropic/claude-sonnet-4-6`) and may carry suffixes like `:beta`, `:nitro`, `:free` — `:` is forbidden on Windows filesystems, `/` is interpreted as a path separator. Filenames replace any character not in `[A-Za-z0-9._-]` with `_` (single regex covers `/`, `:`, `@`, and any future surprises). The original unescaped model id stays in the JSON `key.model` field; the filename slug is purely a filesystem concern and is never parsed back. A single helper `_slugify_model(model: str) -> str` in `slopmortem/evals/cassettes.py` does the substitution; both recording wrappers and replay loaders import it.
+**Model slug in filenames.** OpenRouter model ids contain `/` (e.g. `anthropic/claude-sonnet-4.6`) and may carry suffixes like `:beta`, `:nitro`, `:free` — `:` is forbidden on Windows filesystems, `/` is interpreted as a path separator. Filenames replace any character not in `[A-Za-z0-9._-]` with `_` (single regex covers `/`, `:`, `@`, and any future surprises). The original unescaped model id stays in the JSON `key.model` field; the filename slug is purely a filesystem concern and is never parsed back. A single helper `_slugify_model(model: str) -> str` in `slopmortem/evals/cassettes.py` does the substitution; both recording wrappers and replay loaders import it.
 
 5. **Corpus fixture.** `tests/fixtures/corpus_fixture.jsonl` (~30 documents). Each line:
 
 ```json
 {
   "canonical_id": "...",
-  "dense": [1536 floats],
+  "dense": [768 floats],     // 768 under fastembed default; 1536 if embedding_provider="openai" with text-embedding-3-small
   "sparse_indices": [...],
   "sparse_values": [...],
   "payload": { full CandidatePayload shape }
@@ -121,7 +121,7 @@ InputContext → FakeEmbeddingClient (dense cassette) ┐
 ### Data flow at record time
 
 ```
-InputContext → RecordingEmbeddingClient → real OpenAI → dense cassette file
+InputContext → RecordingEmbeddingClient → real EmbeddingClient (fastembed by default, OpenAI if opted in) → dense cassette file
               RecordingSparseEncoder    → live fastembed BM25 → sparse cassette file
                       ↓
                  Qdrant query (real fixture)
@@ -185,8 +185,9 @@ slopmortem/evals/
   runner.py ──→ cassettes.py ──→ slopmortem/llm/fake.py, fake_embeddings.py
      │              ▲
      │              └── recording.py ──→ slopmortem/llm/openrouter.py
-     │                                    slopmortem/llm/openai_embeddings.py
-     │                                    slopmortem/corpus/sparse.py (BM25 encoder)
+     │                                    slopmortem/llm/fastembed_client.py    # default
+     │                                    slopmortem/llm/openai_embeddings.py   # opt-in
+     │                                    slopmortem/corpus/embed_sparse.py (BM25 encoder)
      │
      ├──→ recording_helper.py ──→ recording.py + qdrant_setup.py
      │
@@ -206,7 +207,7 @@ Imports are one-way `evals → llm` and `evals → corpus`. Recording wrappers l
   "schema_version": 1,
   "key": {
     "template_sha": "<full hex>",
-    "model": "anthropic/claude-sonnet-4-6",
+    "model": "anthropic/claude-sonnet-4.6",
     "prompt_hash": "<16 hex chars>"
   },
   "response": {
@@ -272,7 +273,7 @@ The `key.model` field is whatever string `EmbeddingClient.model` returned at rec
 }
 ```
 
-Same envelope as the dense embedding cassette (`schema_version`, `key`, `response`, `request_debug`); discriminator is the `key.model` value (`"Qdrant/bm25"` for sparse, `"text-embedding-3-small"` etc. for dense). Loaders dispatch by model, so a single `load_embedding_cassettes()` call returns one map of dense vectors and one of sparse `(indices, values)` tuples — both keyed `(model, text_hash)`.
+Same envelope as the dense embedding cassette (`schema_version`, `key`, `response`, `request_debug`); discriminator is the `key.model` value (`"Qdrant/bm25"` for sparse, `"nomic-ai/nomic-embed-text-v1.5"` / `"text-embedding-3-small"` etc. for dense). Loaders dispatch by model, so a single `load_embedding_cassettes()` call returns one map of dense vectors and one of sparse `(indices, values)` tuples — both keyed `(model, text_hash)`.
 
 ### Corpus fixture JSONL
 
@@ -287,9 +288,9 @@ One JSON object per line, schema described under Architecture overview. ~50KB pe
   "recording_metadata": {
     "recorded_at": "...",
     "models": {
-      "facet": "anthropic/claude-haiku-4-5",
-      "rerank": "anthropic/claude-sonnet-4-6",
-      "synthesize": "anthropic/claude-sonnet-4-6",
+      "facet": "anthropic/claude-haiku-4.5",
+      "rerank": "anthropic/claude-sonnet-4.6",
+      "synthesize": "anthropic/claude-sonnet-4.6",
       "embedding": "nomic-ai/nomic-embed-text-v1.5",
       "embedding_provider": "fastembed"
     }
@@ -325,7 +326,7 @@ def embed_cassette_key(text: str, model: str) -> tuple[str, str]:
     return (model, h)
 ```
 
-`embed_cassette_key` is shared by dense and sparse embedding cassettes; the discriminator is `model` (`"text-embedding-3-small"` for dense, `"Qdrant/bm25"` for sparse). All three functions live in `slopmortem/evals/cassettes.py` and are imported by both recording wrappers and replay loaders. Single source of truth.
+`embed_cassette_key` is shared by dense and sparse embedding cassettes; the discriminator is `model` (`"nomic-ai/nomic-embed-text-v1.5"` for dense under the fastembed default, `"text-embedding-3-small"` / `-large` under the OpenAI opt-in, `"Qdrant/bm25"` for sparse). All three functions live in `slopmortem/evals/cassettes.py` and are imported by both recording wrappers and replay loaders. Single source of truth.
 
 ## Recording flow
 
