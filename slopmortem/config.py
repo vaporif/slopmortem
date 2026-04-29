@@ -40,8 +40,9 @@ class Config(BaseSettings):
     model_rerank: str = "anthropic/claude-sonnet-4.6"
     model_synthesize: str = "anthropic/claude-sonnet-4.6"
 
-    embedding_provider: str = "openai"
-    embed_model_id: str = "text-embedding-3-small"
+    embedding_provider: str = "fastembed"
+    embed_model_id: str = "nomic-ai/nomic-embed-text-v1.5"
+    embed_cache_dir: Path | None = None
     retry_max_attempts: int = 3
     retry_initial_backoff: float = 1.0
 

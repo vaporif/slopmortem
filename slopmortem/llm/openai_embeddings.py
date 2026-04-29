@@ -25,7 +25,15 @@ if TYPE_CHECKING:
 EMBED_DIMS: dict[str, int] = {
     "text-embedding-3-small": 1536,
     "text-embedding-3-large": 3072,
+    "nomic-ai/nomic-embed-text-v1.5": 768,
 }
+
+OPENAI_EMBED_MODELS: frozenset[str] = frozenset(
+    {
+        "text-embedding-3-small",
+        "text-embedding-3-large",
+    }
+)
 
 _PRICES_PATH = Path(__file__).resolve().parent / "prices.yml"
 _PRICES: dict[str, Any] = yaml.safe_load(_PRICES_PATH.read_text())  # pyright: ignore[reportExplicitAny]
@@ -56,8 +64,11 @@ class OpenAIEmbeddingClient:
         sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
         """Bind an SDK instance, budget, and tunable retry knobs."""
-        if model not in EMBED_DIMS:
-            msg = f"unknown embed model {model!r}; add it to EMBED_DIMS"
+        if model not in OPENAI_EMBED_MODELS:
+            msg = (
+                f"OpenAIEmbeddingClient does not support model {model!r}; "
+                f"valid choices: {sorted(OPENAI_EMBED_MODELS)}"
+            )
             raise ValueError(msg)
         self._sdk = sdk
         self._budget = budget
@@ -74,6 +85,8 @@ class OpenAIEmbeddingClient:
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
         """Embed *texts* and settle the real cost against the budget."""
         eff_model = model or self.model
+        if not texts:
+            return EmbeddingResult(vectors=[], n_tokens=0, cost_usd=0.0)
         rate = _input_rate_per_million(eff_model)
         # Reserve a conservative ceiling assuming ~1k tokens per text in the
         # worst case. The real cost is settled from usage.total_tokens after.

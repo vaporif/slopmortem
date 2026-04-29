@@ -61,7 +61,7 @@
 - `fastembed.TextEmbedding(model_name=...)` is a sync API. Wrap it with `anyio.to_thread.run_sync` (already used elsewhere in the codebase — see `slopmortem/ingest.py:49`).
 - The fastembed model is ~550 MB on disk. The lazy-load contract (no disk I/O in `__init__`) lets CLI smoke tests construct the client without downloading.
 
-- [ ] **Step 1.1: Write the failing dim test**
+- [x] **Step 1.1: Write the failing dim test**
 
 Create `tests/llm/test_fastembed_client.py` (the file is owned by Task 4 but a single dim assertion lives here as the TDD entrypoint for Task 1; Task 4 expands it). Add:
 
@@ -81,12 +81,12 @@ def test_dim_matches_embed_dims_registry():
 
 `pytest` is imported up-front so subsequent Task 4 steps can append tests that use `pytest.raises` without inserting a mid-file import (which would trip ruff `E402`).
 
-- [ ] **Step 1.2: Run the test and verify it fails**
+- [x] **Step 1.2: Run the test and verify it fails**
 
 Run: `uv run pytest tests/llm/test_fastembed_client.py::test_dim_matches_embed_dims_registry -v`
 Expected: FAIL with `ModuleNotFoundError: slopmortem.llm.fastembed_client`.
 
-- [ ] **Step 1.3: Add `nomic-ai/nomic-embed-text-v1.5` to `EMBED_DIMS` and split the OpenAI-allowed-model set**
+- [x] **Step 1.3: Add `nomic-ai/nomic-embed-text-v1.5` to `EMBED_DIMS` and split the OpenAI-allowed-model set**
 
 `EMBED_DIMS` is the shared dimensionality registry consumed by both the OpenAI client and the new fastembed client. After this change it also contains `nomic-ai/nomic-embed-text-v1.5`, which `OpenAIEmbeddingClient` cannot price or serve. To keep the `__init__` guard strict, introduce a separate `OPENAI_EMBED_MODELS` constant and have the OpenAI client validate against it instead.
 
@@ -126,7 +126,7 @@ to:
 
 This keeps `EMBED_DIMS` as the shared dim registry (read by `dim`, the qdrant collection sizing, and the fastembed client) while preventing a misconfigured `OpenAIEmbeddingClient(model="nomic-ai/...")` from constructing successfully and crashing later inside `_input_rate_per_million`.
 
-- [ ] **Step 1.4: Create `slopmortem/llm/fastembed_client.py` with the minimal class**
+- [x] **Step 1.4: Create `slopmortem/llm/fastembed_client.py` with the minimal class**
 
 Write the full implementation (all subsequent tests in Task 4 will need it):
 
@@ -246,12 +246,12 @@ Notes:
 - Token count goes through fastembed's public `te.token_count(texts)` API rather than reaching into `te.model.tokenizer`, which is `None` until the ONNX session loads under `lazy_load=True`. `token_count` itself triggers the load when needed.
 - `# pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]` follows the established repo pattern (see `slopmortem/ingest.py:204`); a bare `# type: ignore` would either be flagged as unnecessary by basedpyright's strict config or fail to suppress strict-mode `reportAny` / `reportUnknown*` errors.
 
-- [ ] **Step 1.5: Run the dim test and verify it passes**
+- [x] **Step 1.5: Run the dim test and verify it passes**
 
 Run: `uv run pytest tests/llm/test_fastembed_client.py::test_dim_matches_embed_dims_registry -v`
 Expected: PASS.
 
-- [ ] **Step 1.6: Add the empty-input short-circuit to `OpenAIEmbeddingClient`**
+- [x] **Step 1.6: Add the empty-input short-circuit to `OpenAIEmbeddingClient`**
 
 In `slopmortem/llm/openai_embeddings.py`, modify `embed` (currently at `:74`). Insert immediately after the `eff_model = model or self.model` line:
 
@@ -262,7 +262,7 @@ if not texts:
 
 This avoids reserving a non-zero ceiling and calling the SDK with empty `input` (the OpenAI SDK errors today). It mirrors the new fastembed contract and keeps the two providers identical on edges.
 
-- [ ] **Step 1.7: Add a regression test for the OpenAI empty-input short-circuit**
+- [x] **Step 1.7: Add a regression test for the OpenAI empty-input short-circuit**
 
 Append to `tests/llm/test_embeddings.py`:
 
@@ -276,7 +276,7 @@ async def test_openai_embed_empty_input_returns_empty_without_calling_sdk(fake_s
     fake_sdk.embeddings.create.assert_not_called()
 ```
 
-- [ ] **Step 1.8: Re-export the new client from `slopmortem/llm/__init__.py`**
+- [x] **Step 1.8: Re-export the new client from `slopmortem/llm/__init__.py`**
 
 Edit `slopmortem/llm/__init__.py`. Replace its single docstring line with:
 
@@ -295,17 +295,17 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 1.9: Verify `pyproject.toml` already declares `fastembed`**
+- [x] **Step 1.9: Verify `pyproject.toml` already declares `fastembed`**
 
 Run: `grep '^  "fastembed' pyproject.toml`
 Expected: a line like `"fastembed>=0.8",`. If absent, add it under `[project] dependencies`.
 
-- [ ] **Step 1.10: Refresh the lock file**
+- [x] **Step 1.10: Refresh the lock file**
 
 Run: `uv lock`
 Expected: `uv.lock` either unchanged or updated to a resolved fastembed pin. No new errors.
 
-- [ ] **Step 1.11: Run the full embeddings test file**
+- [x] **Step 1.11: Run the full embeddings test file**
 
 Run: `uv run pytest tests/llm/test_embeddings.py tests/llm/test_fastembed_client.py -v`
 Expected: all existing tests still pass; the new `test_openai_embed_empty_input_returns_empty_without_calling_sdk` and `test_dim_matches_embed_dims_registry` pass.
@@ -323,7 +323,7 @@ Expected: all existing tests still pass; the new `test_openai_embed_empty_input_
 - `Config.settings_customise_sources` (`slopmortem/config.py:74`) places the TOML source after env, so the TOML value wins at runtime. If only `config.py` defaults flip but `slopmortem.toml` still pins `"openai"`, the runtime default is `"openai"` and the change is a no-op.
 - `embed_cache_dir` is `Path | None`. Pydantic-settings parses TOML strings into `Path` automatically; `None` is the type default and means "let fastembed pick".
 
-- [ ] **Step 2.1: Write a failing test for the config default**
+- [x] **Step 2.1: Write a failing test for the config default**
 
 Append to `tests/llm/test_embeddings.py` (existing test file, has the imports already):
 
@@ -338,12 +338,12 @@ def test_config_defaults_to_fastembed_with_nomic(tmp_path, monkeypatch):
     assert cfg.embed_cache_dir is None
 ```
 
-- [ ] **Step 2.2: Run the test and verify it fails**
+- [x] **Step 2.2: Run the test and verify it fails**
 
 Run: `uv run pytest tests/llm/test_embeddings.py::test_config_defaults_to_fastembed_with_nomic -v`
 Expected: FAIL — `embedding_provider == "openai"` and `AttributeError` on `embed_cache_dir`.
 
-- [ ] **Step 2.3: Edit `slopmortem/config.py` defaults**
+- [x] **Step 2.3: Edit `slopmortem/config.py` defaults**
 
 Replace `slopmortem/config.py:43-44`:
 
@@ -362,12 +362,12 @@ embed_cache_dir: Path | None = None
 
 `Path` is already imported at `slopmortem/config.py:5`.
 
-- [ ] **Step 2.4: Run the config test and verify it passes**
+- [x] **Step 2.4: Run the config test and verify it passes**
 
 Run: `uv run pytest tests/llm/test_embeddings.py::test_config_defaults_to_fastembed_with_nomic -v`
 Expected: PASS.
 
-- [ ] **Step 2.5: Flip `slopmortem.toml:18-19`**
+- [x] **Step 2.5: Flip `slopmortem.toml:18-19`**
 
 Replace:
 
@@ -385,12 +385,12 @@ embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 
 Do not add `embed_cache_dir` to the TOML — leave it absent so users default to `~/.cache/fastembed` without needing to know about the override.
 
-- [ ] **Step 2.6: Verify the TOML override matches code**
+- [x] **Step 2.6: Verify the TOML override matches code**
 
 Run: `uv run python -c "from slopmortem.config import load_config; c = load_config(); print(c.embedding_provider, c.embed_model_id, c.embed_cache_dir)"`
 Expected output: `fastembed nomic-ai/nomic-embed-text-v1.5 None`.
 
-- [ ] **Step 2.7: Confirm ingest tests still read from config rather than literals**
+- [x] **Step 2.7: Confirm ingest tests still read from config rather than literals**
 
 Run: `uv run pytest tests/test_ingest_dry_run.py tests/test_ingest_idempotency.py tests/test_ingest_orchestration.py -q`
 Expected: all pass. They construct `FakeEmbeddingClient(model=cfg.embed_model_id)`, so the new default flows through automatically.
@@ -409,7 +409,7 @@ Expected: all pass. They construct `FakeEmbeddingClient(model=cfg.embed_model_id
 - `embed-prefetch` is a new typer command registered on the existing `app = typer.Typer(...)` at `slopmortem/cli.py:76`. It calls `load_config()`, builds an embedder with a throwaway `Budget`, calls `_ensure_loaded()`, and exits 0; on failure it prints to stderr and exits 1.
 - For the `OPENAI_API_KEY` env var: today both `_build_deps` and `_build_ingest_deps` unconditionally read `os.environ["OPENAI_API_KEY"]`. After the refactor, when `embedding_provider == "fastembed"` no key should be required. Move the OpenAI-only env read inside the `"openai"` branch of the factory.
 
-- [ ] **Step 3.1: Write a failing test for the factory's provider dispatch**
+- [x] **Step 3.1: Write a failing test for the factory's provider dispatch**
 
 Create `tests/llm/test_embedder_factory.py`:
 
@@ -446,12 +446,12 @@ def test_factory_raises_on_unknown_provider():
         _make_embedder(cfg, Budget(0.0))
 ```
 
-- [ ] **Step 3.2: Run the factory tests and verify they fail**
+- [x] **Step 3.2: Run the factory tests and verify they fail**
 
 Run: `uv run pytest tests/llm/test_embedder_factory.py -v`
 Expected: FAIL with `ImportError: cannot import name '_make_embedder' from slopmortem.cli`.
 
-- [ ] **Step 3.3: Add the import for `FastEmbedEmbeddingClient` to `slopmortem/cli.py`**
+- [x] **Step 3.3: Add the import for `FastEmbedEmbeddingClient` to `slopmortem/cli.py`**
 
 Replace `slopmortem/cli.py:55`:
 
@@ -466,7 +466,7 @@ from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 ```
 
-- [ ] **Step 3.4: Add `_make_embedder` to `slopmortem/cli.py`**
+- [x] **Step 3.4: Add `_make_embedder` to `slopmortem/cli.py`**
 
 Insert the following helper immediately above `_build_deps` (currently at `slopmortem/cli.py:336`):
 
@@ -500,7 +500,7 @@ def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
 
 Actually `Config` and `EmbeddingClient` are both inside `TYPE_CHECKING`. They are used here only as type annotations on the function signature, so they stay inside `TYPE_CHECKING` and the annotations work because of `from __future__ import annotations` at the top of the file (`slopmortem/cli.py:28`).
 
-- [ ] **Step 3.5: Replace inline construction in `_build_deps`**
+- [x] **Step 3.5: Replace inline construction in `_build_deps`**
 
 In `slopmortem/cli.py:361-366`, replace:
 
@@ -519,7 +519,7 @@ with:
     embedder = _make_embedder(config, budget)
 ```
 
-- [ ] **Step 3.6: Replace inline construction in `_build_ingest_deps`**
+- [x] **Step 3.6: Replace inline construction in `_build_ingest_deps`**
 
 In `slopmortem/cli.py:442-447`, replace:
 
@@ -538,12 +538,12 @@ with:
     embedder = _make_embedder(config, budget)
 ```
 
-- [ ] **Step 3.7: Run the factory tests and verify they pass**
+- [x] **Step 3.7: Run the factory tests and verify they pass**
 
 Run: `uv run pytest tests/llm/test_embedder_factory.py -v`
 Expected: all three tests PASS.
 
-- [ ] **Step 3.8: Add the `embed-prefetch` subcommand**
+- [x] **Step 3.8: Add the `embed-prefetch` subcommand**
 
 Append to `slopmortem/cli.py` (just above `if __name__ == "__main__":` at `:519`):
 
@@ -577,12 +577,12 @@ async def _embed_prefetch() -> None:
     typer.echo(f"slopmortem: prefetched {config.embed_model_id} into the fastembed cache")
 ```
 
-- [ ] **Step 3.9: Smoke-test the new subcommand wires up**
+- [x] **Step 3.9: Smoke-test the new subcommand wires up**
 
 Run: `uv run slopmortem embed-prefetch --help`
 Expected: typer prints help text including `embed-prefetch` description; exit code 0.
 
-- [ ] **Step 3.10: Run the full test suite to confirm no regressions in CLI wiring**
+- [x] **Step 3.10: Run the full test suite to confirm no regressions in CLI wiring**
 
 Run: `uv run pytest tests/ -q -x --ignore=tests/llm/test_fastembed_client.py`
 Expected: all pre-existing tests pass. (We exclude the slow fastembed file because its model-loading tests land in Task 4 and need a live model download.)
@@ -603,7 +603,7 @@ Expected: all pre-existing tests pass. (We exclude the slow fastembed file becau
 - For the unknown-model test, we don't need a live model — the `__init__` raises before any disk work.
 - `tests/llm/test_embedder_factory.py` was created in Task 3 and is complete. No changes here.
 
-- [ ] **Step 4.1: Add the `slow` marker to `pyproject.toml`**
+- [x] **Step 4.1: Add the `slow` marker to `pyproject.toml`**
 
 Edit `pyproject.toml` `[tool.pytest.ini_options].markers`. Replace:
 
@@ -622,7 +622,7 @@ markers = [
 ]
 ```
 
-- [ ] **Step 4.2: Add the empty-input test (no model load)**
+- [x] **Step 4.2: Add the empty-input test (no model load)**
 
 Append to `tests/llm/test_fastembed_client.py`:
 
@@ -637,7 +637,7 @@ async def test_embed_empty_returns_empty_without_loading_model():
     assert c._te is None  # noqa: SLF001 — explicit lazy-load contract assertion
 ```
 
-- [ ] **Step 4.3: Add the unknown-model test (no model load)**
+- [x] **Step 4.3: Add the unknown-model test (no model load)**
 
 Append to `tests/llm/test_fastembed_client.py`:
 
@@ -649,7 +649,7 @@ def test_unknown_model_raises_with_embed_dims_in_message():
 
 `pytest` is already imported at the top of the file from Step 1.1 — do not add another import.
 
-- [ ] **Step 4.4: Add the per-call model-override rejection test**
+- [x] **Step 4.4: Add the per-call model-override rejection test**
 
 Append to `tests/llm/test_fastembed_client.py`:
 
@@ -660,7 +660,7 @@ async def test_per_call_model_override_rejected():
         await c.embed(["x"], model="text-embedding-3-small")
 ```
 
-- [ ] **Step 4.5: Add the slow real-model integration test**
+- [x] **Step 4.5: Add the slow real-model integration test**
 
 Append to `tests/llm/test_fastembed_client.py`:
 
@@ -685,22 +685,22 @@ async def test_embed_returns_normalized_vectors_with_correct_dim(tmp_path):
     assert r.n_tokens > 0
 ```
 
-- [ ] **Step 4.6: Run the fast-lane tests (should pass without downloading the model)**
+- [x] **Step 4.6: Run the fast-lane tests (should pass without downloading the model)**
 
 Run: `uv run pytest tests/llm/test_fastembed_client.py -v -m "not slow"`
 Expected: `test_dim_matches_embed_dims_registry`, `test_embed_empty_returns_empty_without_loading_model`, `test_unknown_model_raises_with_embed_dims_in_message`, `test_per_call_model_override_rejected` all PASS. The slow test is collected and skipped.
 
-- [ ] **Step 4.7: Run the slow lane to confirm the integration test works on a real model**
+- [x] **Step 4.7: Run the slow lane to confirm the integration test works on a real model**
 
 Run: `uv run pytest tests/llm/test_fastembed_client.py::test_embed_returns_normalized_vectors_with_correct_dim -v -m slow`
 Expected: PASS (first run downloads ~550MB into `tmp_path`, subsequent runs use the same fixture path and re-download). If your environment has no network, mark this step DEFERRED in the PR description and run it locally before merge.
 
-- [ ] **Step 4.8: Final whole-suite check**
+- [x] **Step 4.8: Final whole-suite check**
 
 Run: `uv run pytest tests/ -m "not slow" -q`
 Expected: all tests pass; no regressions in ingest, retrieve, evals, or CLI tests.
 
-- [ ] **Step 4.9: Lint and typecheck**
+- [x] **Step 4.9: Lint and typecheck**
 
 Run: `uv run ruff check . && uv run ruff format --check . && uv run basedpyright`
 Expected: clean.
