@@ -2,9 +2,12 @@
 
 import ipaddress
 import socket
+from typing import Final
 from urllib.parse import urlparse
 
 import httpx
+
+USER_AGENT: Final[str] = "slopmortem/0.1.0 (+https://github.com/vaporif/premortem)"
 
 _BLOCKED_IMDS_HOSTS = frozenset(
     {
@@ -90,13 +93,14 @@ def _resolve_and_validate(url: str) -> str:
 async def safe_get(
     url: str,
     *,
+    user_agent: str = USER_AGENT,
     timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
 ) -> httpx.Response:
     """Fetch *url* via httpx after enforcing scheme and DNS-pinned SSRF checks."""
     host = _resolve_and_validate(url)
     transport = httpx.AsyncHTTPTransport()
     async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:
-        return await client.get(url, headers={"Host": host})
+        return await client.get(url, headers={"Host": host, "User-Agent": user_agent})
 
 
 async def safe_post(
@@ -104,6 +108,7 @@ async def safe_post(
     *,
     json: dict[str, object] | None = None,
     headers: dict[str, str] | None = None,
+    user_agent: str = USER_AGENT,
     timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
 ) -> httpx.Response:
     """POST *json* to *url* via httpx after enforcing the same SSRF policy as ``safe_get``.
@@ -113,7 +118,7 @@ async def safe_post(
     synthesis tools (``/search`` and ``/extract`` are POST-only).
     """
     host = _resolve_and_validate(url)
-    merged_headers: dict[str, str] = {"Host": host}
+    merged_headers: dict[str, str] = {"Host": host, "User-Agent": user_agent}
     if headers:
         merged_headers.update(headers)
     transport = httpx.AsyncHTTPTransport()
