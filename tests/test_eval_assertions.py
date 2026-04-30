@@ -55,11 +55,6 @@ def test_where_diverged_nonempty_real_text_is_true() -> None:
     assert where_diverged_nonempty(_synth(where_diverged="diverged here")) is True
 
 
-# ---------------------------------------------------------------------------
-# all_sources_in_allowed_domains
-# ---------------------------------------------------------------------------
-
-
 def test_all_sources_empty_is_vacuously_true() -> None:
     s = _synth(sources=[])
     assert all_sources_in_allowed_domains(s, {"news.ycombinator.com"}) is True
@@ -92,11 +87,6 @@ def test_all_sources_unparseable_url_is_false() -> None:
     s = _synth(sources=["not a url at all"])
     allowed = {"news.ycombinator.com"}
     assert all_sources_in_allowed_domains(s, allowed) is False
-
-
-# ---------------------------------------------------------------------------
-# lifespan_months_positive
-# ---------------------------------------------------------------------------
 
 
 def test_lifespan_none_is_true() -> None:

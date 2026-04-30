@@ -53,7 +53,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
         llm: Async :class:`LLMClient` impl. ``cache=True`` is set so the
             shared rubric block hits the prompt cache across calls within
             the 5-min TTL.
-        config: :class:`Config` — ``N_synthesize`` is the load-bearing knob
+        config: :class:`Config`. ``N_synthesize`` is the load-bearing knob
             for the post-parse length check.
         model: Optional override of the LLM client's default model. ``None``
             lets the client pick.

@@ -1,7 +1,7 @@
-"""Integration tests for the retrieve stage + QdrantCorpus.query FormulaQuery impl.
+"""Integration tests for the retrieve stage and ``QdrantCorpus.query`` FormulaQuery impl.
 
 The four cases below are gated on ``@pytest.mark.requires_qdrant`` and exercise
-the live FormulaQuery + recency-branch + facet-skip-other behavior end-to-end
+the live FormulaQuery, recency branches, and facet-skip-other behavior end-to-end
 against a Qdrant service on ``localhost:6333``.
 """
 
@@ -75,7 +75,7 @@ def _to_iso(d: date | None) -> str | None:
 
 
 def _build_payload_dict(canonical_id: str, payload: CandidatePayload) -> dict[str, object]:
-    """Render a CandidatePayload into the Qdrant payload dict, with ISO dates."""
+    """Render a ``CandidatePayload`` into the Qdrant payload dict, with ISO dates."""
     pd = payload.model_dump(mode="json")
     # Qdrant DatetimeRange compares ISO-8601 strings.
     pd["founding_date"] = _to_iso(payload.founding_date)
@@ -114,11 +114,11 @@ async def _seed(  # noqa: PLR0913 — test helper threading every payload field
 async def fixture_corpus(
     qdrant_client, tmp_path
 ) -> AsyncIterator[tuple[QdrantCorpus, str, FakeEmbeddingClient]]:
-    """Create a fresh collection + QdrantCorpus instance scoped to one test.
+    """Create a fresh collection and ``QdrantCorpus`` instance scoped to one test.
 
     Uses ``facet_boost=10.0`` so a 4-facet match overwhelms RRF tie-breaking
-    noise (Qdrant tie-breaks identical RRF positions by point id, not
-    symmetrically — see qdrant#5182). The production value 0.01 is verified
+    noise. Qdrant tie-breaks identical RRF positions by point id, not
+    symmetrically (see qdrant#5182). The production value 0.01 is verified
     separately by reading-side unit tests; this fixture covers the
     FormulaQuery wiring shape, not the calibrated value.
     """
@@ -141,7 +141,7 @@ async def fixture_corpus(
 
 @pytest.mark.requires_qdrant
 async def test_retrieve_with_facet_boost_outranks_unboosted(qdrant_client, fixture_corpus):
-    """Three docs at the same dense+sparse score: full-facet match must rank first."""
+    """Three docs at the same dense and sparse score: full-facet match must rank first."""
     corpus, name, embed = fixture_corpus
     # Use the same query embedding for every seed so the dense $score is identical;
     # the only differentiator is the facet-match boost.
@@ -254,7 +254,7 @@ async def test_strict_deaths_filters_unknown(qdrant_client, fixture_corpus):
     [qvec] = (await embed.embed([description])).vectors
 
     facets = _facets()
-    # branch A doc — should appear.
+    # branch A doc: should appear.
     await _seed(
         qdrant_client,
         name,
@@ -268,7 +268,7 @@ async def test_strict_deaths_filters_unknown(qdrant_client, fixture_corpus):
             failure_date=date(2023, 6, 1),
         ),
     )
-    # branch C doc — should NOT appear under --strict-deaths.
+    # branch C doc: should NOT appear under --strict-deaths.
     await _seed(
         qdrant_client,
         name,
@@ -305,7 +305,7 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
     """Facet value ``"other"`` must NOT enter the FormulaQuery boost condition.
 
     If ``"other"`` were included, a doc that bucketed every facet to ``other``
-    would match the boost and outrank a doc with no field overlap; we assert
+    would match the boost and outrank a doc with no field overlap. We assert
     boost equality instead, by querying with all-other and confirming the
     ranking is independent of which facet bucket the candidate landed in.
     """
@@ -354,8 +354,8 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
     # Query with all-"other" facets: the FormulaQuery must skip every "other"
     # entry, leaving NO boost condition active. With ``facet_boost=10.0``
     # (see fixture), an active 5-facet boost would yield score >= ~50.
-    # We assert no candidate's score crosses the no-boost ceiling — Qdrant's
-    # RRF $score caps at 1.0 with two channels — regardless of which facet
+    # We assert no candidate's score crosses the no-boost ceiling (Qdrant's
+    # RRF $score caps at 1.0 with two channels) regardless of which facet
     # bucket the candidate landed in. This confirms "other" did not enter
     # the FormulaQuery condition.
     candidates = await retrieve(

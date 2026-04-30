@@ -29,8 +29,8 @@ _DEFAULT_MODEL = "test-model"
 
 
 def _canned(text: str, *, description: str) -> dict[tuple[str, str, str], FakeResponse]:
-    # ``extract_facets`` is called without an explicit model, so
-    # ``FakeLLMClient`` keys lookups on its ``default_model``.
+    # ``extract_facets`` is called without an explicit model, so ``FakeLLMClient``
+    # keys lookups on its ``default_model``.
     rendered = render_prompt("facet_extract", description=description)
     return {
         llm_canned_key("facet_extract", model=_DEFAULT_MODEL, prompt=rendered): FakeResponse(

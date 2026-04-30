@@ -45,7 +45,7 @@ class GetPostMortemArgs(BaseModel):
 
 
 class SearchCorpusArgs(BaseModel):
-    """Arguments for ``search_corpus``: query string + optional facet filters."""
+    """Arguments for ``search_corpus``: query string and optional facet filters."""
 
     q: str
     facets: dict[str, str] | None = None
@@ -53,7 +53,7 @@ class SearchCorpusArgs(BaseModel):
 
 
 class SearchHit(BaseModel):
-    """A single corpus search result; minimal fields the LLM needs to reason about."""
+    """A single corpus search result with the minimal fields the LLM reasons about."""
 
     canonical_id: str
     name: str
@@ -81,7 +81,7 @@ def _set_corpus(c: Corpus) -> None:
     """Bind the module-level :class:`Corpus` used by ``_get_post_mortem`` / ``_search_corpus``.
 
     Called once at CLI startup so tool functions stay plain ``async def``.
-    Tests pass a fake here and reset to ``None`` in teardown.
+    Tests pass a fake and reset to ``None`` in teardown.
     """
     global _corpus  # noqa: PLW0603 — the module-level binding is the public init surface
     _corpus = c
@@ -103,7 +103,7 @@ async def _search_corpus(
     raw = await _corpus.search_corpus(q, facets=facets)
     hits: list[SearchHit] = []
     for row in raw[:limit]:
-        # Corpus.search_corpus returns list[dict[str, Any]]; impls vary
+        # Corpus.search_corpus returns list[dict[str, Any]]. Impls vary
         # (Qdrant payload shapes, fakes, future stores), so per-row dict
         # values are deliberately Any. Coerce each field to its expected
         # scalar type at this boundary.
@@ -127,7 +127,7 @@ def _tavily_api_key() -> str:
     callables are passed bare to OpenRouter's function-calling surface and
     the existing ``_set_corpus`` indirection would not extend cleanly to a
     second binding. ``TAVILY_API_KEY`` is the documented surface in the
-    spec (§Auth, §Synthesis tool registry).
+    spec (Auth, Synthesis tool registry).
     """
     key = os.environ.get("TAVILY_API_KEY", "")
     if not key:
@@ -137,7 +137,7 @@ def _tavily_api_key() -> str:
 
 
 async def _tavily_search(q: str, limit: int = 5) -> str:
-    r"""Search the live web via Tavily and return a compact text summary for the LLM.
+    r"""Search the live web via Tavily and return a text summary for the LLM.
 
     Reads ``TAVILY_API_KEY`` from the environment at call time. Returns a
     newline-joined ``- title — url\n  snippet`` listing, capped at

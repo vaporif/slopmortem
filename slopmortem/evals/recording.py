@@ -129,7 +129,7 @@ class RecordingEmbeddingClient:
     def model(self) -> str:
         """Forward the wrapped client's ``model`` attribute (not part of the Protocol)."""
         # The EmbeddingClient Protocol does not expose `.model`, but every concrete
-        # impl (OpenAI/Fake) does — accept the dynamic attribute access at the seam.
+        # impl (OpenAI/Fake) does. Accept the dynamic attribute access at the seam.
         inner_model: object = getattr(self._inner, "model", "")
         return str(inner_model) if inner_model else ""
 

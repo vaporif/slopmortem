@@ -1,5 +1,5 @@
 # pyright: reportAny=false
-"""Entity resolution: tier-1 / tier-2 / tier-3 canonical_id derivation.
+"""Entity resolution: tier-1, tier-2, tier-3 canonical_id derivation.
 
 ``resolve_entity`` returns a :class:`ResolveResult` with the chosen
 canonical_id, the action (``create`` / ``merge`` / ``resolver_flipped`` /
@@ -59,8 +59,6 @@ if TYPE_CHECKING:
     from slopmortem.models import AliasEdge, RawEntry
 
 
-# ─── Module-level constants ────────────────────────────────────────────────────
-
 _PLATFORM_DOMAINS_YAML = Path(__file__).resolve().parent / "sources" / "platform_domains.yml"
 _CORPORATE_HIERARCHY_YAML = (
     Path(__file__).resolve().parent / "sources" / "corporate_hierarchy_overrides.yml"
@@ -97,9 +95,6 @@ _DEFAULT_TIER3_BAND: tuple[float, float] = (0.65, 0.85)
 _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
 
 
-# ─── Public dataclass returned by the resolver ─────────────────────────────────
-
-
 @dataclass(frozen=True, slots=True)
 class ResolveResult:
     """Outcome of a resolve_entity call.
@@ -120,9 +115,6 @@ class ResolveResult:
     action: Literal["create", "merge", "resolver_flipped", "alias_blocked"]
     prior_canonical_id: str | None = None
     span_events: list[str] = field(default_factory=list)
-
-
-# ─── YAML loaders (cached at import time) ──────────────────────────────────────
 
 
 def _load_platform_domains() -> frozenset[str]:

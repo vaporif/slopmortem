@@ -209,8 +209,8 @@ class _ByModelLLM:
         """Forward ``complete`` to the wrapper keyed by ``model``.
 
         Raises:
-            KeyError: When ``model`` is ``None`` or not in the dispatch table —
-                callers must always pass an explicit model.
+            KeyError: When ``model`` is ``None`` or not in the dispatch table.
+                Callers must always pass an explicit model.
         """
         if model is None or model not in self._by_model:
             msg = f"no recording wrapper for model={model!r}"

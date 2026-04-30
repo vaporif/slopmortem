@@ -98,7 +98,7 @@ class OpenRouterClient:
         self._initial_backoff = initial_backoff
         self._sleep: Callable[[float], Awaitable[None]] = sleep or anyio.sleep
 
-    async def complete(  # noqa: C901, PLR0913, PLR0915 - public surface mirrors OpenAI chat.create kwargs.
+    async def complete(  # noqa: C901, PLR0912, PLR0913, PLR0915 - mirrors OpenAI chat.create kwargs.
         self,
         prompt: str,
         *,
@@ -157,9 +157,7 @@ class OpenRouterClient:
                         if retry_usage is not None:
                             ptd = getattr(retry_usage, "prompt_tokens_details", None)
                             cache_read += getattr(ptd, "cached_tokens", 0) or 0 if ptd else 0
-                            cache_write += (
-                                getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
-                            )
+                            cache_write += getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
                             cost += getattr(retry_usage, "cost", 0.0) or 0.0
                         retry_choice = retry_resp.choices[0]
                         if retry_choice.finish_reason == "stop":
@@ -184,7 +182,9 @@ class OpenRouterClient:
                         spec = registered[name]
                         spec.args_model.model_validate(args)
                         result = await spec.fn(**args)
-                        wrapped = f'<untrusted_document source="{name}">\n{result}\n</untrusted_document>'
+                        wrapped = (
+                            f'<untrusted_document source="{name}">\n{result}\n</untrusted_document>'
+                        )
                         messages.append(
                             {
                                 "role": "tool",

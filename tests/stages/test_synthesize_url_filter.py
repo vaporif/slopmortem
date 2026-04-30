@@ -1,4 +1,4 @@
-"""URL allowlist filter test for synthesize: drops sources whose host isn't in the allowlist."""
+"""URL allowlist filter test for synthesize: drops sources whose host is not in the allowlist."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def _ctx() -> InputContext:
 
 
 def _bad_synthesis_payload() -> str:
-    """Synthesis JSON whose `sources` mixes an allowed acme.com URL with attacker.com."""
+    """Synthesis JSON whose ``sources`` mixes an allowed acme.com URL with attacker.com."""
     return json.dumps(
         {
             "candidate_id": "acme-corp",
@@ -94,13 +94,13 @@ async def test_synthesize_drops_off_allowlist_urls() -> None:
 
     s = await synthesize(cand, _ctx(), fake_llm, Config(), model=_DEFAULT_MODEL)
 
-    # Allowed: every host in candidate.payload.sources, plus the fixed allowlist.
+    # Allowed hosts: every host in candidate.payload.sources, plus the fixed allowlist.
     allowed_hosts = {"acme.com", "news.ycombinator.com"}
     for url in s.sources:
         host = urlparse(url).hostname
         assert host in allowed_hosts, f"leaked off-allowlist url: {url}"
 
-    # The clean URLs survive; attacker.com and malicious.example are gone.
+    # Clean URLs survive; attacker.com and malicious.example are gone.
     assert "https://acme.com/postmortem" in s.sources
     assert any("news.ycombinator.com" in u for u in s.sources)
     assert not any("attacker.com" in u for u in s.sources)

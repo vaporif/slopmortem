@@ -1,4 +1,4 @@
-# ruff: noqa: FBT002 — typer signatures are bool flags with False defaults by convention.
+# ruff: noqa: FBT002 - typer signatures are bool flags with False defaults by convention.
 """Top-level CLI entry point: ``slopmortem ingest``, ``query``, and ``replay``.
 
 The ``query`` command is the production entry point for the synthesis pipeline.
@@ -107,7 +107,7 @@ app = typer.Typer(
 
 
 @app.command("ingest")
-def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwargs.
+def ingest_cmd(  # noqa: PLR0913 - every flag mirrors the spec; user types kwargs.
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Count entries that would be ingested; write nothing.")
     ] = False,
@@ -196,7 +196,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
 async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
     """Re-run the slop classifier across quarantined rows and print the summary."""
     journal = await _build_journal(config, post_mortems_root)
-    # reclassify is a live operation that must hit the slop judge for real;
+    # reclassify is a live operation that hits the slop judge for real;
     # construct only the LLM (no embedder/qdrant) and route it into the
     # Haiku-backed classifier.
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
@@ -238,7 +238,7 @@ async def _run_reconcile(config: Config, post_mortems_root: Path) -> None:
 
 
 @observe(name="cli.ingest")
-async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide.
+async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
     *,
     dry_run: bool,
     force: bool,
@@ -304,9 +304,9 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
     progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
         RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
-    # Catch + print any exception that escapes the orchestrator BEFORE the
+    # Catch and print any exception that escapes the orchestrator BEFORE the
     # Rich live render tears down. Without this, ``Progress.__exit__`` clears
-    # the screen and the traceback can interleave invisibly with bar redraws —
+    # the screen and the traceback can interleave invisibly with bar redraws,
     # exactly what happened with the Wesabe / "collection doesn't exist" run.
     err_console = Console(stderr=True)
     try:
@@ -333,10 +333,10 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
         err_console.rule("[bold yellow]ingest cancelled (Ctrl-C)", style="yellow")
         raise
     except BaseException:
-        # Catch ``BaseException`` (asyncio.CancelledError, SystemExit, etc.) too —
+        # Catch ``BaseException`` (asyncio.CancelledError, SystemExit, etc.) too.
         # ``except Exception`` alone misses these and they exit silently when
-        # Rich's live render tears down. We print + re-raise so the caller still
-        # sees a non-zero exit; this is purely for visibility.
+        # Rich's live render tears down. We print and re-raise so the caller
+        # still sees a non-zero exit; this is purely for visibility.
         err_console.rule("[bold red]ingest failed", style="red")
         err_console.print_exception(show_locals=False)
         raise
@@ -349,11 +349,6 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
 def _default_curated_yaml() -> Path:
     """Return the in-tree curated post-mortem YAML path shipped with the package."""
     return Path(__file__).parent / "corpus" / "sources" / "curated" / "post_mortems_v0.yml"
-
-
-# ---------------------------------------------------------------------------
-# query
-# ---------------------------------------------------------------------------
 
 
 @app.command("query")
@@ -386,11 +381,12 @@ def query_cmd(
 ) -> None:
     """Run the synthesis pipeline against *description* and print a Markdown report.
 
-    Streams stage progress to stderr (TTY-gated) while the pipeline runs; emits
-    the rendered :class:`Report` to stdout when done. Tracing wiring (Laminar)
-    is gated on ``Config.enable_tracing`` plus a present ``LMNR_PROJECT_API_KEY``.
-    When the API key is missing but tracing is enabled, a one-line warning goes
-    to stderr and the run continues without tracing.
+    Streams stage progress to stderr (TTY-gated) while the pipeline runs;
+    emits the rendered :class:`Report` to stdout when done. Tracing wiring
+    (Laminar) is gated on ``Config.enable_tracing`` and a present
+    ``LMNR_PROJECT_API_KEY``. When the API key is missing but tracing is
+    enabled, a one-line warning goes to stderr and the run continues without
+    tracing.
     """
     anyio.run(
         functools.partial(
@@ -522,7 +518,7 @@ def _maybe_init_tracing(config: Config) -> None:
         return
     api_key = config.lmnr_project_api_key.get_secret_value()
     if not api_key:
-        print(  # noqa: T201 — CLI surface; intentional stderr write
+        print(  # noqa: T201 - CLI surface; intentional stderr write
             "slopmortem: LMNR_PROJECT_API_KEY missing; tracing disabled",
             file=sys.stderr,
         )
@@ -566,7 +562,7 @@ def _build_deps(
     All credentials and connection settings come from :class:`Config`, which
     pydantic-settings populates from env vars, ``.env``, and TOML.
     """
-    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
+    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 - heavy dep, lazy import
 
     budget = Budget(cap_usd=config.max_cost_usd_per_query)
 
@@ -638,7 +634,7 @@ async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> Inges
     separate setup step. Without this, ``upsert_chunk`` fails with
     ``Collection 'slopmortem' doesn't exist`` on the first write.
     """
-    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
+    from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 - heavy dep, lazy import
 
     from slopmortem.corpus.qdrant_store import ensure_collection  # noqa: PLC0415
     from slopmortem.llm.openai_embeddings import EMBED_DIMS  # noqa: PLC0415
@@ -657,7 +653,7 @@ async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> Inges
         facet_boost=config.facet_boost,
         rrf_k=config.rrf_k,
     )
-    # ``QdrantCorpus`` ships ``upsert_chunk`` but not yet ``has_chunks`` /
+    # ``QdrantCorpus`` ships ``upsert_chunk`` but not yet ``has_chunks`` or
     # ``delete_chunks_for_canonical`` (production gap tracked separately);
     # cast at this boundary so the CLI surface compiles against the strict
     # ingest-side ``Corpus`` Protocol declared in :mod:`slopmortem.ingest`.
@@ -670,7 +666,7 @@ async def _build_ingest_deps(
     *,
     dry_run: bool,
 ) -> tuple[LLMClient, EmbeddingClient, IngestCorpus, Budget, MergeJournal, SlopClassifier]:
-    """Construct the full ingest-side wiring: LLM / embed / corpus / budget / journal / classifier.
+    """Construct the full ingest-side wiring: LLM, embed, corpus, budget, journal, classifier.
 
     Mirrors :func:`_build_deps` but uses ``max_cost_usd_per_ingest`` for the
     budget cap and additionally constructs a :class:`MergeJournal` and the
@@ -702,10 +698,6 @@ async def _build_ingest_deps(
     return llm, embedder, corpus, budget, journal, classifier
 
 
-# ---------------------------------------------------------------------------
-# ingest progress (Rich)
-# ---------------------------------------------------------------------------
-
 # Phase labels keyed on the IngestPhase enum so any new phase added in
 # ``slopmortem.ingest`` flags here at type-check time as a missing label.
 _INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
@@ -722,8 +714,8 @@ class RichIngestProgress:
 
     Holds one :class:`rich.progress.Progress` instance with a task per phase.
     Task IDs are created lazily on ``start_phase`` so phases the run skips
-    (e.g. cache_warm in dry-run) don't appear as empty bars. ``log`` writes a
-    grey one-liner above the bars via the same console, so messages don't
+    (e.g. cache_warm in dry-run) don't appear as empty bars. ``log`` writes
+    a grey one-liner above the bars via the same console so messages don't
     fight the progress redraw.
     """
 
@@ -781,7 +773,7 @@ class RichIngestProgress:
     def start_phase(self, phase: IngestPhase, total: int | None) -> None:
         """Create or reset the bar for *phase* with the expected ``total``.
 
-        ``total=None`` -> indeterminate (Rich pulses the bar; ETA blank).
+        ``total=None`` means indeterminate (Rich pulses the bar; ETA blank).
         Used by ``GATHER`` when no ``--limit`` caps the run.
         """
         if phase in self._tasks:
@@ -800,7 +792,7 @@ class RichIngestProgress:
         """Complete *phase*'s bar and stop its spinner.
 
         For indeterminate phases (``total is None``), freeze the bar by
-        setting ``total = completed`` — otherwise Rich keeps it pulsing
+        setting ``total = completed``; otherwise Rich keeps it pulsing
         even after the work is done.
         """
         tid = self._tasks.get(phase)
@@ -852,10 +844,6 @@ def _render_ingest_result(console: Console, result: IngestResult) -> None:
         table.add_row(k, v)
     console.print(table)
 
-
-# ---------------------------------------------------------------------------
-# query progress (Rich)
-# ---------------------------------------------------------------------------
 
 _QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
     QueryPhase.FACET_EXTRACT: "Extracting facets",
@@ -977,11 +965,6 @@ def _render_query_footer(console: Console, report: Report, n_target: int) -> Non
     console.print("[bold cyan]done[/bold cyan] • " + " • ".join(parts))
 
 
-# ---------------------------------------------------------------------------
-# replay
-# ---------------------------------------------------------------------------
-
-
 @app.command("replay")
 def replay_cmd(
     dataset: Annotated[
@@ -1018,9 +1001,9 @@ async def _replay(dataset: str) -> None:
             line = raw_line.strip()
             if not line:
                 continue
-            # ``json.loads`` returns ``Any`` by design; the per-site ignore narrows
-            # the unknown payload to ``object``. ``InputContext.model_validate`` is
-            # the strict boundary.
+            # ``json.loads`` returns ``Any`` by design; the per-site ignore
+            # narrows the unknown payload to ``object``.
+            # ``InputContext.model_validate`` is the strict boundary.
             row: object = json.loads(line)  # pyright: ignore[reportAny]
             ctx = InputContext.model_validate(row)
             report = await run_query(
@@ -1035,11 +1018,6 @@ async def _replay(dataset: str) -> None:
             if bar is not None:
                 _render_query_footer(bar.console, report, n_target=config.N_synthesize)
             typer.echo(render(report))
-
-
-# ---------------------------------------------------------------------------
-# embed-prefetch
-# ---------------------------------------------------------------------------
 
 
 @app.command("embed-prefetch")

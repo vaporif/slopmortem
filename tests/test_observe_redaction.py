@@ -45,11 +45,8 @@ if TYPE_CHECKING:
 
     from slopmortem.llm.client import CompletionResult
 
-# ---------------------------------------------------------------------------
 # Inlined fakes (copied verbatim in spirit from tests/test_pipeline_e2e.py;
 # extracting a shared fixture is out of scope for this test file).
-# ---------------------------------------------------------------------------
-
 _FACET_MODEL = "test-facet"
 _RERANK_MODEL = "test-rerank"
 _SYNTH_MODEL = "test-synth"
@@ -203,7 +200,7 @@ class _FakeCorpus:
     candidates: list[Candidate]
     queries: list[dict[str, object]] = field(default_factory=list)
 
-    async def query(  # noqa: PLR0913 — Protocol contract dictates the signature
+    async def query(  # noqa: PLR0913 - Protocol contract dictates the signature
         self,
         *,
         dense: list[float],

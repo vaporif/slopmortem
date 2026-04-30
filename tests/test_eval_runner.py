@@ -1,6 +1,6 @@
 """Integration tests for :mod:`slopmortem.evals.runner`.
 
-Invokes ``main(argv)`` directly — never spawns a subprocess. Tests run the
+Invokes ``main(argv)`` directly, never spawns a subprocess. Tests run the
 deterministic path (no env vars, no Qdrant, no real API calls) by
 monkeypatching ``run_query`` to return a hand-built Report.
 """

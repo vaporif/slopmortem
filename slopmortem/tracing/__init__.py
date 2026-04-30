@@ -1,6 +1,6 @@
 """Init guard for the laminar tracer. Refuses non-loopback endpoints by default.
 
-Also exposes small helpers for run-identity attributes on root spans:
+Also exposes helpers for run-identity attributes on root spans:
 :func:`mint_run_id` and :func:`git_sha`.
 """
 

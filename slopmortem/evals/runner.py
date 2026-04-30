@@ -493,15 +493,10 @@ async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, d
             config=cfg,
             budget=budget,
         )
-        # In --live we have no payload-lookup; pass eval_corpus=None so
+        # In --live we have no payload-lookup. Pass eval_corpus=None so
         # allowed_hosts collapses to the fixed allowlist.
         results[rid] = _score_report(report, eval_corpus=None)
     return results
-
-
-# ---------------------------------------------------------------------------
-# Baseline diffing
-# ---------------------------------------------------------------------------
 
 
 def _diff_against_baseline(
@@ -521,7 +516,7 @@ def _diff_against_baseline(
     if not isinstance(raw_rows, dict):
         warnings.append("baseline.rows is not a dict; treating as empty")
         raw_rows = {}
-    # Narrow once; pyright infers ``dict[Unknown, Unknown]`` from the runtime
+    # Narrow once. Pyright infers ``dict[Unknown, Unknown]`` from the runtime
     # check, which is good enough for this scope.
     baseline_rows = cast("dict[str, dict[str, object]]", raw_rows)
 
@@ -559,8 +554,8 @@ def _diff_row(
     for cand_id, base_results in base_assertions.items():
         cur_results = cur_assertions.get(cand_id)
         if cur_results is None:
-            # Baseline had a candidate that the current run didn't synthesize —
-            # only a regression if the baseline asserted something true.
+            # Baseline had a candidate that the current run didn't synthesize.
+            # Only a regression if the baseline asserted something true.
             if any(bool(v) for v in base_results.values()):
                 out.append(f"row {row_id!r} candidate {cand_id!r}: missing from current run")
             continue
@@ -594,11 +589,6 @@ def _load_baseline(path: Path) -> dict[str, object]:
 def _serialize_results(results: dict[str, dict[str, object]]) -> dict[str, object]:
     """Wrap per-row results in the normative baseline-file envelope."""
     return {"version": _BASELINE_VERSION, "rows": results}
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 
 def _build_argparser() -> argparse.ArgumentParser:
@@ -720,7 +710,7 @@ def main(argv: list[str] | None = None) -> None:
     ns = parser.parse_args(argv)
     # ``argparse.Namespace`` attributes are ``Any`` by design (argparse
     # builds the namespace dynamically). We narrow each at the boundary
-    # with explicit casts; ``--store_true`` flags read out as ``bool``.
+    # with explicit casts. ``--store_true`` flags read out as ``bool``.
     dataset_path = cast("Path", ns.dataset)
     baseline_path = cast("Path", ns.baseline)
     live = cast("bool", ns.live)
@@ -749,7 +739,6 @@ def main(argv: list[str] | None = None) -> None:
 
     baseline = _load_baseline(baseline_path)
 
-    # Per-row pass/fail to stdout
     for row_id, row_results in results.items():
         assertions_obj = row_results.get("assertions", {})
         if not isinstance(assertions_obj, dict):

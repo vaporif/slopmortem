@@ -4,7 +4,7 @@
 The fixture is a regenerable artifact (run ``just eval-record-corpus``).
 This module bridges a populated Qdrant collection and a human-diffable
 JSONL file. The per-file ``reportAny`` / ``reportUnknown*`` silences match
-the SDK-boundary pattern in ``slopmortem/corpus/qdrant_store.py``, since
+the SDK-boundary pattern in ``slopmortem/corpus/qdrant_store.py``, because
 Qdrant's models surface ``Optional`` / ``Mapping`` everywhere.
 """
 

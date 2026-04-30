@@ -23,7 +23,7 @@ def _stub_sparse(_text: str) -> dict[int, float]:
 
 def _canned() -> dict[tuple[str, str, str], FakeResponse]:
     # dry_run exits before any LLM call, so the canned dict is unused at runtime.
-    # Empty is valid; we keep the function for parity with the non-dry-run files.
+    # Empty is valid; the function exists for parity with the non-dry-run files.
     return {}
 
 
@@ -80,12 +80,9 @@ async def test_dry_run_counts_but_writes_nothing(tmp_path, cfg):
     assert result.dry_run is True
     assert result.would_process == n_entries
     assert result.processed == 0
-    # Nothing in journal.
     assert await journal.fetch_all() == []
     assert await journal.fetch_quarantined() == []
-    # Nothing in corpus.
     assert corpus.points == []
-    # Nothing on disk.
     raw_root = root / "raw"
     canonical_root = root / "canonical"
     assert not raw_root.exists() or not any(raw_root.rglob("*.md"))

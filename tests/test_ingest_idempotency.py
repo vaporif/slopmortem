@@ -40,7 +40,7 @@ def _facets() -> str:
 
 
 def _canned() -> dict[tuple[str, str, str], FakeResponse]:
-    """Build canned entries for one ingest of `_BODY`: cache-warm + facet + fanout summarize."""
+    """Build canned entries for one ingest of `_BODY`: cache-warm, facet, and fanout summarize."""
     facets_resp = FakeResponse(
         text=_facets(),
         cache_creation_tokens=1000,
@@ -96,7 +96,6 @@ async def test_ingest_twice_no_duplicate_points(tmp_path, cfg):
     classifier = FakeSlopClassifier(default_score=0.0)
     root = tmp_path / "post_mortems"
 
-    # Run #1.
     r1 = await ingest(
         sources=[_OneShotSource()],
         enrichers=[],
@@ -114,7 +113,7 @@ async def test_ingest_twice_no_duplicate_points(tmp_path, cfg):
     n_points_after_1 = len(corpus.points)
     assert n_points_after_1 >= 1
 
-    # Run #2 — same corpus + journal + classifier. Skip-key should short-circuit.
+    # Run #2: same corpus, journal, classifier. Skip-key should short-circuit.
     r2 = await ingest(
         sources=[_OneShotSource()],
         enrichers=[],
@@ -129,7 +128,6 @@ async def test_ingest_twice_no_duplicate_points(tmp_path, cfg):
         sparse_encoder=_stub_sparse,
     )
     assert r2.skipped >= 1
-    # No new points appended.
     assert len(corpus.points) == n_points_after_1
 
 
@@ -173,9 +171,8 @@ async def test_ingest_force_bypasses_skip_key(tmp_path, cfg):
         force=True,
         sparse_encoder=_stub_sparse,
     )
-    # With force, processed is non-zero (re-processed).
     assert r2.processed >= 1
     assert r2.skipped == 0
-    # delete-then-re-upsert: same canonical_id produces the same chunk count.
-    # No duplicate orphans should remain.
+    # delete-then-re-upsert: same canonical_id produces the same chunk count;
+    # no duplicate orphans should remain.
     assert len(corpus.points) == n1

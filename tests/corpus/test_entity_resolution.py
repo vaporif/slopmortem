@@ -82,9 +82,6 @@ async def _seed_complete(journal, *, canonical_id: str, source: str, source_id: 
     )
 
 
-# ─── Step 5a.1: tier-1 platform-blocklist ──────────────────────────────────────
-
-
 async def test_tier1_platform_domains_dont_collapse(journal, embed_client):
     e1 = make_entry(
         url="https://username.medium.com/post-mortem-acme",
@@ -116,9 +113,6 @@ async def test_tier1_non_platform_domain_uses_registrable(journal, embed_client)
     )
     assert r.canonical_id == "acme.com"
     assert r.action == "create"
-
-
-# ─── Step 5a.2: recycled-domain founding-year delta ────────────────────────────
 
 
 async def test_recycled_domain_demotes_to_tier2(journal, embed_client):
@@ -171,9 +165,6 @@ async def test_recycled_domain_within_decade_does_not_demote(journal, embed_clie
     assert r2.canonical_id == r1.canonical_id
 
 
-# ─── Step 5a.3: parent/subsidiary suffix delta ─────────────────────────────────
-
-
 async def test_parent_subsidiary_suffix_demotes(journal, embed_client):
     e1 = make_entry(url="https://www.acme.com/p1", source_id="1")
     r1 = await resolve_entity(
@@ -205,9 +196,6 @@ async def test_same_name_no_suffix_delta_does_not_demote(journal, embed_client):
     assert r2.canonical_id == r1.canonical_id
 
 
-# ─── Step 5a.5: tier-3 fuzzy + Haiku tiebreaker ────────────────────────────────
-
-
 async def test_tier3_high_similarity_auto_merges(journal, embed_client):
     e1 = make_entry(
         url="https://a.medium.com/p1",
@@ -228,7 +216,7 @@ async def test_tier3_high_similarity_auto_merges(journal, embed_client):
     r2 = await resolve_entity(
         e2, journal=journal, embed_client=embed_client, name="Acme", sector="saas"
     )
-    # Tier-2 (name + sector) collapses these — both forced off tier-1 by platform blocklist.
+    # Tier-2 (name + sector) collapses these; both are forced off tier-1 by the platform blocklist.
     assert r2.canonical_id == r1.canonical_id
 
 
@@ -336,9 +324,6 @@ async def test_tier3_decision_is_cached(journal, embed_client):
     assert len(fake_llm.calls) == 1
 
 
-# ─── Step 5a.7: resolver-flip detection ────────────────────────────────────────
-
-
 async def test_resolver_flip_detected(journal, embed_client):
     await _seed_complete(journal, canonical_id="old.com", source="curated", source_id="1")
     e2 = make_entry(url="https://www.new-canonical.com/p", source_id="1")
@@ -351,9 +336,6 @@ async def test_resolver_flip_detected(journal, embed_client):
     assert len(rows) == 1
     assert rows[0]["merge_state"] == MergeState.RESOLVER_FLIPPED.value
     assert SpanEvent.RESOLVER_FLIP_DETECTED.value in result.span_events
-
-
-# ─── Generic shape tests ────────────────────────────────────────────────────────
 
 
 async def test_resolve_returns_typed_result(journal, embed_client):

@@ -53,7 +53,7 @@ def safe_path(
 ) -> Path:
     """Build a validated path under *base* for the given doc *kind*; refuse traversal."""
     base = Path(base).resolve()
-    # Cast lets us inspect at runtime — callers may pass an unknown string and
+    # Cast lets us inspect at runtime; callers may pass an unknown string and
     # we want a friendly ValueError rather than a Literal-typing assert.
     match cast("str", kind):
         case "raw":

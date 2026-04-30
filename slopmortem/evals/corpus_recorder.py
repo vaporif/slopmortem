@@ -10,7 +10,7 @@ Operator-only. Builds ``tests/fixtures/corpus_fixture.jsonl`` by:
 3. Scrolling the collection out via ``dump_collection_to_jsonl`` and atomically
    swapping a ``.recording`` temp file into place.
 
-Gated on ``RUN_LIVE=1`` — every run hits OpenRouter and the embedder, so the
+Gated on ``RUN_LIVE=1``. Every run hits OpenRouter and the embedder, so the
 gate exists to prevent accidental spend.
 """
 
@@ -54,7 +54,7 @@ def _translate_seed_yaml(src: Path, dst: Path) -> None:
     The curated path doesn't read ``description``, so it's dropped.
 
     Args:
-        src: Seed-input YAML — list of rows, each a mapping with string
+        src: Seed-input YAML, a list of rows, each a mapping with string
             ``name`` and ``url``.
         dst: Destination path for the translated curated YAML.
 
@@ -167,7 +167,7 @@ async def _record(
         dim = EMBED_DIMS[config.embed_model_id]
 
         # ensure_collection lives inside the try so a partial-create still hits
-        # the cleanup path. The suppress below covers the never-created case.
+        # the cleanup path. The suppress block below covers the never-created case.
         try:
             await ensure_collection(qclient, collection_name, dim=dim)
             # QdrantCorpus implements upsert_chunk but not has_chunks /
