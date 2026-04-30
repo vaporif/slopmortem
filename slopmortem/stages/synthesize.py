@@ -13,7 +13,7 @@ hook is a no-op stub until that orchestration ships.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from lmnr import Laminar
@@ -21,7 +21,7 @@ from lmnr import Laminar
 from slopmortem.concurrency import gather_resilient
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
 from slopmortem.llm.tools import synthesis_tools, to_strict_response_schema
-from slopmortem.models import Synthesis
+from slopmortem.models import LLMSynthesis, Synthesis
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
@@ -30,6 +30,31 @@ if TYPE_CHECKING:
     from slopmortem.config import Config
     from slopmortem.llm.client import LLMClient
     from slopmortem.models import Candidate, InputContext
+
+
+def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
+    """Build the ``render_prompt("synthesize", ...)`` kwargs for *candidate*.
+
+    Shared by the production stage and tests so both stay in lockstep when
+    the template's variable list changes.
+    """
+    payload = candidate.payload
+    facets = payload.facets
+    return {
+        "pitch": pitch,
+        "candidate_id": candidate.canonical_id,
+        "candidate_name": payload.name,
+        "candidate_body": payload.body,
+        "founding_date": payload.founding_date.isoformat() if payload.founding_date else None,
+        "failure_date": payload.failure_date.isoformat() if payload.failure_date else None,
+        "sub_sector": facets.sub_sector,
+        "customer_type": facets.customer_type,
+        "geography": facets.geography,
+        "monetization": facets.monetization,
+        "product_type": facets.product_type,
+        "price_point": facets.price_point,
+    }
+
 
 # Fixed host allowlist applied on top of the per-candidate
 # ``payload.sources`` hosts. ``web.archive.org`` is intentionally NOT
@@ -43,14 +68,7 @@ _INJECTION_MARKER = "prompt_injection_attempted"
 
 
 def _emit_event(event: SpanEvent) -> None:
-    """Emit *event* as a Laminar span event when tracing is initialized.
-
-    Tests monkeypatch this to observe emissions; in production the body fires
-    ``Laminar.event(name=str(event))`` when ``Laminar.is_initialized()`` is
-    true. ``Laminar.event`` already guards on initialization itself, but we
-    check here to keep the seam explicit and avoid surprise traces from
-    misconfigured fixtures.
-    """
+    """Emit event as a Laminar span event when tracing is initialized."""
     if Laminar.is_initialized():
         Laminar.event(name=str(event))
 
@@ -94,10 +112,7 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
     """
     prompt = render_prompt(
         "synthesize",
-        pitch=ctx.description,
-        candidate_id=candidate.canonical_id,
-        candidate_name=candidate.payload.name,
-        candidate_body=candidate.payload.body,
+        **synthesize_prompt_kwargs(candidate, pitch=ctx.description),
     )
     result = await llm.complete(
         prompt,
@@ -107,8 +122,8 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
         response_format={
             "type": "json_schema",
             "json_schema": {
-                "name": "Synthesis",
-                "schema": to_strict_response_schema(Synthesis),
+                "name": "LLMSynthesis",
+                "schema": to_strict_response_schema(LLMSynthesis),
                 "strict": True,
             },
         },
@@ -118,14 +133,18 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
         },
         max_tokens=max_tokens,
     )
-    parsed = Synthesis.model_validate_json(result.text)
+    llm_parsed = LLMSynthesis.model_validate_json(result.text)
 
-    if parsed.where_diverged.strip() == _INJECTION_MARKER:
+    if llm_parsed.where_diverged.strip() == _INJECTION_MARKER:
         _emit_event(SpanEvent.PROMPT_INJECTION_ATTEMPTED)
 
     allowed_hosts = _build_allowed_hosts(candidate.payload.sources)
-    filtered_sources = [url for url in parsed.sources if _hostname(url) in allowed_hosts]
-    return parsed.model_copy(update={"sources": filtered_sources})
+    filtered_sources = [url for url in llm_parsed.sources if _hostname(url) in allowed_hosts]
+    return Synthesis.from_llm(
+        llm_parsed.model_copy(update={"sources": filtered_sources}),
+        founding_date=candidate.payload.founding_date,
+        failure_date=candidate.payload.failure_date,
+    )
 
 
 def _hostname(url: str) -> str | None:

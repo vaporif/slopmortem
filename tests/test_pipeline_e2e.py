@@ -26,8 +26,9 @@ from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
-from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis
+from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis, TopRisks
 from slopmortem.pipeline import QueryPhase, _join_to_candidates, cutoff_iso, run_query
+from slopmortem.stages.synthesize import synthesize_prompt_kwargs
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -181,11 +182,7 @@ def _build_canned(
     )
     for cand in top_n:
         synth_prompt = render_prompt(
-            "synthesize",
-            pitch=ctx.description,
-            candidate_id=cand.canonical_id,
-            candidate_name=cand.payload.name,
-            candidate_body=cand.payload.body,
+            "synthesize", **synthesize_prompt_kwargs(cand, pitch=ctx.description)
         )
         canned[llm_canned_key("synthesize", model=_SYNTH_MODEL, prompt=synth_prompt)] = synth_resp
     return canned
@@ -320,6 +317,13 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     assert isinstance(report.candidates, list)
     assert 0 < len(report.candidates) <= cfg.N_synthesize
     assert all(isinstance(s, Synthesis) for s in report.candidates)
+
+    # Top risks: clustered from the canned synthesis lessons. The fake payload
+    # always emits ``candidate_id="acme"`` and lesson ``"target larger ACVs"``,
+    # so per-candidate dedup collapses everything to a single 1-frequency
+    # cluster. Light-touch assertion: type + non-negative cluster count.
+    assert isinstance(report.top_risks, TopRisks)
+    assert len(report.top_risks.clusters) == 1
 
     # Pipeline meta.
     meta = report.pipeline_meta

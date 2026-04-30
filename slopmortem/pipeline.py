@@ -24,7 +24,8 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from lmnr import Laminar, observe
 
 from slopmortem.budget import BudgetExceededError
-from slopmortem.models import PipelineMeta, Report, Synthesis
+from slopmortem.models import PipelineMeta, Report, Synthesis, TopRisks
+from slopmortem.stages.cluster_lessons import cluster_lessons
 from slopmortem.stages.facet_extract import extract_facets
 from slopmortem.stages.llm_rerank import llm_rerank
 from slopmortem.stages.retrieve import retrieve
@@ -189,6 +190,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     """
     t0 = time.monotonic()
     successes: list[Synthesis] = []
+    top_risks = TopRisks()
     budget_exceeded = False
 
     if Laminar.is_initialized():
@@ -266,6 +268,12 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             on_candidate_done=_on_candidate_done,
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
+        # Cluster lessons across candidates inside the try block so a successful
+        # run gets full top-risks. A budget-exceeded run skips this and returns
+        # the default-empty TopRisks initialized above (clustering only what
+        # ``successes`` had partially accumulated would be possible, but keeping
+        # the truncated-run shape minimal matches the existing failure model).
+        top_risks = cluster_lessons(successes)
         progress.end_phase(QueryPhase.SYNTHESIZE)
     except BudgetExceededError:
         budget_exceeded = True
@@ -276,6 +284,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         input=input_ctx,
         generated_at=datetime.now(UTC),
         candidates=successes,
+        top_risks=top_risks,
         pipeline_meta=PipelineMeta(
             K_retrieve=config.K_retrieve,
             N_synthesize=config.N_synthesize,

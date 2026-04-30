@@ -1,3 +1,5 @@
+set quiet := true
+
 # Redirect caches under the project so sandbox/Library restrictions don't bite.
 export XDG_CACHE_HOME := env_var_or_default("XDG_CACHE_HOME", justfile_directory() / ".uv-cache")
 
@@ -131,3 +133,23 @@ init-env:
     upsert LMNR_PROJECT_API_KEY "Laminar tracing; only if enable_tracing=true in slopmortem.toml" no
 
     echo "wrote $ENV_FILE"
+
+# Wipe all ingested state: stop Qdrant, delete its storage volume, drop
+# the merge journal, and remove the post_mortems tree. Prompts before
+# touching anything. Run before a fresh `just ingest` when you want to
+# start from zero.
+nuke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "This will delete:"
+    echo "  - data/qdrant/         (Qdrant storage volume)"
+    echo "  - journal.sqlite       (merge journal)"
+    echo "  - post_mortems/        (raw + canonical + quarantine docs)"
+    read -r -p "Proceed? [y/N] " confirm
+    case "$confirm" in
+        y|Y|yes|YES) ;;
+        *) echo "aborted"; exit 1 ;;
+    esac
+    docker compose down qdrant 2>/dev/null || true
+    rm -rf data/qdrant journal.sqlite post_mortems
+    echo "nuked. run 'docker compose up -d qdrant' + 'just ingest' to rebuild."

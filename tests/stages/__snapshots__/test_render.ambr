@@ -2,6 +2,7 @@
 # name: test_render_strips_autolinks_and_images
   list([
     '# Premortem report for newco',
+    '## Top risks across all comparables',
     '## Acme',
     'Similarity:',
     'Why similar:',

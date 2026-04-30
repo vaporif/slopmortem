@@ -33,8 +33,9 @@ import json
 import logging
 import os
 import sys
+from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self, cast
+from typing import TYPE_CHECKING, Annotated, Self, cast, override
 
 # Silence gRPC C-Core's INFO-level log channel BEFORE the Laminar import below
 # transitively pulls in grpcio. Without this, the OTLP exporter's connection
@@ -50,18 +51,22 @@ import anyio  # must follow the GRPC env-var setup above
 import typer
 from lmnr import Laminar, observe
 from openai import AsyncOpenAI
-from rich.console import Console
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
+    Task,
     TaskID,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
+from rich.segment import Segment
 from rich.table import Table
+from rich.text import Text
 
 from slopmortem.budget import Budget
 from slopmortem.config import load_config
@@ -87,6 +92,8 @@ from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
     from types import TracebackType
+
+    from rich.progress_bar import ProgressBar
 
     from slopmortem.config import Config
     from slopmortem.corpus.merge import MergeJournal
@@ -498,17 +505,14 @@ async def _debug_retrieve(
         if p.sources:
             extra = f" +{len(p.sources) - 1}" if len(p.sources) > 1 else ""
             typer.echo(f"    sources: {p.sources[0]}{extra}")
+        elif p.provenance_id:
+            typer.echo(f"    provenance: {p.provenance_id}")
         typer.echo(f"    summary: {summary}")
         typer.echo("")
 
 
 def _maybe_init_tracing(config: Config) -> None:
-    """Run the endpoint guard, then conditionally call ``Laminar.initialize``.
-
-    Always runs the SSRF-style endpoint guard (a no-op when ``LMNR_BASE_URL``
-    is unset). If tracing is enabled in config but the project API key is
-    missing, log to stderr and skip Laminar init. Tracing is best-effort.
-    """
+    """Opt-in Laminar init gated on ``enable_tracing`` and a non-empty API key."""
     base_url = config.lmnr_base_url or None
     init_tracing(
         base_url=base_url,
@@ -527,11 +531,7 @@ def _maybe_init_tracing(config: Config) -> None:
 
 
 def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
-    """Construct the configured embedder; branch on ``config.embedding_provider``.
-
-    Unknown provider names raise ``ValueError`` listing the supported values so
-    a typo in ``slopmortem.toml`` fails loud at startup rather than mid-pipeline.
-    """
+    """Raise ``ValueError`` on unknown providers so misconfig fails loud at startup."""
     provider = config.embedding_provider
     if provider == "fastembed":
         return FastEmbedEmbeddingClient(
@@ -709,30 +709,85 @@ _INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 }
 
 
-class RichIngestProgress:
-    """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl.
+class _StackedBar:
+    """Render *bar* ``height`` times on consecutive rows.
 
-    Holds one :class:`rich.progress.Progress` instance with a task per phase.
-    Task IDs are created lazily on ``start_phase`` so phases the run skips
-    (e.g. cache_warm in dry-run) don't appear as empty bars. ``log`` writes
-    a grey one-liner above the bars via the same console so messages don't
-    fight the progress redraw.
+    Rich's :class:`ProgressBar` yields segments without a trailing newline,
+    so ``Group`` of N bars renders inline; we drop explicit ``Segment.line``
+    between copies to stack them vertically.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, bar: ProgressBar, height: int) -> None:
+        self._bar = bar
+        self._height = height
+
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
+        for i in range(self._height):
+            yield from self._bar.__rich_console__(console, options)
+            if i < self._height - 1:
+                yield Segment.line()
+
+    def __rich_measure__(self, console: Console, options: ConsoleOptions) -> Measurement:
+        return Measurement.get(console, options, self._bar)
+
+
+class _ThickBarColumn(BarColumn):
+    """:class:`BarColumn` whose bar spans ``height`` terminal rows.
+
+    Rich bars are one row tall; a :class:`_StackedBar` wrapper repeats the
+    bar so it reads as a chunkier marker without changing layout — adjacent
+    columns auto-pad to the tallest cell in the row.
+    """
+
+    height = 1
+
+    def render(self, task: Task) -> _StackedBar | Text:  # type: ignore[override]
+        if task.total is None or task.total <= 1:
+            return Text("")
+        return _StackedBar(super().render(task), self.height)
+
+
+class _OptionalMofNCompleteColumn(MofNCompleteColumn):
+    """:class:`MofNCompleteColumn` that hides for single-shot phases.
+
+    Tasks with ``total <= 1`` carry no useful count — the bar's pulse-then-
+    fill already conveys done/not-done. Returning empty text drops the
+    cell and avoids ``0/1 → 1/1`` noise.
+    """
+
+    @override
+    def render(self, task: Task) -> Text:
+        if task.total is None or task.total <= 1:
+            return Text("")
+        return super().render(task)
+
+
+class _RichPhaseProgress[PhaseT: StrEnum]:
+    """Rich-backed phase progress shared by ingest and query pipelines.
+
+    One :class:`rich.progress.Progress` with a task per phase, lazy task
+    creation so unreached phases don't render empty bars, and a red
+    error-count badge appended to the description on per-phase failures.
+    """
+
+    def __init__(
+        self,
+        labels: dict[PhaseT, str],
+    ) -> None:
         """Build the underlying ``Progress`` and console; tasks are added lazily."""
+        self._labels = labels
         self._console = Console(stderr=True)
         self._progress = Progress(
             SpinnerColumn(),
             TextColumn("{task.description}", justify="left"),
-            BarColumn(
-                bar_width=None,
+            _ThickBarColumn(
+                bar_width=40,
                 style="grey50",
                 complete_style="cyan",
                 finished_style="green",
                 pulse_style="cyan",
             ),
-            MofNCompleteColumn(),
+            _OptionalMofNCompleteColumn(),
             TextColumn("[dim]•"),
             TimeElapsedColumn(),
             TextColumn("[dim]eta"),
@@ -740,8 +795,8 @@ class RichIngestProgress:
             console=self._console,
             transient=False,
         )
-        self._tasks: dict[IngestPhase, TaskID] = {}
-        self._phase_errors: dict[IngestPhase, int] = {}
+        self._tasks: dict[PhaseT, TaskID] = {}
+        self._phase_errors: dict[PhaseT, int] = {}
 
     def __enter__(self) -> Self:
         """Start the live render."""
@@ -759,51 +814,53 @@ class RichIngestProgress:
 
     @property
     def console(self) -> Console:
-        """Underlying Rich console; the CLI uses it for the post-run table."""
+        """Underlying Rich console; the CLI uses it for post-run output."""
         return self._console
 
-    def _label(self, phase: IngestPhase) -> str:
-        styled = f"[bold cyan]{_INGEST_PHASE_LABELS[phase]}[/bold cyan]"
+    def _label(self, phase: PhaseT) -> str:
+        styled = f"[bold cyan]{self._labels[phase]}[/bold cyan]"
         n = self._phase_errors.get(phase, 0)
         if not n:
             return styled
         noun = "error" if n == 1 else "errors"
         return f"{styled} [bold red]({n} {noun})[/bold red]"
 
-    def start_phase(self, phase: IngestPhase, total: int | None) -> None:
+    def start_phase(self, phase: PhaseT, total: int | None) -> None:
         """Create or reset the bar for *phase* with the expected ``total``.
 
-        ``total=None`` means indeterminate (Rich pulses the bar; ETA blank).
-        Used by ``GATHER`` when no ``--limit`` caps the run.
+        Phases with no granular progress (``total`` is ``None`` or ``<= 1``)
+        are pulsed instead of rendered as an instant 0→1 bar; ``end_phase``
+        snaps them to filled on completion.
         """
+        bar_total = total if total and total > 1 else None
         if phase in self._tasks:
-            self._progress.reset(self._tasks[phase], total=total)
+            self._progress.reset(self._tasks[phase], total=bar_total)
             self._progress.update(self._tasks[phase], description=self._label(phase))
             return
-        self._tasks[phase] = self._progress.add_task(self._label(phase), total=total)
+        self._tasks[phase] = self._progress.add_task(self._label(phase), total=bar_total)
 
-    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
+    def advance_phase(self, phase: PhaseT, n: int = 1) -> None:
         """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
         tid = self._tasks.get(phase)
         if tid is not None:
             self._progress.advance(tid, n)
 
-    def end_phase(self, phase: IngestPhase) -> None:
+    def end_phase(self, phase: PhaseT) -> None:
         """Complete *phase*'s bar and stop its spinner.
 
         For indeterminate phases (``total is None``), freeze the bar by
-        setting ``total = completed``; otherwise Rich keeps it pulsing
-        even after the work is done.
+        setting ``total = max(completed, 1)``; otherwise fill to ``total``.
         """
         tid = self._tasks.get(phase)
         if tid is None:
             return
         task = self._progress.tasks[tid]
         if task.total is None:
+            completed = max(task.completed, 1)
             self._progress.update(
                 tid,
-                total=task.completed,
-                completed=task.completed,
+                total=completed,
+                completed=completed,
                 description=self._label(phase),
             )
             return
@@ -815,13 +872,21 @@ class RichIngestProgress:
         """Write a one-off neutral status line above the progress display."""
         self._console.log(message)
 
-    def error(self, phase: IngestPhase, message: str) -> None:
+    def error(self, phase: PhaseT, message: str) -> None:
         """Bump the error count for *phase* and log a red line above the bars."""
         self._phase_errors[phase] = self._phase_errors.get(phase, 0) + 1
         tid = self._tasks.get(phase)
         if tid is not None:
             self._progress.update(tid, description=self._label(phase))
         self._console.log(f"[bold red]ERROR[/bold red] [{phase.value}] {message}")
+
+
+class RichIngestProgress(_RichPhaseProgress[IngestPhase]):
+    """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl."""
+
+    def __init__(self) -> None:
+        """Build with ingest phase labels."""
+        super().__init__(_INGEST_PHASE_LABELS)
 
 
 def _render_ingest_result(console: Console, result: IngestResult) -> None:
@@ -853,101 +918,12 @@ _QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
 }
 
 
-class RichQueryProgress:
-    """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl.
-
-    Mirrors :class:`RichIngestProgress`: one Rich ``Progress`` instance with a
-    task per phase, lazy task creation so unreached phases don't render empty
-    bars, and a red error-count badge appended to the description when
-    synthesize fan-out has per-candidate failures.
-    """
+class RichQueryProgress(_RichPhaseProgress[QueryPhase]):
+    """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl."""
 
     def __init__(self) -> None:
-        """Build the underlying ``Progress`` and console; tasks are added lazily."""
-        self._console = Console(stderr=True)
-        self._progress = Progress(
-            SpinnerColumn(),
-            TextColumn("{task.description}", justify="left"),
-            BarColumn(
-                bar_width=None,
-                style="grey50",
-                complete_style="cyan",
-                finished_style="green",
-                pulse_style="cyan",
-            ),
-            MofNCompleteColumn(),
-            TextColumn("[dim]•"),
-            TimeElapsedColumn(),
-            TextColumn("[dim]eta"),
-            TimeRemainingColumn(),
-            console=self._console,
-            transient=False,
-        )
-        self._tasks: dict[QueryPhase, TaskID] = {}
-        self._phase_errors: dict[QueryPhase, int] = {}
-
-    def __enter__(self) -> Self:
-        """Start the live render."""
-        self._progress.__enter__()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Tear down the live render."""
-        self._progress.__exit__(exc_type, exc_val, exc_tb)
-
-    @property
-    def console(self) -> Console:
-        """Underlying Rich console; the CLI uses it for the post-run footer."""
-        return self._console
-
-    def _label(self, phase: QueryPhase) -> str:
-        styled = f"[bold cyan]{_QUERY_PHASE_LABELS[phase]}[/bold cyan]"
-        n = self._phase_errors.get(phase, 0)
-        if not n:
-            return styled
-        noun = "error" if n == 1 else "errors"
-        return f"{styled} [bold red]({n} {noun})[/bold red]"
-
-    def start_phase(self, phase: QueryPhase, total: int) -> None:
-        """Create or reset the bar for *phase* with the expected ``total``."""
-        if phase in self._tasks:
-            self._progress.reset(self._tasks[phase], total=total)
-            self._progress.update(self._tasks[phase], description=self._label(phase))
-            return
-        self._tasks[phase] = self._progress.add_task(self._label(phase), total=max(total, 1))
-
-    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
-        """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
-        tid = self._tasks.get(phase)
-        if tid is not None:
-            self._progress.advance(tid, n)
-
-    def end_phase(self, phase: QueryPhase) -> None:
-        """Complete *phase*'s bar and stop its spinner."""
-        tid = self._tasks.get(phase)
-        if tid is None:
-            return
-        task = self._progress.tasks[tid]
-        self._progress.update(
-            tid, completed=task.total or task.completed, description=self._label(phase)
-        )
-
-    def log(self, message: str) -> None:
-        """Write a one-off neutral status line above the progress display."""
-        self._console.log(message)
-
-    def error(self, phase: QueryPhase, message: str) -> None:
-        """Bump the error count for *phase* and log a red line above the bars."""
-        self._phase_errors[phase] = self._phase_errors.get(phase, 0) + 1
-        tid = self._tasks.get(phase)
-        if tid is not None:
-            self._progress.update(tid, description=self._label(phase))
-        self._console.log(f"[bold red]ERROR[/bold red] [{phase.value}] {message}")
+        """Build with query phase labels."""
+        super().__init__(_QUERY_PHASE_LABELS)
 
 
 def _render_query_footer(console: Console, report: Report, n_target: int) -> None:

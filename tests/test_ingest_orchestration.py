@@ -118,7 +118,7 @@ def _entry(
     *,
     source: str = "curated",
     source_id: str = "1",
-    url: str = "https://acme.com",
+    url: str | None = "https://acme.com",
 ) -> RawEntry:
     return RawEntry(
         source=source,
@@ -377,3 +377,87 @@ async def test_ingest_quarantines_slop(tmp_path, cfg):
     quarantine_dir = tmp_path / "post_mortems" / "quarantine"
     assert quarantine_dir.exists()
     assert any(p.suffix == ".md" for p in quarantine_dir.iterdir())
+
+
+async def test_ingest_payload_sources_url_only_when_url_present(tmp_path, cfg):
+    """Payload sources holds the URL; provenance_id holds <source>:<source_id>."""
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+    sources = [
+        _ListSource(
+            entries=[
+                _entry(
+                    source="curated",
+                    source_id="Celsius Network",
+                    url="https://example.com/celsius",
+                )
+            ]
+        )
+    ]
+
+    result = await ingest(
+        sources=sources,
+        enrichers=[],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+
+    assert result.processed == 1
+    assert len(corpus.points) >= 1
+    payload = corpus.points[0].payload
+    assert payload["sources"] == ["https://example.com/celsius"]
+    assert payload["provenance_id"] == "curated:Celsius Network"
+
+
+async def test_ingest_payload_sources_empty_when_url_missing(tmp_path, cfg):
+    """When RawEntry.url is None, sources is empty and provenance_id still carries the synth id."""
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+    sources = [
+        _ListSource(
+            entries=[
+                _entry(
+                    source="curated",
+                    source_id="Celsius Network",
+                    url=None,
+                )
+            ]
+        )
+    ]
+
+    result = await ingest(
+        sources=sources,
+        enrichers=[],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+
+    assert result.processed == 1
+    assert len(corpus.points) >= 1
+    payload = corpus.points[0].payload
+    assert payload["sources"] == []
+    assert payload["provenance_id"] == "curated:Celsius Network"

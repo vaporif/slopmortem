@@ -129,6 +129,7 @@ def test_runner_exits_zero_when_baseline_matches(
                         "where_diverged_nonempty": True,
                         "all_sources_in_allowed_domains": True,
                         "lifespan_months_positive": True,
+                        "claims_grounded_in_body": True,
                     }
                 },
             },
@@ -139,6 +140,7 @@ def test_runner_exits_zero_when_baseline_matches(
                         "where_diverged_nonempty": True,
                         "all_sources_in_allowed_domains": True,
                         "lifespan_months_positive": True,
+                        "claims_grounded_in_body": True,
                     }
                 },
             },
@@ -184,6 +186,7 @@ def test_runner_exits_nonzero_on_regression(
                         "where_diverged_nonempty": True,
                         "all_sources_in_allowed_domains": True,
                         "lifespan_months_positive": True,
+                        "claims_grounded_in_body": True,
                     }
                 },
             },

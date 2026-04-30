@@ -23,15 +23,16 @@ Quarantine rows live in their own table keyed on
 
 from __future__ import annotations
 
-import sqlite3
 from typing import TYPE_CHECKING, Any
 
 from anyio import to_thread
 
 from slopmortem._time import utcnow_iso
+from slopmortem.corpus._db import connect
 from slopmortem.models import AliasEdge, PendingReviewRow
 
 if TYPE_CHECKING:
+    import sqlite3
     from collections.abc import Iterable
     from pathlib import Path
 
@@ -93,16 +94,6 @@ _SCHEMA: tuple[str, ...] = (
 )
 
 
-def _connect(db_path: Path) -> sqlite3.Connection:
-    """Open a short-lived connection with WAL and a 5s busy timeout."""
-    conn = sqlite3.connect(db_path, timeout=5.0, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
-
-
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     return {k: row[k] for k in row.keys()}  # noqa: SIM118 — sqlite3.Row needs .keys()
 
@@ -120,7 +111,7 @@ class MergeJournal:
 
     def _init_sync(self) -> None:
         self._db.parent.mkdir(parents=True, exist_ok=True)
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             for stmt in _SCHEMA:
                 conn.execute(stmt)
 
@@ -167,7 +158,7 @@ class MergeJournal:
         )
 
     def _upsert_state(self, canonical_id: str, source: str, source_id: str, state: str) -> None:
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             conn.execute("BEGIN")
             try:
                 # Resolver flip: this (source, source_id) is now bound to a
@@ -208,7 +199,7 @@ class MergeJournal:
         source_id: str,
         alias_edge: AliasEdge,
     ) -> None:
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             conn.execute("BEGIN")
             try:
                 conn.execute(
@@ -272,7 +263,7 @@ class MergeJournal:
         merged_at: str,
         content_hash: str | None,
     ) -> None:
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             conn.execute(
                 """
                 UPDATE merge_journal
@@ -290,7 +281,7 @@ class MergeJournal:
         return await to_thread.run_sync(self._fetch_pending_sync)
 
     def _fetch_pending_sync(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             cur = conn.execute("SELECT * FROM merge_journal WHERE merge_state = 'pending'")
             return [_row_to_dict(r) for r in cur.fetchall()]
 
@@ -303,7 +294,7 @@ class MergeJournal:
     def _fetch_by_key_sync(
         self, canonical_id: str, source: str, source_id: str
     ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             cur = conn.execute(
                 """
                 SELECT * FROM merge_journal
@@ -318,7 +309,7 @@ class MergeJournal:
         return await to_thread.run_sync(self._lookup_reverse_sync, source, source_id)
 
     def _lookup_reverse_sync(self, source: str, source_id: str) -> str | None:
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             cur = conn.execute(
                 """
                 SELECT canonical_id FROM merge_journal
@@ -341,7 +332,7 @@ class MergeJournal:
         return [AliasEdge.model_validate(r) for r in rows]
 
     def _fetch_aliases_sync(self, canonical_id: str) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             cur = conn.execute(
                 """
                 SELECT canonical_id, alias_kind, target_canonical_id,
@@ -358,7 +349,7 @@ class MergeJournal:
         return await to_thread.run_sync(self._fetch_all_sync)
 
     def _fetch_all_sync(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             cur = conn.execute("SELECT * FROM merge_journal")
             return [_row_to_dict(r) for r in cur.fetchall()]
 
@@ -389,7 +380,7 @@ class MergeJournal:
         reason: str,
         slop_score: float | None,
     ) -> None:
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             conn.execute(
                 """
                 INSERT INTO quarantine_journal
@@ -407,7 +398,7 @@ class MergeJournal:
         return await to_thread.run_sync(self._fetch_quarantined_sync)
 
     def _fetch_quarantined_sync(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             cur = conn.execute("SELECT * FROM quarantine_journal")
             return [_row_to_dict(r) for r in cur.fetchall()]
 
@@ -427,7 +418,7 @@ class MergeJournal:
         await to_thread.run_sync(self._drop_quarantine_row_sync, content_sha256, source, source_id)
 
     def _drop_quarantine_row_sync(self, content_sha256: str, source: str, source_id: str) -> None:
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             conn.execute(
                 """
                 DELETE FROM quarantine_journal
@@ -445,7 +436,7 @@ class MergeJournal:
         return await to_thread.run_sync(self._list_pending_review_sync)
 
     def _list_pending_review_sync(self) -> list[PendingReviewRow]:
-        with _connect(self._db) as conn:
+        with connect(self._db) as conn:
             cur = conn.execute("SELECT * FROM pending_review")
             return [
                 PendingReviewRow(

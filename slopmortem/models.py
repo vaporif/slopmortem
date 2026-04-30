@@ -107,8 +107,32 @@ class Facets(BaseModel):
     failure_year: int | None = None
 
 
+class LLMSynthesis(BaseModel):
+    """The fields the LLM emits for one candidate.
+
+    failure_date and lifespan_months are deliberately absent: those are
+    derived from the candidate's CandidatePayload in stages.synthesize,
+    not asked of the LLM (which used to fabricate them from prose).
+    """
+
+    candidate_id: str
+    name: str
+    one_liner: str
+    similarity: SimilarityScores
+    why_similar: str
+    where_diverged: str
+    failure_causes: list[str]
+    lessons_for_input: list[str]
+    sources: list[str]
+
+
 class Synthesis(BaseModel):
-    """The synthesized post-mortem analogue the LLM produces per candidate."""
+    """The synthesized post-mortem analogue per candidate.
+
+    Composed of the LLM-emitted fields (LLMSynthesis) plus failure_date
+    and lifespan_months, which are derived from the candidate's typed
+    payload dates rather than re-extracted from prose.
+    """
 
     candidate_id: str
     name: str
@@ -122,9 +146,50 @@ class Synthesis(BaseModel):
     lessons_for_input: list[str]
     sources: list[str]
 
+    @classmethod
+    def from_llm(
+        cls,
+        llm_synth: LLMSynthesis,
+        *,
+        founding_date: date | None,
+        failure_date: date | None,
+    ) -> Synthesis:
+        """Build a Synthesis from the LLM's output plus typed payload dates."""
+        lifespan = _months_between(founding_date, failure_date)
+        return cls(
+            candidate_id=llm_synth.candidate_id,
+            name=llm_synth.name,
+            one_liner=llm_synth.one_liner,
+            failure_date=failure_date,
+            lifespan_months=lifespan,
+            similarity=llm_synth.similarity,
+            why_similar=llm_synth.why_similar,
+            where_diverged=llm_synth.where_diverged,
+            failure_causes=llm_synth.failure_causes,
+            lessons_for_input=llm_synth.lessons_for_input,
+            sources=llm_synth.sources,
+        )
+
+
+def _months_between(founding: date | None, failure: date | None) -> int | None:
+    """Whole months between two dates, None if missing or delta is negative."""
+    if founding is None or failure is None:
+        return None
+    months = (failure.year - founding.year) * 12 + (failure.month - founding.month)
+    return months if months >= 0 else None
+
 
 class CandidatePayload(BaseModel):
-    """Persisted candidate doc: body, facets, provenance, and text id."""
+    """Persisted candidate doc: body, facets, provenance, and text id.
+
+    sources is URL-only (may be empty when the upstream entry had no URL,
+    e.g. CSV imports). provenance_id is the synthetic "<source>:<source_id>"
+    audit string that always identifies where the doc came from.
+
+    Splitting these prevents the synthetic id from leaking into the synth
+    host allowlist: urlparse("curated:Celsius Network").hostname is None,
+    which used to drop every cited URL.
+    """
 
     name: str
     summary: str
@@ -137,6 +202,7 @@ class CandidatePayload(BaseModel):
     provenance: Literal["curated_real", "scraped"]
     slop_score: float
     sources: list[str]
+    provenance_id: str = ""
     text_id: str
 
 
@@ -193,6 +259,29 @@ class PipelineMeta(BaseModel):
     budget_exceeded: bool
 
 
+class TopRisk(BaseModel):
+    """One cluster of similar lessons across candidates.
+
+    Attributes:
+        summary: A short canonical statement of the lesson (the shortest member
+            of the cluster, in original casing).
+        candidate_ids: Which candidates raised this lesson (deduped, ordered as
+            encountered while iterating over syntheses).
+        frequency: ``len(candidate_ids)``; a denormalized convenience for
+            renderers so they don't have to recompute it.
+    """
+
+    summary: str
+    candidate_ids: list[str]
+    frequency: int
+
+
+class TopRisks(BaseModel):
+    """Cross-candidate dedup of lessons, ranked by frequency descending."""
+
+    clusters: list[TopRisk] = Field(default_factory=list)
+
+
 class Report(BaseModel):
     """The user-visible output: input echo, synthesized candidates, and pipeline meta."""
 
@@ -200,6 +289,7 @@ class Report(BaseModel):
     generated_at: datetime
     candidates: list[Synthesis]
     pipeline_meta: PipelineMeta
+    top_risks: TopRisks = Field(default_factory=TopRisks)
 
 
 class ToolSpec(BaseModel):

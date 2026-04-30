@@ -4,6 +4,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -14,6 +15,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -24,6 +26,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -34,6 +37,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -44,6 +48,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -54,6 +59,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -64,6 +70,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -74,6 +81,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -84,6 +92,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }
@@ -94,6 +103,7 @@
       "assertions": {
         "acme": {
           "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
           "lifespan_months_positive": true,
           "where_diverged_nonempty": true
         }

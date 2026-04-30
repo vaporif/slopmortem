@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         Report,
         SimilarityScores,
         Synthesis,
+        TopRisks,
     )
 
 # ``[txt](url)``: inline markdown link. Must NOT be greedy across lines.
@@ -106,6 +107,26 @@ def _render_candidate(syn: Synthesis) -> str:
     return "\n".join(parts)
 
 
+def _render_top_risks(top_risks: TopRisks, candidates: list[Synthesis]) -> str:
+    """Render the cross-candidate top-risks section as a numbered markdown list.
+
+    Each item is the canonical lesson summary plus a "Raised by: <names> (k/N)"
+    line, where ``k`` is the cluster's frequency and ``N`` is the total number
+    of candidates in the report. Names are looked up by ``candidate_id``;
+    unknown ids fall back to the raw id string (defensive — should not occur
+    in practice since clustering only sees ids from the same syntheses list).
+    """
+    id_to_name = {c.candidate_id: c.name for c in candidates}
+    total = len(candidates)
+    lines: list[str] = ["## Top risks across all comparables", ""]
+    for idx, cluster in enumerate(top_risks.clusters, start=1):
+        names = ", ".join(id_to_name.get(cid, cid) for cid in cluster.candidate_ids)
+        lines.append(f"{idx}. {_strip_markdown_links(cluster.summary)}")
+        lines.append(f"   Raised by: {names} ({cluster.frequency}/{total})")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _render_footer(meta: PipelineMeta) -> str:
     models_block = "\n".join(f"- {role}: {model}" for role, model in sorted(meta.models.items()))
     return "\n".join(
@@ -149,6 +170,8 @@ def render(report: Report) -> str:
         f"Generated: {report.generated_at.isoformat()}",
         "",
     ]
+    if report.top_risks.clusters:
+        sections.append(_render_top_risks(report.top_risks, report.candidates))
     for syn in report.candidates:
         sections.append(_render_candidate(syn))
         sections.append("")

@@ -11,7 +11,7 @@ from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
-from slopmortem.stages.synthesize import synthesize
+from slopmortem.stages.synthesize import synthesize, synthesize_prompt_kwargs
 
 _DEFAULT_MODEL = "test-synth-model"
 
@@ -77,11 +77,7 @@ def _bad_synthesis_payload() -> str:
 async def test_synthesize_drops_off_allowlist_urls() -> None:
     cand = _candidate()
     rendered = render_prompt(
-        "synthesize",
-        pitch=_ctx().description,
-        candidate_id=cand.canonical_id,
-        candidate_name=cand.payload.name,
-        candidate_body=cand.payload.body,
+        "synthesize", **synthesize_prompt_kwargs(cand, pitch=_ctx().description)
     )
     fake_llm = FakeLLMClient(
         canned={

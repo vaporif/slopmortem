@@ -29,7 +29,8 @@ Baseline JSON shape (normative)::
             "<candidate_id>": {
               "where_diverged_nonempty": true,
               "all_sources_in_allowed_domains": true,
-              "lifespan_months_positive": true
+              "lifespan_months_positive": true,
+              "claims_grounded_in_body": true
             }
           }
         }
@@ -59,12 +60,11 @@ baseline that also has ``candidates_count=0`` passes.
 Live-mode limitation
 --------------------
 
-In ``--live`` mode, ``allowed_hosts`` for the ``all_sources_in_allowed_domains``
-assertion is reduced to the fixed allowlist
-(:data:`slopmortem.stages.synthesize._FIXED_HOST_ALLOWLIST`) only. The
-public :class:`Corpus` Protocol does not expose payload sources, and we
-deliberately do not extend it. Deterministic mode tightens this by including
-each candidate's own payload sources via the private in-memory corpus.
+In ``--live`` mode, ``allowed_hosts`` for ``all_sources_in_allowed_domains``
+is reduced to ``_FIXED_HOST_ALLOWLIST`` only. The public Corpus Protocol
+does not expose payload sources, and we deliberately do not extend it.
+Deterministic mode tightens this by including each candidate's own payload
+sources via the private in-memory corpus.
 """
 
 from __future__ import annotations
@@ -86,6 +86,7 @@ from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.evals.assertions import (
     all_sources_in_allowed_domains,
+    claims_grounded_in_body,
     lifespan_months_positive,
     where_diverged_nonempty,
 )
@@ -122,6 +123,7 @@ _ASSERTION_NAMES: tuple[str, ...] = (
     "where_diverged_nonempty",
     "all_sources_in_allowed_domains",
     "lifespan_months_positive",
+    "claims_grounded_in_body",
 )
 
 
@@ -199,13 +201,16 @@ def _rerank_payload(canonical_ids: list[str]) -> str:
 
 
 def _synthesis_payload(canonical_id: str) -> str:
+    """Canned LLMSynthesis JSON.
+
+    failure_date/lifespan_months are derived by the pipeline from
+    CandidatePayload, so the LLM no longer emits them.
+    """
     return json.dumps(
         {
             "candidate_id": canonical_id,
             "name": canonical_id,
             "one_liner": "B2B fintech for SMB invoicing.",
-            "failure_date": "2023-01-01",
-            "lifespan_months": 60,
             "similarity": {
                 "business_model": {"score": 7.0, "rationale": "both B2B SaaS"},
                 "market": {"score": 6.0, "rationale": "SMB overlap"},
@@ -413,13 +418,33 @@ def _allowed_hosts_for_candidate(
     return hosts
 
 
+def _body_for_candidate(candidate_id: str, eval_corpus: _EvalCorpus | None) -> str | None:
+    """Return the candidate body for ``claims_grounded_in_body``, or None in live mode.
+
+    In deterministic mode, looks up the persisted payload via the private
+    ``_EvalCorpus.lookup_payload``. In ``--live`` mode (``eval_corpus is None``),
+    returns None — the public Corpus Protocol does not expose payload bodies
+    (same constraint that ``_allowed_hosts_for_candidate`` lives with). The
+    runner treats a None body as vacuously-grounded so live mode does not
+    spuriously fail.
+    """
+    if eval_corpus is None:
+        return None
+    payload = eval_corpus.lookup_payload(candidate_id)
+    if payload is None:
+        return None
+    return payload.body
+
+
 def _score_synthesis(s: Synthesis, *, eval_corpus: _EvalCorpus | None) -> dict[str, bool]:
-    """Apply all three assertions to *s* and return the result dict."""
+    """Apply every assertion in :data:`_ASSERTION_NAMES` to *s* and return the result dict."""
     allowed = _allowed_hosts_for_candidate(s.candidate_id, eval_corpus)
+    body = _body_for_candidate(s.candidate_id, eval_corpus)
     return {
         "where_diverged_nonempty": where_diverged_nonempty(s),
         "all_sources_in_allowed_domains": all_sources_in_allowed_domains(s, allowed),
         "lifespan_months_positive": lifespan_months_positive(s),
+        "claims_grounded_in_body": True if body is None else claims_grounded_in_body(s, body),
     }
 
 
