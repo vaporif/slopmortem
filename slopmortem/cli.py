@@ -204,7 +204,11 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
         # Haiku-backed classifier.
         budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
         openrouter_sdk = AsyncOpenAI(
-            api_key=os.environ.get("OPENROUTER_API_KEY", "missing-OPENROUTER_API_KEY"),
+            api_key=(
+            config.openrouter_api_key.get_secret_value()
+            or os.environ.get("OPENROUTER_API_KEY")
+            or "missing-OPENROUTER_API_KEY"
+        ),
             base_url=config.openrouter_base_url,
         )
         llm = OpenRouterClient(sdk=openrouter_sdk, budget=budget, model=config.model_summarize)
@@ -372,7 +376,11 @@ def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
             cache_dir=config.embed_cache_dir,
         )
     if provider == "openai":
-        openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        openai_sdk = AsyncOpenAI(
+            api_key=(
+                config.openai_api_key.get_secret_value() or os.environ["OPENAI_API_KEY"]
+            ),
+        )
         return OpenAIEmbeddingClient(
             sdk=openai_sdk,
             budget=budget,
@@ -399,7 +407,11 @@ def _build_deps(
     budget = Budget(cap_usd=config.max_cost_usd_per_query)
 
     openrouter_sdk = AsyncOpenAI(
-        api_key=os.environ.get("OPENROUTER_API_KEY", "missing-OPENROUTER_API_KEY"),
+        api_key=(
+            config.openrouter_api_key.get_secret_value()
+            or os.environ.get("OPENROUTER_API_KEY")
+            or "missing-OPENROUTER_API_KEY"
+        ),
         base_url=config.openrouter_base_url,
     )
     llm = OpenRouterClient(
@@ -493,7 +505,11 @@ def _build_ingest_deps(
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
 
     openrouter_sdk = AsyncOpenAI(
-        api_key=os.environ.get("OPENROUTER_API_KEY", "missing-OPENROUTER_API_KEY"),
+        api_key=(
+            config.openrouter_api_key.get_secret_value()
+            or os.environ.get("OPENROUTER_API_KEY")
+            or "missing-OPENROUTER_API_KEY"
+        ),
         base_url=config.openrouter_base_url,
     )
     llm = OpenRouterClient(
