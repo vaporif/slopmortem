@@ -135,6 +135,7 @@ class HNAlgoliaSource:
                 logger.warning("hn_algolia: unexpected hits type for %s", url)
                 return
             hits_list = cast("list[object]", hits_field)
+            logger.info("hn_algolia: page %d, %d hits", page, len(hits_list))
             for hit in hits_list:
                 if not isinstance(hit, dict):
                     continue

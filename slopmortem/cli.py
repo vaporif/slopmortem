@@ -221,15 +221,15 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     _set_corpus(cast("Corpus", corpus))
 
     sources: list[Source] = [
-        CuratedSource(yaml_path=_default_curated_yaml()),
-        HNAlgoliaSource(query="post-mortem"),
+        CuratedSource(yaml_path=_default_curated_yaml(), rps=3.0),
+        HNAlgoliaSource(query="post-mortem", rps=5.0),
     ]
     if crunchbase_csv is not None:
         sources.append(CrunchbaseCsvSource(csv_path=crunchbase_csv))
 
     enrichers: list[Enricher] = []
     if enrich_wayback:
-        enrichers.append(WaybackEnricher())
+        enrichers.append(WaybackEnricher(rps=5.0))
     if tavily_enrich:
         enrichers.append(TavilyEnricher())
 
