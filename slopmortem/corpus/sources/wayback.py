@@ -113,6 +113,14 @@ class WaybackEnricher:
     async def enrich(self, entry: RawEntry) -> RawEntry:
         """Populate ``raw_html``/``markdown_text`` from Wayback when the live URL is dead.
 
+        Skipped when *any* body content is already present — either ``raw_html``
+        (curated path) or ``markdown_text`` (HN path, where the source supplied
+        title + story_text directly). Without the markdown_text guard, a
+        successful Wayback recovery would *overwrite* HN's own body with whatever
+        the linked URL's snapshot happened to be — a quality regression on top of
+        the latency cost (archive.org is ~5× slower for deep-linked HN URLs than
+        for the root-domain Crunchbase URLs Wayback was actually designed for).
+
         Args:
             entry: A ``RawEntry`` produced by an upstream :class:`Source`.
 
@@ -121,6 +129,8 @@ class WaybackEnricher:
             from the closest available Wayback snapshot.
         """
         if entry.raw_html is not None and entry.raw_html.strip():
+            return entry
+        if entry.markdown_text is not None and entry.markdown_text.strip():
             return entry
         if not entry.url:
             return entry
