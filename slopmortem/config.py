@@ -1,5 +1,7 @@
 """Config loader: TOML, env, and secrets, validated on load."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import override
 

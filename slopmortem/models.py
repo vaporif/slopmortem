@@ -1,5 +1,7 @@
 """Pydantic v2 models shared across the pipeline: facets, candidates, synthesis output."""
 
+from __future__ import annotations
+
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime
 from enum import StrEnum

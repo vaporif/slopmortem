@@ -32,6 +32,8 @@ that shares the merge journal's ``db_path``. The cache key is
 lex-sorted so ``(A, B)`` and ``(B, A)`` collapse to one row.
 """
 
+from __future__ import annotations
+
 import json
 import math
 import re

@@ -14,6 +14,8 @@ Gated on ``RUN_LIVE=1`` — every run hits OpenRouter and the embedder, so the
 gate exists to prevent accidental spend.
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import contextlib

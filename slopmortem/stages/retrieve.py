@@ -7,6 +7,8 @@ the user's description (dense via :class:`EmbeddingClient`, sparse via
 ``embed_sparse.encode``) and forwards every other knob through unchanged.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from lmnr import Laminar, observe

@@ -1,5 +1,7 @@
 """LLM rerank stage: one strict-mode JSON call returning :class:`LlmRerankResult`."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from lmnr import Laminar, observe

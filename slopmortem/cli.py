@@ -25,6 +25,8 @@ the quarantine tree; ``--tavily-enrich`` appends a :class:`TavilyEnricher`
 to the enrichers list.
 """
 
+from __future__ import annotations
+
 import contextlib
 import functools
 import json

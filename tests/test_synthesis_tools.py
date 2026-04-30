@@ -11,6 +11,8 @@ Task 9 unit-testable without a Qdrant service. The contract under test is
 tool-function -> Corpus protocol delegation, not Qdrant behavior.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 import pytest

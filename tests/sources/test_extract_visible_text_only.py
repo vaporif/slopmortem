@@ -5,6 +5,8 @@ indirect prompt injection lands here if any of these poison surfaces leak into
 the cleaned text. Spec line 244 enumerates the surfaces; this test pins them.
 """
 
+from __future__ import annotations
+
 from slopmortem.corpus.extract import extract_clean
 
 

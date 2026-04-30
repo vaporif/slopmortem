@@ -5,6 +5,8 @@ the live FormulaQuery + recency-branch + facet-skip-other behavior end-to-end
 against a Qdrant service on ``localhost:6333``.
 """
 
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING

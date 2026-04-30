@@ -4,6 +4,8 @@ Spins a uniquely-named collection, populates it from a JSONL fixture, and
 drops it on exit.
 """
 
+from __future__ import annotations
+
 import contextlib
 import os
 import uuid

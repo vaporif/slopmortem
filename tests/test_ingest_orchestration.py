@@ -1,5 +1,7 @@
 """Tests for the ingest orchestrator: summary wiring, slop, throttle, fan-out, cache."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import typing

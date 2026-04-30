@@ -1,5 +1,7 @@
 """URL allowlist filter test for synthesize: drops sources whose host isn't in the allowlist."""
 
+from __future__ import annotations
+
 import json
 from datetime import date
 from urllib.parse import urlparse

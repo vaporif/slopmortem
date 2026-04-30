@@ -67,6 +67,8 @@ deliberately do not extend it. Deterministic mode tightens this by including
 each candidate's own payload sources via the private in-memory corpus.
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import hashlib

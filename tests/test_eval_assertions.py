@@ -4,6 +4,8 @@ Each assertion is a pure function over a :class:`Synthesis`; these tests build
 the smallest valid Synthesis values and assert on the boolean output.
 """
 
+from __future__ import annotations
+
 from datetime import date
 
 from slopmortem.evals.assertions import (

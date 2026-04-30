@@ -11,6 +11,8 @@ wiring lands in Task 10 (per plan line 713); the module-level ``_emit_event``
 hook is a no-op stub until that orchestration ships.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 

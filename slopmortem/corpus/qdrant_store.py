@@ -7,6 +7,8 @@ Vendor-SDK boundary module. Qdrant's models are loosely typed
 ``slopmortem/llm/openai_embeddings.py``.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from datetime import datetime

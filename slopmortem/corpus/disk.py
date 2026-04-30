@@ -5,6 +5,8 @@ matter is YAML between ``---`` delimiters. Paths always go through
 :func:`safe_path`: no concatenation, no traversal.
 """
 
+from __future__ import annotations
+
 import secrets
 from typing import TYPE_CHECKING
 

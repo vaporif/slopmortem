@@ -5,6 +5,8 @@ that every sector value lives in `slopmortem/corpus/taxonomy.yml`. Real URLs
 and real `content_sha256_at_review` are populated by Task 4b.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import yaml

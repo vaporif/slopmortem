@@ -7,6 +7,8 @@ match the :class:`ToolSpec` signature contract (no closures, no bound
 methods).
 """
 
+from __future__ import annotations
+
 import os
 from typing import TYPE_CHECKING
 

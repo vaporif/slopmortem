@@ -12,6 +12,8 @@ calls to :meth:`MergeJournal.fetch_aliases` or a one-shot scan of the
 ``aliases`` table) and pass them in.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

@@ -1,5 +1,7 @@
 """In-memory LLMClient stub for stage tests; canned responses keyed by fixture."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import jsonschema
 from pydantic import BaseModel
 

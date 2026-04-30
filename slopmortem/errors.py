@@ -6,6 +6,8 @@ brittle string match. Adding a new error: prefer subclassing ``RuntimeError``
 unless the call site needs a more specific base.
 """
 
+from __future__ import annotations
+
 
 class RerankLengthError(RuntimeError):
     """Raised when ``llm_rerank``'s ``ranked`` array length is not ``N_synthesize``.

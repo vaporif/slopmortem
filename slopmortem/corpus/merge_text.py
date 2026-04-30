@@ -6,6 +6,8 @@ any order yields byte-identical output, which feeds a stable content_hash
 that short-circuits re-extraction and re-embedding downstream.
 """
 
+from __future__ import annotations
+
 import hashlib
 from dataclasses import dataclass
 

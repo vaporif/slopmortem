@@ -1,5 +1,7 @@
 """Alias-graph atomicity tests: alias_blocked rows + edges land in one transaction."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
 import pytest

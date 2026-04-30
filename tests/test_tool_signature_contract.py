@@ -11,6 +11,8 @@ Two invariants:
    :func:`safe_get` / :func:`safe_path`.
 """
 
+from __future__ import annotations
+
 import inspect
 
 from slopmortem.corpus import tools_impl

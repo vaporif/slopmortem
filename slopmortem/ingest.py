@@ -35,6 +35,8 @@ Concurrency contract: every LLM/embedding call routes through the same
 through the bounded fan-out limiter for the facet+summarize batch.
 """
 
+from __future__ import annotations
+
 import contextlib
 import hashlib
 import json
@@ -85,6 +87,11 @@ logger = logging.getLogger(__name__)
 # Spec line 205: read-ratio threshold over the first N fan-out responses.
 _CACHE_READ_RATIO_THRESHOLD: Final[float] = 0.80
 _CACHE_READ_RATIO_PROBE_N: Final[int] = 5
+
+# Cap on per-entry exceptions attached as indexed attributes to the ingest span.
+# Beyond this we set ``errors.truncated_count`` and stop adding attribute keys
+# so a pathological run can't blow past Laminar's per-span attribute limit.
+_MAX_RECORDED_ERRORS: Final[int] = 50
 
 # Reliability rank for in-process classification. merge_text orders sections
 # by this. Curated > HN > Wayback > everything else.
@@ -860,6 +867,24 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         for name in result.span_events:
             Laminar.event(name=name)
 
+    def _record_error(entry_label: str, exc: BaseException) -> None:
+        # Without this, swallowed per-entry exceptions are invisible in
+        # Laminar — the parent span returns OK, the INGEST_ENTRY_FAILED event
+        # has no payload, and the only error context lives in stderr logs.
+        if not Laminar.is_initialized():
+            return
+        idx = result.errors
+        if idx >= _MAX_RECORDED_ERRORS:
+            Laminar.set_span_attributes({"errors.truncated_count": idx - _MAX_RECORDED_ERRORS + 1})
+            return
+        Laminar.set_span_attributes(
+            {
+                f"errors.{idx}.entry": entry_label,
+                f"errors.{idx}.exception_type": type(exc).__name__,
+                f"errors.{idx}.message": str(exc)[:500],
+            }
+        )
+
     if Laminar.is_initialized():
         Laminar.set_span_attributes(
             {
@@ -904,6 +929,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         except Exception as exc:  # noqa: BLE001 — per-entry isolation.
             logger.warning("ingest: enricher failed for %r: %s", entry.source_id, exc)
             progress.error(IngestPhase.CLASSIFY, f"enricher failed for {entry.source_id}: {exc}")
+            _record_error(f"{entry.source}:{entry.source_id}", exc)
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.CLASSIFY)
@@ -1002,6 +1028,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
                 IngestPhase.FAN_OUT,
                 f"fan-out failed for {entry.source}:{entry.source_id}: {fan}",
             )
+            _record_error(f"{entry.source}:{entry.source_id}", fan)
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.WRITE)
@@ -1034,6 +1061,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
                 IngestPhase.WRITE,
                 f"write phase failed for {entry.source}:{entry.source_id}: {exc}",
             )
+            _record_error(f"{entry.source}:{entry.source_id}", exc)
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.WRITE)

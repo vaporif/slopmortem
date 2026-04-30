@@ -5,6 +5,8 @@ deterministic path (no env vars, no Qdrant, no real API calls) by
 monkeypatching ``run_query`` to return a hand-built Report.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING

@@ -1,5 +1,7 @@
 """``--reconcile`` dispatches to ``slopmortem.corpus.reconcile.reconcile`` and prints the report."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 

@@ -1,5 +1,7 @@
 """Corpus storage: paths, retrieval, and tool-call implementations."""
 
+from __future__ import annotations
+
 from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION, Chunk, chunk_markdown
 from slopmortem.corpus.disk import (
     read_canonical,

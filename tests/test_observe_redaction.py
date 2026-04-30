@@ -16,6 +16,8 @@ This is the only intercept point exposed by the SDK at this version; if a
 public hook lands upstream, this fixture should switch to it.
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass, field
 from datetime import date

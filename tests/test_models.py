@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from slopmortem.models import (
     Candidate,
     CandidatePayload,

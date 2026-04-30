@@ -24,6 +24,8 @@ relies on the next normal ingest re-fetching the entry through its source
 adapter and running entity resolution from scratch.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

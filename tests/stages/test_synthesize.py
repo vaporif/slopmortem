@@ -1,5 +1,7 @@
 """Tests for the ``synthesize`` stage: structured-output round trip + cache-warm pattern."""
 
+from __future__ import annotations
+
 import json
 from datetime import date
 

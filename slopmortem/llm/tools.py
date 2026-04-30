@@ -6,6 +6,8 @@ the shape we know we produced (a dict from `model_json_schema()`) and
 silence the `reportUnknown*` family at the file boundary.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, cast
 
 import jsonref

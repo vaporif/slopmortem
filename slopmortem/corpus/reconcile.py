@@ -29,6 +29,8 @@ Each applied repair emits a :class:`SpanEvent.RECONCILE_REPAIR_APPLIED`
 span event so operators can audit what changed across runs.
 """
 
+from __future__ import annotations
+
 import contextlib
 import hashlib
 from pathlib import Path

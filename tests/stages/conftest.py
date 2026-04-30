@@ -1,5 +1,7 @@
 """Stage test fixtures: re-export the shared Qdrant probe + async client fixture."""
 
+from __future__ import annotations
+
 import socket
 from typing import TYPE_CHECKING
 

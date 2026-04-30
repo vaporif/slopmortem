@@ -1,5 +1,7 @@
 """Local ONNX embedding client backed by fastembed; mirrors the OpenAI client contract."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 import anyio

@@ -1,5 +1,7 @@
 """Injection-defense test for synthesize: emits PROMPT_INJECTION_ATTEMPTED + drops attacker URLs."""
 
+from __future__ import annotations
+
 import json
 from datetime import date
 from pathlib import Path

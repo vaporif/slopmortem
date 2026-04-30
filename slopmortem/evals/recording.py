@@ -5,6 +5,8 @@ production LLM modules don't pull in test infrastructure. Import direction
 is one-way: `evals -> llm`, never the reverse.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from slopmortem.evals.cassettes import (

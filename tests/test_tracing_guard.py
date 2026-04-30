@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from slopmortem.tracing import TracingGuardError, init_tracing

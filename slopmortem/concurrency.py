@@ -9,6 +9,8 @@ that gives that contract so the rest of the code only has to import this
 helper.
 """
 
+from __future__ import annotations
+
 import asyncio
 from typing import TYPE_CHECKING
 

@@ -1,5 +1,7 @@
 """Deterministic in-memory EmbeddingClient stub keyed on sha256(text)."""
 
+from __future__ import annotations
+
 import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

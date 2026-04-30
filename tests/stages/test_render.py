@@ -1,5 +1,7 @@
 """Tests for ``slopmortem.render``: pure markdown emit, autolink/image stripping, no I/O."""
 
+from __future__ import annotations
+
 import re
 from datetime import UTC, date, datetime
 from pathlib import Path

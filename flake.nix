@@ -38,7 +38,7 @@
         config.allowUnfree = true;
       };
 
-      python = pkgs.python314;
+      python = pkgs.python313;
 
       workspace = uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ./.;};
 
@@ -46,32 +46,11 @@
         sourcePreference = "wheel";
       };
 
-      pyprojectOverrides = final: prev: {
-        # py-rust-stemmers (transitive via fastembed) ships sdist only — no
-        # cp314 wheel — so it's built from source with maturin + cargo here.
-        py-rust-stemmers = prev.py-rust-stemmers.overrideAttrs (old: {
-          nativeBuildInputs =
-            (old.nativeBuildInputs or [])
-            ++ [
-              pkgs.cargo
-              pkgs.rustc
-              pkgs.rustPlatform.cargoSetupHook
-            ]
-            ++ final.resolveBuildSystem {maturin = [];};
-          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            inherit (old) src;
-            name = "py-rust-stemmers-${old.version}-cargo-deps";
-            hash = "sha256-ton9uOTuje2A2ATNp0uNfr/NuXDxtbOPpz0Nie9mACs=";
-          };
-        });
-      };
-
       pythonSet = (pkgs.callPackage pyproject-nix.build.packages {inherit python;})
         .overrideScope (
         pkgs.lib.composeManyExtensions [
           pyproject-build-systems.overlays.default
           overlay
-          pyprojectOverrides
         ]
       );
 
@@ -135,7 +114,7 @@
           # (especially ``tokenizers``/``onnxruntime``) match the ABI they
           # were built against. ``UV_PYTHON`` pins the version uv resolves to;
           # uv pulls a python-build-standalone tarball if it's not cached.
-          UV_PYTHON = "3.14";
+          UV_PYTHON = "3.13";
           UV_PYTHON_DOWNLOADS = "automatic";
           UV_PROJECT_ENVIRONMENT = ".venv";
 

@@ -9,6 +9,8 @@ Covers Task 10 plan steps:
 don't need real Qdrant / OpenRouter / OpenAI credentials.
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 

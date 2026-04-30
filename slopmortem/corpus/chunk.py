@@ -6,6 +6,8 @@ the window start, the boundary jumps to it so chunks don't start
 mid-paragraph.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 import tiktoken

@@ -21,6 +21,8 @@ Quarantine rows live in their own table keyed on
 ``merge_state`` column; quarantined docs do not live in the main journal.
 """
 
+from __future__ import annotations
+
 import sqlite3
 from typing import TYPE_CHECKING, Any
 

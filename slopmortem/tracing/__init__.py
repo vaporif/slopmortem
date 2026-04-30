@@ -4,12 +4,15 @@ Also exposes small helpers for run-identity attributes on root spans:
 :func:`mint_run_id` and :func:`git_sha`.
 """
 
+from __future__ import annotations
+
 import functools
 import ipaddress
 import socket
 import subprocess
-import uuid
 from urllib.parse import urlparse
+
+from uuid_extensions import uuid7str
 
 
 class TracingGuardError(RuntimeError):
@@ -53,7 +56,7 @@ def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> 
 
 def mint_run_id() -> str:
     """Return a fresh time-ordered run id (uuid7 hex, 32 chars, no hyphens)."""
-    return uuid.uuid7().hex
+    return uuid7str().replace("-", "")
 
 
 @functools.cache
@@ -67,6 +70,6 @@ def git_sha() -> str | None:
             text=True,
             timeout=2,
         )
-    except subprocess.SubprocessError, FileNotFoundError, OSError:
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return None
     return out.stdout.strip() or None
