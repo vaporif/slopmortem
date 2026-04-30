@@ -47,7 +47,7 @@ from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
 import anyio
 from anyio import to_thread
-from lmnr import observe
+from lmnr import Laminar, observe
 
 from slopmortem._time import utcnow_iso
 from slopmortem.concurrency import gather_resilient
@@ -62,6 +62,7 @@ from slopmortem.models import (
     CandidatePayload,
     Facets,
 )
+from slopmortem.tracing import git_sha, mint_run_id
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
@@ -850,6 +851,32 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
     result = IngestResult(dry_run=dry_run)
     progress = progress or NullProgress()
 
+    def _emit_collected_events() -> None:
+        # Drain ``result.span_events`` into Laminar. Stays a local closure so
+        # every early-return path can call it; the list is preserved for tests
+        # and the CLI rendering helper.
+        if not Laminar.is_initialized():
+            return
+        for name in result.span_events:
+            Laminar.event(name=name)
+
+    if Laminar.is_initialized():
+        Laminar.set_span_attributes(
+            {
+                "run.id": mint_run_id(),
+                "run.kind": "ingest",
+                "run.git_sha": git_sha() or "",
+                "run.dry_run": dry_run,
+                "run.force": force,
+                "run.limit": limit if limit is not None else 0,
+                "config.taxonomy_version": config.taxonomy_version,
+                "config.reliability_rank_version": config.reliability_rank_version,
+                "config.slop_threshold": config.slop_threshold,
+                "config.model_facet": config.model_facet,
+                "config.model_summarize": config.model_summarize,
+            }
+        )
+
     # Default sparse encoder: BM25 via fastembed. Tests stub this with a dict-returning
     # lambda so the ONNX model never loads under pytest.
     if sparse_encoder is None:
@@ -928,9 +955,11 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
     # ─── Dry-run early exit: only count, never write. ─────────────────────────
     if dry_run:
         result.would_process = len(keepers)
+        _emit_collected_events()
         return result
 
     if not keepers:
+        _emit_collected_events()
         return result
 
     # ─── Step 3: cache-warm one serial call so fan-out runs hot. ──────────────
@@ -1009,6 +1038,16 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.WRITE)
             continue
+        except BaseException as exc:
+            # CancelledError / SystemExit / etc. — ``except Exception`` above
+            # misses these. Surface what's escaping (which entry, what type)
+            # via the progress error channel before letting it propagate so
+            # the run terminates loud rather than silent.
+            progress.error(
+                IngestPhase.WRITE,
+                f"FATAL {type(exc).__name__} on {entry.source}:{entry.source_id}: {exc}",
+            )
+            raise
         if outcome == "processed":
             result.processed += 1
         elif outcome == "skipped":
@@ -1016,4 +1055,5 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         progress.advance_phase(IngestPhase.WRITE)
     progress.end_phase(IngestPhase.WRITE)
 
+    _emit_collected_events()
     return result

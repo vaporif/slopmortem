@@ -1,7 +1,14 @@
-"""Init guard for the laminar tracer. Refuses non-loopback endpoints by default."""
+"""Init guard for the laminar tracer. Refuses non-loopback endpoints by default.
 
+Also exposes small helpers for run-identity attributes on root spans:
+:func:`mint_run_id` and :func:`git_sha`.
+"""
+
+import functools
 import ipaddress
 import socket
+import subprocess
+import uuid
 from urllib.parse import urlparse
 
 
@@ -42,3 +49,24 @@ def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> 
             "set LMNR_ALLOW_REMOTE=1 to override"
         )
         raise TracingGuardError(msg)
+
+
+def mint_run_id() -> str:
+    """Return a fresh time-ordered run id (uuid7 hex, 32 chars, no hyphens)."""
+    return uuid.uuid7().hex
+
+
+@functools.cache
+def git_sha() -> str | None:
+    """Return ``HEAD`` short sha, or ``None`` outside a git checkout. Memoized per process."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607 — git on PATH is fine.
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except subprocess.SubprocessError, FileNotFoundError, OSError:
+        return None
+    return out.stdout.strip() or None

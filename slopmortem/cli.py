@@ -323,7 +323,11 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
         # user just sees the prompt return with no signal that the run stopped.
         err_console.rule("[bold yellow]ingest cancelled (Ctrl-C)", style="yellow")
         raise
-    except Exception:
+    except BaseException:
+        # Catch ``BaseException`` (asyncio.CancelledError, SystemExit, etc.) too —
+        # ``except Exception`` alone misses these and they exit silently when
+        # Rich's live render tears down. We print + re-raise so the caller still
+        # sees a non-zero exit; this is purely for visibility.
         err_console.rule("[bold red]ingest failed", style="red")
         err_console.print_exception(show_locals=False)
         raise

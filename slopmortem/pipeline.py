@@ -26,6 +26,8 @@ from slopmortem.stages.facet_extract import extract_facets
 from slopmortem.stages.llm_rerank import llm_rerank
 from slopmortem.stages.retrieve import retrieve
 from slopmortem.stages.synthesize import synthesize_all
+from slopmortem.tracing import git_sha, mint_run_id
+from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -126,6 +128,22 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
     successes: list[Synthesis] = []
     budget_exceeded = False
 
+    if Laminar.is_initialized():
+        Laminar.set_span_attributes(
+            {
+                "run.id": mint_run_id(),
+                "run.kind": "query",
+                "run.git_sha": git_sha() or "",
+                "config.taxonomy_version": config.taxonomy_version,
+                "config.K_retrieve": config.K_retrieve,
+                "config.N_synthesize": config.N_synthesize,
+                "config.strict_deaths": config.strict_deaths,
+                "config.model_facet": config.model_facet,
+                "config.model_rerank": config.model_rerank,
+                "config.model_synthesize": config.model_synthesize,
+            }
+        )
+
     try:
         if progress is not None:
             progress("facet_extract")
@@ -168,6 +186,8 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             progress(f"synthesize {len(successes)}/{len(top_n)}")
     except BudgetExceededError:
         budget_exceeded = True
+        if Laminar.is_initialized():
+            Laminar.event(name=str(SpanEvent.BUDGET_EXCEEDED))
 
     return Report(
         input=input_ctx,
