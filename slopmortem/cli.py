@@ -248,7 +248,7 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
     # Spec: §Atomicity / six drift classes (a-f).
     if reconcile_flag:
         journal = await _build_journal(config, post_mortems_root)
-        corpus = _build_ingest_corpus(config, post_mortems_root)
+        corpus = await _build_ingest_corpus(config, post_mortems_root)
         report = await reconcile(
             journal=journal,
             corpus=corpus,
@@ -285,23 +285,33 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
     progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
         RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
-    with progress_ctx as bar:
-        result = await ingest(
-            sources=sources,
-            enrichers=enrichers,
-            journal=journal,
-            corpus=corpus,
-            llm=llm,
-            embed_client=embedder,
-            budget=budget,
-            slop_classifier=classifier,
-            config=config,
-            post_mortems_root=post_mortems_root,
-            dry_run=dry_run,
-            force=force,
-            limit=limit,
-            progress=bar,
-        )
+    # Catch + print any exception that escapes the orchestrator BEFORE the
+    # Rich live render tears down. Without this, ``Progress.__exit__`` clears
+    # the screen and the traceback can interleave invisibly with bar redraws —
+    # exactly what happened with the Wesabe / "collection doesn't exist" run.
+    err_console = Console(stderr=True)
+    try:
+        with progress_ctx as bar:
+            result = await ingest(
+                sources=sources,
+                enrichers=enrichers,
+                journal=journal,
+                corpus=corpus,
+                llm=llm,
+                embed_client=embedder,
+                budget=budget,
+                slop_classifier=classifier,
+                config=config,
+                post_mortems_root=post_mortems_root,
+                dry_run=dry_run,
+                force=force,
+                limit=limit,
+                progress=bar,
+            )
+    except Exception:
+        err_console.rule("[bold red]ingest failed", style="red")
+        err_console.print_exception(show_locals=False)
+        raise
     if bar is not None:
         _render_ingest_result(bar.console, result)
     else:
@@ -489,11 +499,26 @@ def _build_slop_classifier(*, dry_run: bool, llm: LLMClient, model: str) -> Slop
     return HaikuSlopClassifier(llm=llm, model=model)
 
 
-def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
-    """Construct only the Qdrant-backed ingest corpus; no LLM/embedder client required."""
+async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
+    """Construct the Qdrant-backed ingest corpus and ensure its collection exists.
+
+    ``ensure_collection`` is idempotent (creates only when missing), so calling
+    it on every invocation is cheap and means a fresh dev box doesn't need a
+    separate setup step. Without this, ``upsert_chunk`` fails with
+    ``Collection 'slopmortem' doesn't exist`` on the first write.
+    """
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
 
+    from slopmortem.corpus.qdrant_store import ensure_collection  # noqa: PLC0415
+    from slopmortem.llm.openai_embeddings import EMBED_DIMS  # noqa: PLC0415
+
+    if config.embed_model_id not in EMBED_DIMS:
+        msg = f"unknown embed model {config.embed_model_id!r}; add it to EMBED_DIMS"
+        raise ValueError(msg)
+    dim = EMBED_DIMS[config.embed_model_id]
+
     qdrant_client = AsyncQdrantClient(host=config.qdrant_host, port=config.qdrant_port)
+    await ensure_collection(qdrant_client, config.qdrant_collection, dim=dim)
     corpus = QdrantCorpus(
         client=qdrant_client,
         collection=config.qdrant_collection,
@@ -535,7 +560,7 @@ async def _build_ingest_deps(
 
     embedder = _make_embedder(config, budget)
 
-    corpus = _build_ingest_corpus(config, post_mortems_root)
+    corpus = await _build_ingest_corpus(config, post_mortems_root)
     journal = await _build_journal(config, post_mortems_root)
     classifier = _build_slop_classifier(
         dry_run=dry_run,
