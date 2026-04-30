@@ -35,7 +35,7 @@ import os
 import sys
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self, cast
+from typing import TYPE_CHECKING, Annotated, Self, cast, override
 
 # Silence gRPC C-Core's INFO-level log channel BEFORE the Laminar import below
 # transitively pulls in grpcio. Without this, the OTLP exporter's connection
@@ -51,7 +51,7 @@ import anyio  # must follow the GRPC env-var setup above
 import typer
 from lmnr import Laminar, observe
 from openai import AsyncOpenAI
-from rich.console import Console
+from rich.console import Console, ConsoleOptions, RenderResult
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -718,7 +718,7 @@ class _StackedBar:
         self._bar = bar
         self._height = height
 
-    def __rich_console__(self, console: Console, options: object):
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         for i in range(self._height):
             yield from self._bar.__rich_console__(console, options)  # type: ignore[attr-defined]
             if i < self._height - 1:
@@ -749,6 +749,7 @@ class _OptionalMofNCompleteColumn(MofNCompleteColumn):
     cell and avoids ``0/1 → 1/1`` noise.
     """
 
+    @override
     def render(self, task: Task) -> Text:
         if task.total is None or task.total <= 1:
             return Text("")
