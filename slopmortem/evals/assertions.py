@@ -66,16 +66,19 @@ def lifespan_months_positive(s: Synthesis) -> bool:
 #
 # Digit cluster: ``\d[\d,.]*\d`` requires both ends to be digits, so a sentence-
 # terminating ``.`` is excluded (single-digit ``\d`` covers the standalone case).
-# Currency prefix ``$`` is optional. Qualifier is one of common units; matched
-# case-insensitively so "Million"/"million" both extract, but the substring
-# check stays case-sensitive (intentional strictness).
+# Currency prefix ``$`` is optional. Both the regex match and the substring
+# check are case-sensitive; lowercase synthesis prose is the common case, and
+# accidental capitalization in prose simply won't match the qualifier
+# alternation (the digit still matches).
+# re.VERBOSE is required so the inline ``#`` annotations and indented multi-line
+# layout below are not treated as literal regex characters.
 _NUMERIC_CLAIM_RE = re.compile(
     r"""
     \$?(?:\d[\d,.]*\d|\d)                          # currency-prefixed digit cluster
     (?:\s*(?:million|billion|[MBK]|%|months?|years?))?  # optional unit qualifier
     (?:\s+\w+)?                                    # optional one trailing word
     """,
-    re.IGNORECASE | re.VERBOSE,
+    re.VERBOSE,
 )
 
 

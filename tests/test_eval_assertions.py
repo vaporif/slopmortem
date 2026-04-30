@@ -165,8 +165,10 @@ def test_claims_grounded_dollar_with_trailing_word_not_in_body_is_false() -> Non
 
 
 def test_claims_grounded_fabricated_leverage_ratio_is_false() -> None:
-    # "80:1 leverage" -> regex extracts "80" (colon stops the cluster);
-    # body with no digits at all -> "80" not in body -> False.
+    # "80:1 leverage" -> findall returns ['80', '1 leverage']: the colon stops
+    # the first digit cluster, then ``\d`` followed by ``\s+\w+`` re-matches on
+    # ``1 leverage``. The function returns False on the first miss (``'80' not
+    # in body``), so the second match is never substring-checked here.
     s = _synth(similarity=_sim(business_model="Ran 80:1 leverage at the end."))
     body = "Operated through traditional banking partnerships without disclosed ratios."
     assert claims_grounded_in_body(s, body) is False
@@ -191,3 +193,23 @@ def test_claims_grounded_trailing_period_does_not_break_match() -> None:
     s = _synth(why_similar="Hit 5 million customers.")
     body = "They hit 5 million customers in year three."
     assert claims_grounded_in_body(s, body) is True
+
+
+def test_claims_grounded_case_sensitive_regex_and_substring() -> None:
+    # Pins the post-IGNORECASE-removal behavior so a future contributor doesn't
+    # reintroduce ``re.IGNORECASE`` on _NUMERIC_CLAIM_RE.
+    #
+    # Path A: lowercase prose vs lowercase body -> qualifier matches, full
+    # token "1.7 million customers" appears verbatim -> True.
+    s_lower = _synth(why_similar="Reached 1.7 million customers.")
+    body_lower = "they reached 1.7 million customers globally"
+    assert claims_grounded_in_body(s_lower, body_lower) is True
+
+    # Path B: capitalized "Million" in prose vs lowercase "million" in body.
+    # With IGNORECASE removed, the qualifier alternation no longer matches
+    # ``Million``, so findall extracts only the bare digit ``1.7`` (plus the
+    # following word via the trailing-word group). Body contains ``1.7``, so
+    # the substring check still passes -> True.
+    s_mixed = _synth(why_similar="Reached 1.7 Million customers.")
+    body_mixed = "they reached 1.7 million customers globally"
+    assert claims_grounded_in_body(s_mixed, body_mixed) is True
