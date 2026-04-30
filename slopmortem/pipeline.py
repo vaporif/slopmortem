@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from lmnr import Laminar, observe
 
@@ -32,8 +33,6 @@ from slopmortem.tracing import git_sha, mint_run_id
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from slopmortem.budget import Budget
     from slopmortem.config import Config
     from slopmortem.corpus.store import Corpus
@@ -44,6 +43,65 @@ if TYPE_CHECKING:
 
 
 _DAYS_PER_YEAR = 365
+
+
+class QueryPhase(StrEnum):
+    """Closed set of phase keys used by :class:`QueryProgress`.
+
+    Mirrors :class:`slopmortem.ingest.IngestPhase`: a closed enum gives typo
+    safety (``"facetextract"`` fails at parse time) and exhaustiveness checks
+    in match statements / dict literals.
+    """
+
+    FACET_EXTRACT = "facet_extract"
+    RETRIEVE = "retrieve"
+    RERANK = "rerank"
+    SYNTHESIZE = "synthesize"
+
+
+@runtime_checkable
+class QueryProgress(Protocol):
+    """Phase-level progress hooks for ``slopmortem query``.
+
+    Methods are no-op-safe: :class:`NullQueryProgress` keeps the orchestrator
+    decoupled from any specific UI library, while the CLI wires a Rich-based
+    implementation. Mirrors :class:`slopmortem.ingest.IngestProgress` so a
+    future shared base is straightforward.
+    """
+
+    def start_phase(self, phase: QueryPhase, total: int) -> None:
+        """Announce *phase* with an expected ``total`` of advances."""
+
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
+        """Advance *phase*'s bar by ``n``."""
+
+    def end_phase(self, phase: QueryPhase) -> None:
+        """Mark *phase* complete."""
+
+    def log(self, message: str) -> None:
+        """Emit a one-off status line."""
+
+    def error(self, phase: QueryPhase, message: str) -> None:
+        """Record an error against *phase*."""
+
+
+class NullQueryProgress:
+    """No-op :class:`QueryProgress` used when no display surface is attached."""
+
+    def start_phase(self, phase: QueryPhase, total: int) -> None:
+        """No-op."""
+
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
+        """No-op."""
+
+    def end_phase(self, phase: QueryPhase) -> None:
+        """No-op."""
+
+    def log(self, message: str) -> None:
+        """No-op."""
+
+    def error(self, phase: QueryPhase, message: str) -> None:
+        """No-op."""
 
 
 def cutoff_iso(years_filter: int | None) -> str | None:
@@ -96,7 +154,7 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
     corpus: Corpus,
     config: Config,
     budget: Budget,
-    progress: Callable[[str], None] | None = None,
+    progress: QueryProgress | None = None,
     sparse_encoder: SparseEncoder | None = None,
 ) -> Report:
     """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
@@ -112,8 +170,10 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
         budget: Shared per-run :class:`Budget` for cost bookkeeping. Stages
             book costs through their LLM/embedding clients; this function only
             reads ``spent_usd``/``remaining`` at the end.
-        progress: Optional ``str -> None`` callback for stage progress (CLI uses
-            it to write to stderr). Pipeline never writes to stderr itself.
+        progress: Optional :class:`QueryProgress` sink for phase-level updates.
+            CLI wires a Rich-backed impl; passing ``None`` (or omitting) is
+            equivalent to :class:`NullQueryProgress`. Pipeline never writes to
+            stderr itself.
         sparse_encoder: Optional override for the BM25 sparse encoder forwarded
             to ``retrieve``. ``None`` lazy-loads the production fastembed model
             on first call. The recording helper passes a wrapped encoder so it
@@ -146,18 +206,19 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             }
         )
 
+    progress = progress if progress is not None else NullQueryProgress()
     try:
-        if progress is not None:
-            progress("facet_extract")
+        progress.start_phase(QueryPhase.FACET_EXTRACT, total=1)
         facets = await extract_facets(
             input_ctx.description,
             llm,
             model=config.model_facet,
             max_tokens=config.max_tokens_facet,
         )
+        progress.advance_phase(QueryPhase.FACET_EXTRACT)
+        progress.end_phase(QueryPhase.FACET_EXTRACT)
 
-        if progress is not None:
-            progress("retrieve")
+        progress.start_phase(QueryPhase.RETRIEVE, total=1)
         cutoff = cutoff_iso(input_ctx.years_filter)
         retrieved = await retrieve(
             description=input_ctx.description,
@@ -169,9 +230,10 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             k_retrieve=config.K_retrieve,
             sparse_encoder=sparse_encoder,
         )
+        progress.advance_phase(QueryPhase.RETRIEVE)
+        progress.end_phase(QueryPhase.RETRIEVE)
 
-        if progress is not None:
-            progress("rerank")
+        progress.start_phase(QueryPhase.RERANK, total=1)
         reranked = await llm_rerank(
             retrieved,
             input_ctx.description,
@@ -181,11 +243,18 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             model=config.model_rerank,
             max_tokens=config.max_tokens_rerank,
         )
+        progress.advance_phase(QueryPhase.RERANK)
+        progress.end_phase(QueryPhase.RERANK)
 
         top_n = _join_to_candidates(retrieved, reranked.ranked)[: config.N_synthesize]
 
-        if progress is not None:
-            progress(f"synthesize 0/{len(top_n)}")
+        progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
+
+        def _on_candidate_done(exc: BaseException | None) -> None:
+            if exc is not None:
+                progress.error(QueryPhase.SYNTHESIZE, f"{type(exc).__name__}: {exc}")
+            progress.advance_phase(QueryPhase.SYNTHESIZE)
+
         synth_results = await synthesize_all(
             top_n,
             input_ctx,
@@ -193,10 +262,10 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             config,
             model=config.model_synthesize,
             max_tokens=config.max_tokens_synthesize,
+            on_candidate_done=_on_candidate_done,
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
-        if progress is not None:
-            progress(f"synthesize {len(successes)}/{len(top_n)}")
+        progress.end_phase(QueryPhase.SYNTHESIZE)
     except BudgetExceededError:
         budget_exceeded = True
         if Laminar.is_initialized():

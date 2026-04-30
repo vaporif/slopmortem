@@ -92,12 +92,14 @@ def _rerank_canned(
     text: str,
     pitch: str,
     candidates: list[Candidate],
+    top_n: int,
     model: str = _DEFAULT_MODEL,
 ) -> dict[tuple[str, str, str], FakeResponse]:
     rendered = render_prompt(
         "llm_rerank",
         pitch=pitch,
         facets=_facets().model_dump(),
+        top_n=top_n,
         candidates=[
             {
                 "candidate_id": c.canonical_id,
@@ -117,7 +119,9 @@ async def test_llm_rerank_returns_n_synthesize() -> None:
     cfg = _config(n_synthesize=5)
     payload = _scored_payload([c.canonical_id for c in candidates[:5]])
     fake_llm = FakeLLMClient(
-        canned=_rerank_canned(text=payload, pitch="pitch text", candidates=candidates),
+        canned=_rerank_canned(
+            text=payload, pitch="pitch text", candidates=candidates, top_n=cfg.N_synthesize
+        ),
         default_model=_DEFAULT_MODEL,
     )
 
@@ -142,7 +146,9 @@ async def test_llm_rerank_uses_summary_not_body() -> None:
     cfg = _config(n_synthesize=1)
     payload = _scored_payload(["only-cand"])
     fake_llm = FakeLLMClient(
-        canned=_rerank_canned(text=payload, pitch="pitch", candidates=candidates),
+        canned=_rerank_canned(
+            text=payload, pitch="pitch", candidates=candidates, top_n=cfg.N_synthesize
+        ),
         default_model=_DEFAULT_MODEL,
     )
 
@@ -160,7 +166,9 @@ async def test_llm_rerank_raises_on_length_mismatch() -> None:
     # array length, so the stage's post-parse length guard must trigger.
     payload = _scored_payload([c.canonical_id for c in candidates[:3]])
     fake_llm = FakeLLMClient(
-        canned=_rerank_canned(text=payload, pitch="pitch", candidates=candidates),
+        canned=_rerank_canned(
+            text=payload, pitch="pitch", candidates=candidates, top_n=cfg.N_synthesize
+        ),
         default_model=_DEFAULT_MODEL,
     )
 

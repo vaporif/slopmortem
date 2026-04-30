@@ -34,6 +34,8 @@ async def summarize_for_rerank(
         source_id: Source attribution embedded in the prompt's
             ``<untrusted_document>`` tag. Defaults to empty since the
             summary text isn't keyed on it.
+        max_tokens: Optional cap on completion tokens. ``None`` keeps the
+            client's default (no cap sent upstream).
 
     Returns:
         The stripped LLM output. The <=400-token cap is a prompt-level

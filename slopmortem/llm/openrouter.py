@@ -98,7 +98,7 @@ class OpenRouterClient:
         self._initial_backoff = initial_backoff
         self._sleep: Callable[[float], Awaitable[None]] = sleep or anyio.sleep
 
-    async def complete(  # noqa: C901, PLR0913 — public surface mirrors OpenAI chat.create kwargs.
+    async def complete(  # noqa: C901, PLR0913, PLR0915 — public surface mirrors OpenAI chat.create kwargs.
         self,
         prompt: str,
         *,

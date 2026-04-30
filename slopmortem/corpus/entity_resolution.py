@@ -530,6 +530,8 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             mirror spec line 264.
         force_similarity: Test-only. Skips the embedding cosine and uses
             this value directly.
+        tiebreaker_max_tokens: Optional cap on completion tokens for the
+            tier-3 Haiku tiebreaker. ``None`` keeps the client's default.
 
     Returns:
         :class:`ResolveResult` with the chosen canonical_id and action.

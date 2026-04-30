@@ -57,6 +57,8 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
             for the post-parse length check.
         model: Optional override of the LLM client's default model. ``None``
             lets the client pick.
+        max_tokens: Optional cap on completion tokens. ``None`` keeps the
+            client's default (no cap sent upstream).
 
     Returns:
         Parsed :class:`LlmRerankResult` with ``ranked`` length equal to

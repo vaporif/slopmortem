@@ -53,7 +53,7 @@ def _emit_event(event: SpanEvent) -> None:
         Laminar.event(name=str(event))
 
 
-async def synthesize(
+async def synthesize(  # noqa: PLR0913 — every dependency is required at the call site
     candidate: Candidate,
     ctx: InputContext,
     llm: LLMClient,
@@ -75,6 +75,8 @@ async def synthesize(
         config: :class:`Config`. Drives ``synthesis_tools`` (Tavily inclusion)
             and is reserved for future per-stage knobs.
         model: Optional model override; ``None`` lets the client pick.
+        max_tokens: Optional cap on completion tokens. ``None`` keeps the
+            client's default (no cap sent upstream).
 
     Returns:
         The parsed :class:`Synthesis`. ``sources`` is filtered against
@@ -138,7 +140,7 @@ def _build_allowed_hosts(candidate_sources: list[str]) -> frozenset[str]:
     return frozenset(candidate_hosts | _FIXED_HOST_ALLOWLIST)
 
 
-async def synthesize_all(
+async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fan-out wrapper
     candidates: list[Candidate],
     ctx: InputContext,
     llm: LLMClient,
@@ -161,6 +163,8 @@ async def synthesize_all(
         llm: Async :class:`LLMClient`.
         config: :class:`Config`.
         model: Optional model override.
+        max_tokens: Optional cap on completion tokens, forwarded to each
+            :func:`synthesize` call.
 
     Returns:
         A list the same length as *candidates*, each entry either a
