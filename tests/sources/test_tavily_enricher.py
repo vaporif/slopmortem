@@ -104,7 +104,7 @@ async def test_returns_entry_unchanged_on_http_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_returns_entry_unchanged_when_api_key_missing(monkeypatch):
-    """Missing ``TAVILY_API_KEY``: enricher logs and returns the entry unchanged (does not raise)."""
+    """Missing ``TAVILY_API_KEY``: enricher logs and returns the entry unchanged (no raise)."""
     mock_post = AsyncMock()
     monkeypatch.setattr("slopmortem.corpus.sources.tavily.safe_post", mock_post)
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)

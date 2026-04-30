@@ -201,7 +201,6 @@ def _pair_key(canonical_a: str, canonical_b: str) -> str:
     return f"{lo}{hi}"
 
 
-
 _TIER3_DECISIONS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS tier3_decisions (
     pair_key                TEXT PRIMARY KEY,

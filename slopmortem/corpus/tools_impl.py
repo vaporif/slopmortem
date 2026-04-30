@@ -15,7 +15,14 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from slopmortem.http import safe_post
-from slopmortem.models import ToolSpec
+from slopmortem.models import (
+    BusinessModelLit,
+    CustomerTypeLit,
+    GeographyLit,
+    MonetizationLit,
+    SectorLit,
+    ToolSpec,
+)
 
 if TYPE_CHECKING:
     from slopmortem.corpus.store import Corpus
@@ -27,6 +34,7 @@ _TAVILY_SNIPPET_CHARS = 500
 __all__ = [
     "GetPostMortemArgs",
     "SearchCorpusArgs",
+    "SearchFacets",
     "SearchHit",
     "TavilyExtractArgs",
     "TavilySearchArgs",
@@ -45,11 +53,28 @@ class GetPostMortemArgs(BaseModel):
     max_chars: int = 8000
 
 
+class SearchFacets(BaseModel):
+    """Closed-enum filters for ``search_corpus``; all optional.
+
+    Values are pulled from ``taxonomy.yml`` at module load (via ``*Lit``),
+    so the JSON schema carries an ``enum`` constraint per field. Anthropic's
+    grammar-constrained sampler / OpenAI strict tools mode then enforce
+    validity at decode time — the model can't emit a typo'd key or an
+    out-of-taxonomy value.
+    """
+
+    sector: SectorLit | None = None
+    business_model: BusinessModelLit | None = None
+    customer_type: CustomerTypeLit | None = None
+    geography: GeographyLit | None = None
+    monetization: MonetizationLit | None = None
+
+
 class SearchCorpusArgs(BaseModel):
     """Arguments for ``search_corpus``: query string and optional facet filters."""
 
     q: str
-    facets: dict[str, str] | None = None
+    facets: SearchFacets | None = None
     limit: int = 5
 
 
@@ -200,7 +225,10 @@ get_post_mortem = ToolSpec(
 search_corpus = ToolSpec(
     name="search_corpus",
     description=(
-        "Search the corpus for additional dead startups matching a query and optional facets."
+        "Search the corpus for additional dead startups matching a query and "
+        "optional taxonomy facets (sector, business_model, customer_type, "
+        "geography, monetization). Facet values are closed enums — see the "
+        "schema for allowed values."
     ),
     args_model=SearchCorpusArgs,
     fn=_search_corpus,
