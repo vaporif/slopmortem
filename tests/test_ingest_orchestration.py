@@ -352,7 +352,7 @@ async def test_ingest_quarantines_slop(tmp_path, cfg):
     classifier = FakeSlopClassifier(default_score=0.95)
     llm = FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU)
 
-    sources = [_ListSource(entries=[_entry()])]
+    sources = [_ListSource(entries=[_entry(source="hn")])]
     result = await ingest(
         sources=sources,
         enrichers=[],
