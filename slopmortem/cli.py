@@ -130,6 +130,17 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
             help="Root for raw/, canonical/, quarantine/ trees.",
         ),
     ] = Path("./post_mortems"),
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            "--limit",
+            help=(
+                "Process only the first N entries after gathering from all sources. "
+                "Source order is curated -> HN -> Crunchbase. Useful for cheap live "
+                "smoke tests; cost scales with N."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run the ingest pipeline against the configured sources.
 
@@ -149,6 +160,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
             enrich_wayback=enrich_wayback,
             tavily_enrich=tavily_enrich,
             post_mortems_root=post_mortems_root,
+            limit=limit,
         )
     )
 
@@ -160,6 +172,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     reconcile_flag: bool,
     reclassify: bool,
     list_review: bool,
+    limit: int | None,
     crunchbase_csv: Path | None,
     enrich_wayback: bool,
     tavily_enrich: bool,
@@ -259,6 +272,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
         post_mortems_root=post_mortems_root,
         dry_run=dry_run,
         force=force,
+        limit=limit,
     )
     typer.echo(f"slopmortem ingest result: {result}")
 

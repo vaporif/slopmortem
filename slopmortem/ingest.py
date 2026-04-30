@@ -699,6 +699,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
     dry_run: bool = False,
     force: bool = False,
     sparse_encoder: SparseEncoder | None = None,
+    limit: int | None = None,
 ) -> IngestResult:
     """Run one full ingest pass and return the aggregated :class:`IngestResult`.
 
@@ -740,6 +741,8 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
     # ─── Step 1: pull every entry; per-source errors counted, run continues. ───
     entries, source_failures = await _gather_entries(sources, span_events=result.span_events)
     result.source_failures = source_failures
+    if limit is not None and limit >= 0:
+        entries = entries[:limit]
 
     # ─── Step 2: enrich + slop classify + length-floor. ───────────────────────
     keepers: list[tuple[RawEntry, str]] = []  # (entry, body) post-extract.
