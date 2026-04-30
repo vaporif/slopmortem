@@ -372,8 +372,10 @@ def query_cmd(
         bool,
         typer.Option(
             "--debug-retrieve",
-            help="Run facet_extract + retrieve only; print the candidate list and exit. "
-            "Skips rerank and synthesize so retrieval can be inspected in isolation.",
+            help=(
+                "Run facet_extract + retrieve only; print the candidate list and exit. "
+                "Skips rerank and synthesize so retrieval can be inspected in isolation."
+            ),
         ),
     ] = False,
 ) -> None:
@@ -425,12 +427,15 @@ async def _query(
     typer.echo(render(report))
 
 
+_DEBUG_SUMMARY_MAX = 200
+
+
 async def _debug_retrieve(
     ctx: InputContext,
     *,
-    llm: OpenRouterClient,
+    llm: LLMClient,
     embedder: EmbeddingClient,
-    corpus: QdrantCorpus,
+    corpus: Corpus,
     config: Config,
 ) -> None:
     """Run facet_extract + retrieve and print the candidate list to stdout."""
@@ -447,13 +452,12 @@ async def _debug_retrieve(
     )
 
     typer.echo(f"# debug-retrieve  input={ctx.name!r}  cutoff={cutoff or 'none'}")
-    typer.echo(
-        f"facets: sector={facets.sector} business_model={facets.business_model} "
-        f"customer_type={facets.customer_type} geography={facets.geography} "
-        f"monetization={facets.monetization} sub_sector={facets.sub_sector} "
-        f"product_type={facets.product_type} price_point={facets.price_point} "
-        f"founding_year={facets.founding_year} failure_year={facets.failure_year}"
-    )
+    typer.echo(f"facets.closed: sector={facets.sector} business_model={facets.business_model}")
+    typer.echo(f"               customer_type={facets.customer_type} geography={facets.geography}")
+    typer.echo(f"               monetization={facets.monetization}")
+    typer.echo(f"facets.open:   sub_sector={facets.sub_sector} product_type={facets.product_type}")
+    typer.echo(f"               price_point={facets.price_point}")
+    typer.echo(f"facets.years:  founding={facets.founding_year} failure={facets.failure_year}")
     typer.echo(f"retrieved: {len(candidates)} (k_retrieve={config.K_retrieve})")
     typer.echo("")
     for i, c in enumerate(candidates, start=1):
@@ -461,17 +465,16 @@ async def _debug_retrieve(
         founded = p.founding_date.isoformat() if p.founding_date else "?"
         failed = p.failure_date.isoformat() if p.failure_date else "?"
         summary = p.summary.replace("\n", " ").strip()
-        if len(summary) > 200:  # noqa: PLR2004 — display truncation
-            summary = summary[:197] + "..."
-        typer.echo(
-            f"[{i}] score={c.score:.4f}  {p.name}  "
-            f"({p.facets.sector}/{p.facets.business_model}, founded={founded}, failed={failed})"
-        )
+        if len(summary) > _DEBUG_SUMMARY_MAX:
+            summary = summary[: _DEBUG_SUMMARY_MAX - 3] + "..."
+        meta = f"{p.facets.sector}/{p.facets.business_model}, founded={founded}, failed={failed}"
+        typer.echo(f"[{i}] score={c.score:.4f}  {p.name}  ({meta})")
         typer.echo(f"    id={c.canonical_id}  provenance={p.provenance}  slop={p.slop_score:.2f}")
         if c.alias_canonicals:
             typer.echo(f"    aliases: {', '.join(c.alias_canonicals)}")
         if p.sources:
-            typer.echo(f"    sources: {len(p.sources)} ({p.sources[0]}{'...' if len(p.sources) > 1 else ''})")
+            extra = f" +{len(p.sources) - 1}" if len(p.sources) > 1 else ""
+            typer.echo(f"    sources: {p.sources[0]}{extra}")
         typer.echo(f"    summary: {summary}")
         typer.echo("")
 
