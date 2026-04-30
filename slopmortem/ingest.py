@@ -270,12 +270,37 @@ def _skip_key(  # noqa: PLR0913 — the spec-defined tuple is wide
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _entry_summary_text(entry: RawEntry) -> str:
-    """Return the entry's body text for slop+facet+summarize stages."""
+def _truncate_to_tokens(text: str, max_tokens: int) -> str:
+    """Clip *text* so it encodes to at most *max_tokens* under cl100k_base.
+
+    Anthropic's tokenizer isn't published; cl100k_base (used by GPT-4) is a
+    good proxy for cost-control purposes — Anthropic and OpenAI tokenizers
+    agree to within ~10% on English prose, which is well inside the
+    headroom for a truncation budget.
+    """
+    if max_tokens <= 0:
+        return text
+    import tiktoken  # noqa: PLC0415 — heavy dep; lazy
+
+    enc = tiktoken.get_encoding("cl100k_base")
+    tokens = enc.encode(text)
+    if len(tokens) <= max_tokens:
+        return text
+    return enc.decode(tokens[:max_tokens])
+
+
+def _entry_summary_text(entry: RawEntry, *, max_tokens: int) -> str:
+    """Return the entry's body text for slop+facet+summarize stages.
+
+    Body is clipped to *max_tokens* tokens (cl100k_base proxy) to bound
+    LLM input cost on long-tail articles. Wikipedia articles especially
+    can be 60KB+ of plain text after trafilatura; the demise narrative
+    is almost always in the lead and first major body section.
+    """
     if entry.markdown_text:
-        return entry.markdown_text
+        return _truncate_to_tokens(entry.markdown_text, max_tokens)
     if entry.raw_html:
-        return extract_clean(entry.raw_html)
+        return _truncate_to_tokens(extract_clean(entry.raw_html), max_tokens)
     return ""
 
 
@@ -728,7 +753,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             continue
 
-        body = _entry_summary_text(enriched)
+        body = _entry_summary_text(enriched, max_tokens=config.max_doc_tokens)
         if not body:
             result.skipped += 1
             continue

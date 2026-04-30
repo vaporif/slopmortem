@@ -27,7 +27,7 @@ class Config(BaseSettings):
     facet_boost: float = 0.01
     rrf_k: int = 60
     slop_threshold: float = 0.7
-    max_doc_tokens: int = 50000
+    max_doc_tokens: int = 8000
     tier3_calibration_band: tuple[float, float] = (0.65, 0.85)
     max_cost_usd_per_query: float = 2.00
     max_cost_usd_per_ingest: float = 15.00
