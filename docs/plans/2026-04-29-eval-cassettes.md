@@ -67,6 +67,10 @@ Owner: one subagent.
 - Create: `tests/llm/test_cassette_keys.py` (key derivation tests live with the module they test)
 - Create: `tests/test_cassettes.py`
 - Create: `tests/test_recording.py`
+- Modify: `slopmortem/llm/prompts/__init__.py:46-48` (extend `prompt_template_sha` signature to fold `tools` + `response_format`; see §1A-bis)
+- Modify: `slopmortem/stages/synthesize.py:112` (call site — pass `tools=synthesis_tools(config), response_format=Synthesis`)
+- Modify: `slopmortem/stages/facet_extract.py:45` (call site — pass `response_format=Facets`)
+- Modify: `slopmortem/stages/llm_rerank.py:99` (call site — pass `response_format=LlmRerankResult`)
 - Modify: `slopmortem/llm/fake.py`
 - Modify: `slopmortem/llm/fake_embeddings.py`
 - Modify: `tests/test_pipeline_e2e.py:138-156, 236-237, 297-298, 335-365`
@@ -215,27 +219,9 @@ _PROMPT_HASH_LEN = 16
 _TEXT_HASH_LEN = 16
 
 
-def template_sha(
-    template_text: str,
-    tools: list[dict[str, object]] | None,
-    response_format: type[BaseModel] | None,
-) -> str:
-    """Structural hash: template source + tools list + response_format schema.
-
-    Returns a full hex digest (no truncation). Editing the template, the tool
-    list, or the Pydantic response schema invalidates every cassette under
-    that template — exactly the cache-invalidation behaviour we want.
-    """
-    parts = [
-        template_text,
-        json.dumps(tools or [], sort_keys=True, separators=(",", ":")),
-        json.dumps(
-            response_format.model_json_schema() if response_format is not None else {},
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
-    ]
-    return hashlib.sha256("\x1e".join(parts).encode("utf-8")).hexdigest()
+# `template_sha` lives in slopmortem.llm.prompts (so stage code does not need
+# to import from `evals/`). Re-exported here for use in cassette tests / loaders.
+from slopmortem.llm.prompts import _template_sha as template_sha  # noqa: E402,F401  (re-export)
 
 
 def llm_cassette_key(
@@ -351,6 +337,121 @@ def _check_schema_version(version: object, *, path: Path) -> None:
 
 Run: `uv run pytest tests/test_cassettes.py -v`
 Expected: every test in 1A passes (loaders/error-type tests not yet added).
+
+### 1A-bis — Extend `prompt_template_sha` to fold tools + response_format (P1 / B2)
+
+The existing helper at `slopmortem/llm/prompts/__init__.py:46-48` only hashes
+the `.j2` source bytes. After this change it folds the structural inputs that
+also affect model behaviour: the JSON-serialized `tools` list and the
+JSON-serialized `response_format` schema. Editing `synthesis_tools()` or the
+`Synthesis` Pydantic schema then invalidates every cassette under the
+synthesize template — closing the silent-stale-replay hole P1 flagged.
+
+- [ ] **Step 4a: Replace the body of `prompt_template_sha` and add the structural primitive `_template_sha`**
+
+Edit `slopmortem/llm/prompts/__init__.py`:
+
+```python
+import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+
+
+def _template_sha(
+    template_text: str,
+    tools: list[dict[str, object]] | None,
+    response_format: type[BaseModel] | None,
+) -> str:
+    """Structural hash: template source + tools list + response_format schema.
+
+    Full hex digest (no truncation). Editing the template, the tool list, or
+    the Pydantic response schema invalidates every cassette under that template.
+    Re-exported by `slopmortem.evals.cassettes` for cassette-key derivation.
+    """
+    parts = [
+        template_text,
+        json.dumps(tools or [], sort_keys=True, separators=(",", ":")),
+        json.dumps(
+            response_format.model_json_schema() if response_format is not None else {},
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    ]
+    return hashlib.sha256("\x1e".join(parts).encode("utf-8")).hexdigest()
+
+
+def prompt_template_sha(
+    name: str,
+    tools: list[dict[str, object]] | None = None,
+    response_format: type[BaseModel] | None = None,
+) -> str:
+    """Structural hash for a Jinja template, optionally folding tools+schema.
+
+    Stages that pass tools or response_format to `LLMClient.complete()` MUST
+    pass the same values here so the SHA captures the full structural identity
+    of the call (P1 / spec B2). Callers without tools/schema (e.g.
+    `summarize`, the entity-resolution tiebreaker) keep the single-arg form
+    and the SHA reduces to the file-only structural identity.
+    """
+    text = _PROMPT_DIR.joinpath(f"{name}.j2").read_text()
+    return _template_sha(text, tools, response_format)
+```
+
+Defaulting `tools` and `response_format` to `None` keeps single-arg call sites
+in `slopmortem/ingest.py` (summarize, facet_extract via the rendered SHA),
+`slopmortem/corpus/summarize.py`, and `slopmortem/corpus/entity_resolution.py`
+working without modification — those templates have no tools or
+`response_format`, so the SHA is unchanged from a single-arg invocation.
+
+- [ ] **Step 4b: Update the three multi-arg call sites**
+
+Edit `slopmortem/stages/synthesize.py:112` — pass tools + schema:
+
+```python
+extra_body={
+    "provider": {"require_parameters": True},
+    "prompt_template_sha": prompt_template_sha(
+        "synthesize",
+        tools=synthesis_tools(config),
+        response_format=Synthesis,
+    ),
+},
+```
+
+Edit `slopmortem/stages/facet_extract.py:45` — pass schema:
+
+```python
+extra_body={
+    "prompt_template_sha": prompt_template_sha(
+        "facet_extract",
+        response_format=Facets,
+    ),
+},
+```
+
+Edit `slopmortem/stages/llm_rerank.py:99` — pass schema:
+
+```python
+extra_body={
+    "prompt_template_sha": prompt_template_sha(
+        "llm_rerank",
+        response_format=LlmRerankResult,
+    ),
+},
+```
+
+Re-grep to confirm: `grep -rnE "prompt_template_sha\(\"[^\"]+\"\s*\)" slopmortem/` —
+remaining single-arg call sites (`ingest.py`, `corpus/summarize.py`,
+`corpus/entity_resolution.py`) are correct as-is because their templates
+take no tools/schema.
+
+- [ ] **Step 4c: Run typecheck + cassette tests**
+
+Run: `just typecheck && uv run pytest tests/test_cassettes.py -v`
+Expected: green. Stage tests still pass because callers haven't changed
+shape — only the SHA value changes, and tests don't pin its exact bytes.
 
 ### 1B — Cassette JSON dataclasses, loaders, dispatch by model
 
@@ -1183,7 +1284,8 @@ class _FakeInnerLLM:
 async def test_recording_llm_writes_cassette_on_success(tmp_path: Path) -> None:
     inner = _FakeInnerLLM(text="hello")
     rec = RecordingLLMClient(
-        inner=inner, out_dir=tmp_path, stage="facet_extract", model="anthropic/claude-haiku-4.5",
+        inner=inner, out_dir=tmp_path,
+        stage_registry={"tsha-abc": "facet_extract"},
     )
     extra = {"prompt_template_sha": "tsha-abc"}
     result = await rec.complete("the prompt", model="anthropic/claude-haiku-4.5", extra_body=extra)
@@ -1193,32 +1295,60 @@ async def test_recording_llm_writes_cassette_on_success(tmp_path: Path) -> None:
     assert files[0].name.startswith("facet_extract__anthropic_claude-haiku-4.5__")
 
 
+async def test_recording_llm_falls_back_to_template_sha_prefix_when_unregistered(tmp_path: Path) -> None:
+    """Unknown template_sha → first-8-hex prefix; ensures stage-agnostic callers still get a filename."""
+    inner = _FakeInnerLLM(text="ok")
+    rec = RecordingLLMClient(inner=inner, out_dir=tmp_path)  # no registry
+    extra = {"prompt_template_sha": "abc12345deadbeef"}
+    _ = await rec.complete("p", model="m", extra_body=extra)
+    files = sorted(tmp_path.glob("*.json"))
+    assert len(files) == 1
+    assert files[0].name.startswith("abc12345__m__")
+
+
 async def test_recording_llm_skips_cassette_on_inner_error(tmp_path: Path) -> None:
     inner = _FakeInnerLLM()
     inner.raise_on_call = 1
-    rec = RecordingLLMClient(
-        inner=inner, out_dir=tmp_path, stage="facet_extract", model="m",
-    )
+    rec = RecordingLLMClient(inner=inner, out_dir=tmp_path)
     with pytest.raises(RuntimeError):
         _ = await rec.complete("the prompt", model="m", extra_body={"prompt_template_sha": "t"})
     assert list(tmp_path.glob("*.json")) == []
 
 
-async def test_recording_llm_cost_ceiling_aborts_before_inner(tmp_path: Path) -> None:
-    inner = _FakeInnerLLM(cost_usd=0.40)  # third call would push past 1.00
-    rec = RecordingLLMClient(
-        inner=inner, out_dir=tmp_path, stage="facet_extract", model="m", max_cost_usd=1.00,
-    )
+async def test_recording_llm_cost_ceiling_post_call_raise_after_cassette_written(tmp_path: Path) -> None:
+    """Soft cap: post-call raise after settle. Cassette IS written for the call that pushed over."""
+    inner = _FakeInnerLLM(cost_usd=0.40)
+    rec = RecordingLLMClient(inner=inner, out_dir=tmp_path, max_cost_usd=0.99)
+    extra = {"prompt_template_sha": "t"}
+    # Calls 1 and 2 settle under the cap.
+    _ = await rec.complete("a", model="m", extra_body={**extra, "prompt_hash": "0" * 16})
+    _ = await rec.complete("b", model="m", extra_body={**extra, "prompt_hash": "1" * 16})
+    # Call 3: pre-check 0.80 >= 0.99 False → proceeds → settle to 1.20 → cassette written
+    # → post-check 1.20 > 0.99 True → raises. Cassette `c` is on disk.
+    with pytest.raises(RecordingBudgetExceededError) as exc_info:
+        _ = await rec.complete("c", model="m", extra_body={**extra, "prompt_hash": "2" * 16})
+    assert exc_info.value.spent == pytest.approx(1.20)
+    assert exc_info.value.limit == pytest.approx(0.99)
+    assert inner.calls == 3
+    assert len(list(tmp_path.glob("*.json"))) == 3
+
+
+async def test_recording_llm_cost_ceiling_pre_call_refusal_when_already_over(tmp_path: Path) -> None:
+    """After post-call raise, a subsequent call hits the pre-call refusal — no cassette, inner not called."""
+    inner = _FakeInnerLLM(cost_usd=0.40)
+    rec = RecordingLLMClient(inner=inner, out_dir=tmp_path, max_cost_usd=0.99)
     extra = {"prompt_template_sha": "t"}
     _ = await rec.complete("a", model="m", extra_body={**extra, "prompt_hash": "0" * 16})
     _ = await rec.complete("b", model="m", extra_body={**extra, "prompt_hash": "1" * 16})
-    with pytest.raises(RecordingBudgetExceededError) as exc_info:
+    with pytest.raises(RecordingBudgetExceededError):
         _ = await rec.complete("c", model="m", extra_body={**extra, "prompt_hash": "2" * 16})
-    assert exc_info.value.spent == pytest.approx(0.80)
-    assert exc_info.value.limit == pytest.approx(1.00)
-    # Inner only called twice (third aborted pre-call); cassettes for a and b only.
-    assert inner.calls == 2
-    assert len(list(tmp_path.glob("*.json"))) == 2
+    # Now spent=1.20, well over cap. Next call refuses pre-flight; inner.calls and cassette count unchanged.
+    pre_calls = inner.calls
+    pre_files = len(list(tmp_path.glob("*.json")))
+    with pytest.raises(RecordingBudgetExceededError):
+        _ = await rec.complete("d", model="m", extra_body={**extra, "prompt_hash": "3" * 16})
+    assert inner.calls == pre_calls
+    assert len(list(tmp_path.glob("*.json"))) == pre_files
 
 
 class _FakeInnerEmbed:
@@ -1294,7 +1424,7 @@ from slopmortem.llm.client import CompletionResult
 from slopmortem.llm.embedding_client import EmbeddingResult
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from slopmortem.llm.client import LLMClient
@@ -1306,22 +1436,33 @@ _PREVIEW_CHARS_TEXT = 200
 
 
 class RecordingLLMClient:
-    """Wrap a real `LLMClient`; write one LLM cassette per `complete()` call."""
+    """Wrap a real `LLMClient`; write one LLM cassette per `complete()` call.
+
+    Stage and model are derived per-call (from `extra_body['prompt_template_sha']`
+    and the `model=` arg) so a single wrapper can record across heterogeneous
+    callers (e.g. `ingest()` calls `summarize`, `facet_extract`, and the
+    entity-resolution tiebreaker through one `LLMClient`).
+
+    Cost ceiling is **soft**: pre-call refusal at `spent >= cap` and post-call
+    raise at `spent > cap` after the cassette is written. A single oversized
+    call therefore overshoots by at most one call's `cost_usd`. Bounded by
+    `cap + max_single_call_cost_usd`. See spec §F20 / plan §P4.
+    """
 
     def __init__(
         self,
         *,
         inner: LLMClient,
         out_dir: Path,
-        stage: str,
-        model: str,
         max_cost_usd: float | None = None,
+        stage_registry: Mapping[str, str] | None = None,
     ) -> None:
         self._inner = inner
         self._out_dir = out_dir
-        self._stage = stage
-        self._model = model
         self._max_cost_usd = max_cost_usd
+        # Map template_sha → human-readable filename prefix. Misses fall back
+        # to template_sha[:8].
+        self._stage_registry = dict(stage_registry or {})
         self._spent_usd = 0.0
 
     async def complete(
@@ -1335,6 +1476,7 @@ class RecordingLLMClient:
         response_format: dict[str, Any] | None = None,
         extra_body: dict[str, Any] | None = None,
     ) -> CompletionResult:
+        # Pre-call refusal: already at/over the cap.
         if self._max_cost_usd is not None and self._spent_usd >= self._max_cost_usd:
             raise RecordingBudgetExceededError(
                 spent=self._spent_usd, limit=self._max_cost_usd,
@@ -1348,20 +1490,29 @@ class RecordingLLMClient:
             response_format=response_format,
             extra_body=extra_body,
         )
-        eff_model = model or self._model
+        # Settle cost first so the post-call check sees this call's spend.
+        self._spent_usd += result.cost_usd
+        if model is None:
+            msg = "RecordingLLMClient requires a model on every complete() call"
+            raise ValueError(msg)
         template_sha = ""
         if extra_body and "prompt_template_sha" in extra_body:
             template_sha = str(extra_body["prompt_template_sha"])
+        # Stage prefix: registry hit → human name; miss → first 8 chars of template_sha.
+        stage = self._stage_registry.get(
+            template_sha,
+            template_sha[:8] if template_sha else "unknown",
+        )
         # Allow override (tests pin a known prompt_hash); otherwise compute.
         if extra_body and "prompt_hash" in extra_body:
             prompt_hash = str(extra_body["prompt_hash"])
         else:
             _, _, prompt_hash = llm_cassette_key(
-                prompt=prompt, system=system, template_sha=template_sha, model=eff_model,
+                prompt=prompt, system=system, template_sha=template_sha, model=model,
             )
         cas = LlmCassette(
             template_sha=template_sha,
-            model=eff_model,
+            model=model,
             prompt_hash=prompt_hash,
             text=result.text,
             stop_reason=result.stop_reason,
@@ -1373,8 +1524,13 @@ class RecordingLLMClient:
             tools_present=[getattr(t, "name", str(t)) for t in (tools or [])],
             response_format_present=response_format is not None,
         )
-        write_llm_cassette(cas, self._out_dir, stage=self._stage)
-        self._spent_usd += result.cost_usd
+        write_llm_cassette(cas, self._out_dir, stage=stage)
+        # Post-call raise (soft cap): this call pushed us past the limit.
+        # Cassette is already on disk; the operator paid for the data, keep it.
+        if self._max_cost_usd is not None and self._spent_usd > self._max_cost_usd:
+            raise RecordingBudgetExceededError(
+                spent=self._spent_usd, limit=self._max_cost_usd,
+            )
         return result
 
 
@@ -1454,51 +1610,52 @@ Owner: one subagent.
 - Create: `tests/evals/__init__.py` (if missing)
 - Create: `tests/evals/test_corpus_fixture.py`
 - Create: `tests/fixtures/corpus_fixture_inputs.yml`
+- Create: `tests/fixtures/corpus_fixture_bodies/` (directory; one `.md` file per seed entry, populated during commit 5 by the operator)
 
 ### 2A — Hand-curated seed-input list
 
-The corpus fixture is regenerable; this YAML is the source of truth for what gets ingested.
+The corpus fixture is regenerable; the YAML index + sibling body files are the source of truth for what gets ingested. Body text lives in `tests/fixtures/corpus_fixture_bodies/<canonical_id>.md` rather than inline in the YAML — escaping landmines for code blocks/quotes are unavoidable in YAML literal blocks, sibling text files diff cleanly, and individual body edits don't churn the index.
 
 - [x] **Step 1: Create `tests/fixtures/corpus_fixture_inputs.yml` with ~30 entries**
 
-For each entry, supply a `name`, a representative description, and the single canonical source URL. Pick a mix so the eval's facet retrieval has coverage across `(sector, business_model, customer_type, geography, monetization)`. Aim for ~30 entries; the existing `tests/fixtures/curated_test.yml` is a good starting source.
-
-The exact YAML schema mirrors the seed-input format used by `slopmortem.ingest.ingest` (one entry per source). Operator can extend later. Initial content (10 entries — operator can grow during commit 5):
+The schema is bespoke for cassette regen — `_SeedInputSource` (Task 5,
+`slopmortem/evals/corpus_recorder.py`) reads it and emits `RawEntry` records.
+Operator hand-curates ~30 entries with mixed sectors so the eval's facet
+retrieval has coverage across `(sector, business_model, customer_type,
+geography, monetization)`. Initial content (3 entries shown — operator grows
+to ~30 during commit 5; commit message references each ingested document):
 
 ```yaml
-- name: solyndra
-  description: Cylindrical thin-film solar manufacturer
+- canonical_id: solyndra
+  source: seed
+  source_id: solyndra
+  body_path: corpus_fixture_bodies/solyndra.md
   url: https://en.wikipedia.org/wiki/Solyndra
-- name: theranos
-  description: Blood-testing platform
+  fetched_at: "2026-04-29T00:00:00Z"
+- canonical_id: theranos
+  source: seed
+  source_id: theranos
+  body_path: corpus_fixture_bodies/theranos.md
   url: https://en.wikipedia.org/wiki/Theranos
-- name: webvan
-  description: Online grocery delivery (1996-2001)
+  fetched_at: "2026-04-29T00:00:00Z"
+- canonical_id: webvan
+  source: seed
+  source_id: webvan
+  body_path: corpus_fixture_bodies/webvan.md
   url: https://en.wikipedia.org/wiki/Webvan
-- name: pets-com
-  description: Online pet supplies retailer
-  url: https://en.wikipedia.org/wiki/Pets.com
-- name: kozmo-com
-  description: One-hour delivery startup
-  url: https://en.wikipedia.org/wiki/Kozmo.com
-- name: better-place
-  description: EV battery-swap network
-  url: https://en.wikipedia.org/wiki/Better_Place_(company)
-- name: jawbone
-  description: Wearable fitness band
-  url: https://en.wikipedia.org/wiki/Jawbone_(company)
-- name: blockbuster
-  description: Video rental chain
-  url: https://en.wikipedia.org/wiki/Blockbuster_LLC
-- name: pebble
-  description: Smartwatch maker
-  url: https://en.wikipedia.org/wiki/Pebble_(watch)
-- name: quibi
-  description: Short-form mobile video service
-  url: https://en.wikipedia.org/wiki/Quibi
+  fetched_at: "2026-04-29T00:00:00Z"
 ```
 
-Note: Wikipedia is the safe default for test fixtures (`wikipedia.org` is in `_FIXED_HOST_ALLOWLIST` per `slopmortem/stages/synthesize.py`). Avoid HN/HN-comment URLs because the dataset can include arbitrary IDs that age out; YC's allowlist excerpts also break under recency filters.
+`url:` carries the source attribution (used downstream by
+`all_sources_in_allowed_domains`); the body bytes come from `body_path` only.
+Operator copies cleaned text from each source into the corresponding `.md`
+file once, then never re-fetches — this is what makes corpus regen
+deterministic across runs.
+
+Note on URL choice: Wikipedia is the safe default (`wikipedia.org` is in
+`_FIXED_HOST_ALLOWLIST` per `slopmortem/stages/synthesize.py`). Avoid HN/HN-
+comment URLs (IDs age out); YC's allowlist excerpts break under recency
+filters.
 
 ### 2B — `dump_collection_to_jsonl`, `restore_jsonl_to_collection`, `compute_fixture_sha256`
 
@@ -2055,6 +2212,18 @@ async def record_cassettes_for_inputs(
             # We use the helper's ephemeral corpus; ignore _live_corpus.
             del _live_corpus
 
+            # One recording wrapper covers every stage. Stage filename prefix
+            # comes from the registry; filename model slug comes from the
+            # per-call `model=` arg.
+            from slopmortem.llm.prompts import prompt_template_sha  # noqa: PLC0415
+            from slopmortem.llm.tools import synthesis_tools  # noqa: PLC0415
+            from slopmortem.models import Facets, LlmRerankResult, Synthesis  # noqa: PLC0415
+            stage_registry = {
+                prompt_template_sha("facet_extract", tools=None, response_format=Facets): "facet_extract",
+                prompt_template_sha("llm_rerank", tools=None, response_format=LlmRerankResult): "llm_rerank",
+                prompt_template_sha("synthesize", tools=synthesis_tools(cfg), response_format=Synthesis): "synthesize",
+            }
+
             for ctx in inputs:
                 # Share the directory-naming function with the replay path
                 # (`slopmortem.evals.runner._row_id`) so anonymous inputs
@@ -2066,27 +2235,12 @@ async def record_cassettes_for_inputs(
                 tmp_dir = output_dir / f"{scope_name}.{os.getpid()}.{uuid.uuid4().hex}.recording"
                 tmp_dir.mkdir(parents=True, exist_ok=False)
                 try:
-                    rec_llm_facet = RecordingLLMClient(
-                        inner=llm, out_dir=tmp_dir, stage="facet_extract",
-                        model=cfg.model_facet, max_cost_usd=max_cost_usd,
+                    rec_llm = RecordingLLMClient(
+                        inner=llm,
+                        out_dir=tmp_dir,
+                        max_cost_usd=max_cost_usd,
+                        stage_registry=stage_registry,
                     )
-                    rec_llm_rerank = RecordingLLMClient(
-                        inner=llm, out_dir=tmp_dir, stage="llm_rerank",
-                        model=cfg.model_rerank, max_cost_usd=max_cost_usd,
-                    )
-                    rec_llm_synth = RecordingLLMClient(
-                        inner=llm, out_dir=tmp_dir, stage="synthesize",
-                        model=cfg.model_synthesize, max_cost_usd=max_cost_usd,
-                    )
-                    # Single recording LLM that dispatches per stage by inspecting
-                    # `extra_body['prompt_template_sha']` is overkill; the pipeline
-                    # already calls `complete()` with the right model per stage,
-                    # so we route by model:
-                    routed_llm = _ByModelLLM({
-                        cfg.model_facet: rec_llm_facet,
-                        cfg.model_rerank: rec_llm_rerank,
-                        cfg.model_synthesize: rec_llm_synth,
-                    })
                     rec_embed = RecordingEmbeddingClient(inner=embedder, out_dir=tmp_dir)
 
                     from slopmortem.corpus.embed_sparse import encode as live_sparse  # noqa: PLC0415
@@ -2094,7 +2248,7 @@ async def record_cassettes_for_inputs(
 
                     _ = await run_query(
                         ctx,
-                        llm=routed_llm,
+                        llm=rec_llm,
                         embedding_client=rec_embed,
                         corpus=corpus,
                         config=cfg,
@@ -2106,26 +2260,15 @@ async def record_cassettes_for_inputs(
                     raise
                 else:
                     _atomic_swap(tmp_dir=tmp_dir, real_dir=real_dir)
-
-
-class _ByModelLLM:
-    """LLM router: dispatch each `complete()` to the wrapper for the matching model."""
-
-    def __init__(self, by_model: dict[str, RecordingLLMClient]) -> None:
-        self._by_model = by_model
-
-    async def complete(self, prompt, *, system=None, tools=None, model=None,
-                       cache=False, response_format=None, extra_body=None):
-        if model is None or model not in self._by_model:
-            msg = f"no recording wrapper for model={model!r}"
-            raise KeyError(msg)
-        return await self._by_model[model].complete(
-            prompt, system=system, tools=tools, model=model,
-            cache=cache, response_format=response_format, extra_body=extra_body,
-        )
 ```
 
-Note on recording-LLM-per-stage: each stage uses a different `model` (`model_facet`, `model_rerank`, `model_synthesize`). The router dispatches based on the `model=` kwarg the stage already supplies, so no extra plumbing is needed. The `stage=` value in each wrapper's filename comes from how the wrapper was constructed, not from runtime introspection.
+Note on the single-wrapper design: `RecordingLLMClient` derives both the
+filename stage prefix and the model slug per call (from
+`extra_body['prompt_template_sha']` lookup in the registry, and from the
+per-call `model=` arg). One wrapper records facet, rerank, and synthesize
+under the same cost ceiling — and the same shape works for `corpus_recorder`,
+which fans out into `summarize`, `facet_extract`, and the entity-resolution
+tiebreaker through the same `LLMClient`. No model-routing dispatcher needed.
 
 - [x] **Step 9: Run the recording-helper tests**
 
@@ -2353,11 +2496,35 @@ RUN_LIVE=1 just eval-record               # ~$0.50-$1, ceiling --max-cost-usd=2.
 ```
 
 **Operator deliverables (committed):**
+- `tests/fixtures/corpus_fixture_inputs.yml` (grown to ~30 entries from the Task 2 scaffold)
+- `tests/fixtures/corpus_fixture_bodies/<canonical_id>.md` (~30 hand-curated body files; regular git diffs)
 - `tests/fixtures/corpus_fixture.jsonl` (~1.5 MB, via LFS — `git diff` shows LFS pointer, not floats)
 - `tests/fixtures/cassettes/evals/<row_id>/*.json` (10 dirs, ~70 files; regular git diffs)
 - Updated `tests/evals/baseline.json` (v2)
 
-**Note:** the full `slopmortem/evals/corpus_recorder.py` implementation (replacing the stub from Task 4) lands in this commit too:
+**Note:** the full `slopmortem/evals/corpus_recorder.py` implementation (replacing the stub from Task 4) lands in this commit too. Cost-ceiling enforcement uses `Budget(cap_usd=...)` (which already raises `BudgetExceededError` from `slopmortem/budget.py:11-43`) — there is no need to wrap `llm` in `RecordingLLMClient` for `eval-record-corpus`, because corpus regen produces a JSONL artifact, not cassettes (replay loads the JSONL directly into ephemeral Qdrant; see spec §"Data flow at replay time"). Per-row `eval-record` still wraps with `RecordingLLMClient` because that flow records cassettes.
+
+**Seed-YAML format (`tests/fixtures/corpus_fixture_inputs.yml`).** Body text
+lives in sibling `tests/fixtures/corpus_fixture_bodies/<id>.md` files
+(referenced by `body_path:`). Inline body in YAML is operator-hostile —
+escaping landmines for code blocks, quotes, etc. Sibling text files diff
+cleanly. Schema:
+
+```yaml
+- canonical_id: stripe_2024_outage_a
+  source: seed
+  source_id: stripe_2024_outage_a
+  body_path: corpus_fixture_bodies/stripe_2024_outage_a.md
+  url: null
+  fetched_at: "2026-04-29T00:00:00Z"
+- canonical_id: webvan_postmortem_a
+  source: seed
+  source_id: webvan_postmortem_a
+  body_path: corpus_fixture_bodies/webvan_postmortem_a.md
+  url: null
+  fetched_at: "2026-04-29T00:00:00Z"
+# ~30 entries total
+```
 
 ```python
 """CLI: regenerate `corpus_fixture.jsonl` by running real ingest then dumping."""
@@ -2367,63 +2534,179 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import tempfile
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import asyncio
 import yaml
 from qdrant_client import AsyncQdrantClient
 
+from slopmortem.budget import Budget
 from slopmortem.config import load_config
-from slopmortem.corpus.qdrant_store import ensure_collection
+from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
 from slopmortem.evals.corpus_fixture import dump_collection_to_jsonl
-from slopmortem.ingest import ingest
+from slopmortem.ingest import MergeJournal, ingest
+from slopmortem.models import RawEntry, SlopJudgement
 
 
-async def _record(inputs_path: Path, out_path: Path) -> None:
+# Ingest's LLM-side cost is dominated by summarize + facet_extract per doc.
+# ~30 docs × ~3 calls × ~$0.01-$0.05 ≈ $1-5 on a clean run; ceiling at $5
+# stops a single model-upgrade surprise from blowing through silently.
+# Operator overrides via --max-cost-usd if a re-record legitimately needs more.
+_DEFAULT_CORPUS_MAX_COST_USD = 5.00
+
+
+class _SeedInputSource:
+    """Adapter: read seed YAML + body files, yield RawEntry per doc.
+
+    Bespoke for cassette regen: deterministic (no live HTTP, no extract_clean
+    drift), so the same seed YAML + body files always produce the same RawEntry
+    stream. CuratedSource is wrong here because it re-fetches URLs, and live
+    page content drifts between regens.
+    """
+
+    def __init__(self, yaml_path: Path) -> None:
+        self._yaml_path = yaml_path
+
+    async def fetch(self) -> AsyncIterator[RawEntry]:
+        rows = yaml.safe_load(self._yaml_path.read_text()) or []
+        base = self._yaml_path.parent
+        for row in rows:
+            body_path = base / row["body_path"]
+            yield RawEntry(
+                source=row["source"],
+                source_id=row["source_id"],
+                url=row.get("url"),
+                fetched_at=row["fetched_at"],
+                body=body_path.read_text(),
+                # Seed inputs are hand-curated; canonical_id is provided
+                # directly rather than derived. The ingest pipeline normally
+                # canonicalizes — operator confirms canonical_id matches what
+                # canonicalize would have produced (or extends ingest to
+                # short-circuit canonicalization for `source == "seed"`).
+            )
+
+
+class _PermissiveSlopClassifier:
+    """Returns 'not slop' for every input.
+
+    Seed corpus is hand-vetted, so real Binoculars would also pass everything;
+    the stub avoids loading a ~few-hundred-MB model at corpus regen time and
+    avoids version-drift surprises where a Binoculars update unexpectedly
+    filters a hand-curated doc.
+    """
+
+    async def classify(self, text: str) -> SlopJudgement:  # pyright: ignore[reportUnusedParameter]
+        return SlopJudgement(is_slop=False, score=0.0)
+
+
+async def _record(inputs_path: Path, out_path: Path, *, max_cost_usd: float) -> None:
     cfg = load_config()
     name = f"slopmortem_corpus_record_{os.getpid()}_{uuid.uuid4().hex}"
-    qdrant_url = cfg.qdrant_url  # or default
+    qdrant_url = cfg.qdrant_url
     client = AsyncQdrantClient(url=qdrant_url)
-    try:
-        from slopmortem.llm.openai_embeddings import EMBED_DIMS  # noqa: PLC0415
-        await ensure_collection(client, name, dim=EMBED_DIMS[cfg.embed_model_id])
-        # Wire ingest against this collection (consult slopmortem.ingest.ingest signature at slopmortem/ingest.py:653)
-        seed_inputs = yaml.safe_load(inputs_path.read_text())
-        await ingest(seed_inputs=seed_inputs, ...)  # operator: complete the call site
-        out_tmp = out_path.with_suffix(out_path.suffix + ".recording")
-        await dump_collection_to_jsonl(client, name, out_tmp)
-        os.replace(out_tmp, out_path)
-        print(f"wrote {out_path} ({out_path.stat().st_size} bytes)")
-    finally:
+    with tempfile.TemporaryDirectory(prefix="corpus_record_") as scratch_str:
+        scratch = Path(scratch_str)
         try:
-            await client.delete_collection(name)
-        except Exception:
-            pass
-        await client.close()
+            from slopmortem.llm.embedding_client import EMBED_DIMS  # noqa: PLC0415
+            await ensure_collection(client, name, dim=EMBED_DIMS[cfg.embed_model_id])
+
+            # Build live deps. No RecordingLLMClient wrapping: Budget handles
+            # the cost cap (BudgetExceededError raises inside reserve()) and
+            # corpus regen does not produce cassettes — the JSONL is the
+            # artifact replay consumes.
+            from slopmortem.cli import _build_deps  # noqa: PLC0415; pyright: ignore[reportPrivateUsage]
+            llm, embed_client, _live_corpus, _ignored_budget = _build_deps(cfg)
+            del _live_corpus, _ignored_budget
+
+            from slopmortem.corpus.embed_sparse import encode as live_sparse  # noqa: PLC0415
+
+            corpus = QdrantCorpus(client=client, collection=name, embed_model_id=cfg.embed_model_id)
+            journal = await MergeJournal.open(scratch / "journal.sqlite")
+            try:
+                await ingest(
+                    sources=[_SeedInputSource(inputs_path)],
+                    enrichers=[],
+                    journal=journal,
+                    corpus=corpus,
+                    llm=llm,
+                    embed_client=embed_client,
+                    budget=Budget(cap_usd=max_cost_usd),
+                    slop_classifier=_PermissiveSlopClassifier(),
+                    config=cfg,
+                    post_mortems_root=scratch / "post_mortems",
+                    sparse_encoder=live_sparse,
+                )
+            finally:
+                await journal.close()
+
+            out_tmp = out_path.with_suffix(out_path.suffix + ".recording")
+            await dump_collection_to_jsonl(client, name, out_tmp)
+            os.replace(out_tmp, out_path)
+            print(f"wrote {out_path} ({out_path.stat().st_size} bytes)")
+        finally:
+            try:
+                await client.delete_collection(name)
+            except Exception:  # noqa: BLE001 — best-effort cleanup
+                pass
+            await client.close()
 
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="slopmortem.evals.corpus_recorder")
     p.add_argument("--inputs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument(
+        "--max-cost-usd", type=float, default=_DEFAULT_CORPUS_MAX_COST_USD,
+        help="Cost ceiling enforced via Budget(cap_usd=...).",
+    )
     ns = p.parse_args(argv)
     if not os.environ.get("RUN_LIVE"):
         print("eval-record-corpus requires RUN_LIVE=1 (live API spend)", file=sys.stderr)
         sys.exit(2)
-    asyncio.run(_record(ns.inputs, ns.out))
+    asyncio.run(_record(ns.inputs, ns.out, max_cost_usd=ns.max_cost_usd))
 
 
 if __name__ == "__main__":
     main()
 ```
 
-`ingest` signature lookup: `slopmortem/ingest.py:653` — `async def ingest(*, sources, enrichers, journal, corpus, llm, embed_client, budget, slop_classifier, config, post_mortems_root)`. Operator maps `seed_inputs` to whatever the actual ingest input shape is (likely `sources`) and passes the open `AsyncQdrantClient`-backed collection through `corpus`. **Note:** P5 (cost-ceiling) still requires wrapping `llm` in `RecordingLLMClient(max_cost_usd=...)` — see open finding.
+`ingest` signature lookup: `slopmortem/ingest.py:653` — `async def ingest(*, sources, enrichers, journal, corpus, llm, embed_client, budget, slop_classifier, config, post_mortems_root, dry_run, force, sparse_encoder)`. The call above maps every required keyword. Operator verifies `RawEntry` field names against `slopmortem/models.py:202` at implementation time — if the model defines `body` under a different field name (e.g. `text`), update `_SeedInputSource.fetch()` accordingly.
 
-**Validation:**
-- `git lfs ls-files` shows `tests/fixtures/corpus_fixture.jsonl` is tracked by LFS.
-- Cassette files appear as regular git diffs.
-- Operator spot-checks ~5 random `request_debug.prompt_preview` fields.
+**Validation (P9 pass criteria — all must hold):**
+
+1. **Distinct canonical_id count matches seed input count:**
+   ```bash
+   python -c "
+   import json
+   from pathlib import Path
+   import yaml
+   inputs = yaml.safe_load(Path('tests/fixtures/corpus_fixture_inputs.yml').read_text())
+   ids_jsonl = {json.loads(l)['canonical_id'] for l in Path('tests/fixtures/corpus_fixture.jsonl').read_text().splitlines() if l.strip()}
+   assert len(ids_jsonl) == len(inputs), f'distinct canonical_ids in JSONL ({len(ids_jsonl)}) != seed inputs ({len(inputs)}) — silent dedup or missing doc'
+   "
+   ```
+   (Strict equality: a duplicate `canonical_id` in the seed YAML or silent ingest drop is loud.)
+
+2. **JSONL schema validates per row** — every line parses as JSON and contains required fields `canonical_id`, `dense`, `sparse_indices`, `sparse_values`, `payload`. Run via:
+   ```bash
+   python -c "
+   import json
+   from pathlib import Path
+   for i, line in enumerate(Path('tests/fixtures/corpus_fixture.jsonl').read_text().splitlines(), 1):
+       row = json.loads(line)
+       missing = {'canonical_id', 'dense', 'sparse_indices', 'sparse_values', 'payload'} - row.keys()
+       assert not missing, f'line {i}: missing {missing}'
+   "
+   ```
+
+3. **Round-trip restores cleanly** — `restore_jsonl_to_collection` against the freshly-recorded file completes without raising, and the resulting collection's point count matches `wc -l`.
+
+4. **`just eval` against the freshly-recorded set returns exit 0** (after operator runs `just eval-record` to fill in the per-row cassettes; this is the integration-level gate).
+
+5. `git lfs ls-files` shows `tests/fixtures/corpus_fixture.jsonl` is tracked by LFS.
 
 ---
 
@@ -2814,11 +3097,37 @@ Expected: green.
 Owner: one subagent. Depends on Task 6 + an operator-recorded cassette dir at `tests/fixtures/cassettes/e2e/test_full_pipeline_with_fake_clients/`.
 
 **Files:**
-- Modify: `tests/test_pipeline_e2e.py:200-265` (migrate `test_full_pipeline_with_fake_clients`)
+- Modify: `tests/test_pipeline_e2e.py:200-290` (migrate `test_full_pipeline_with_fake_clients`)
 
 The other two tests in that file (`test_run_query_records_budget_exceeded`, `test_ctrl_c_cancels_in_flight`) keep their canned `FakeLLMClient` setups — they're plumbing tests, not realism tests.
 
 **Operator pre-step (before this task can land):** run `record_cassettes_for_inputs()` against the same `InputContext` the test currently feeds, writing cassettes to `tests/fixtures/cassettes/e2e/test_full_pipeline_with_fake_clients/`. Commit those cassettes.
+
+**Assertions to port — explicit enumeration (P7 resolution).** The original test
+asserted 12+ contract properties (`tests/test_pipeline_e2e.py:259-290`). The
+migration MUST port them — silently dropping them via a placeholder comment
+turns a contract test into a smoke test.
+
+**Group A — port verbatim, no changes:**
+1. `report.input == ctx` (original: line ~262) — structural equality
+2. `0 < len(report.candidates) <= cfg.N_synthesize` (line ~263) — assertion holds because cassettes capture the same N candidates the original FakeLLMClient produced
+3. `meta.K_retrieve == cfg.K_retrieve` — config round-trip
+4. `meta.cost_usd_total == budget.spent_usd` — both sides see the same aggregate; cassette JSON includes `cost_usd` (spec line 216), `CompletionResult.cost_usd` survives replay
+5. `meta.budget_exceeded is False`
+6. `meta.trace_id is None`
+7. `set(meta.models.keys()) == {"facet", "rerank", "synthesize"}`
+8. `meta.models["facet"] == cfg.model_facet` (and `rerank`, `synthesize`) — exact strings
+9. `"facet_extract" in progress_events` — span emission, LLM-implementation-agnostic
+
+**Group B — port via `_CountingCorpus` test wrapper (3 assertions):**
+- `len(corpus_observer.queries) == 1`
+- `corpus_observer.queries[0]["k_retrieve"] == cfg.K_retrieve`
+- `corpus_observer.queries[0]["strict_deaths"] == ctx.strict_deaths`
+
+`_FakeCorpus.queries` is gone (replaced by ephemeral `QdrantCorpus`). Add a
+~10-line wrapper that implements the `Corpus` Protocol, delegates to the
+wrapped `QdrantCorpus`, and records each `query()` call's args. No production
+change — `Corpus` is a Protocol so the wrapper composes transparently.
 
 - [ ] **Step 1: Migrate `test_full_pipeline_with_fake_clients`**
 
@@ -2836,6 +3145,21 @@ async def test_full_pipeline_with_fake_clients() -> None:
     from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant
     from slopmortem.llm.cassettes import embed_cassette_key
     from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
+
+    class _CountingCorpus:
+        """Test-only `Corpus` wrapper: records each query() call's kwargs."""
+        def __init__(self, inner) -> None:
+            self._inner = inner
+            self.queries: list[dict[str, object]] = []
+        async def query(self, *, dense, sparse, k_retrieve, strict_deaths, **kw):
+            self.queries.append({"k_retrieve": k_retrieve, "strict_deaths": strict_deaths})
+            return await self._inner.query(
+                dense=dense, sparse=sparse, k_retrieve=k_retrieve,
+                strict_deaths=strict_deaths, **kw,
+            )
+        # Forward any other Corpus methods the pipeline calls.
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
 
     scope = Path("tests/fixtures/cassettes/e2e/test_full_pipeline_with_fake_clients")
     fixture = Path("tests/fixtures/corpus_fixture.jsonl")
@@ -2856,14 +3180,41 @@ async def test_full_pipeline_with_fake_clients() -> None:
         return dict(zip(idx, vals, strict=True))
 
     ctx = InputContext(name="acme", description="...the test's existing pitch text...")
-    async with setup_ephemeral_qdrant(fixture) as corpus:
+    budget = Budget(cap_usd=2.0)
+    progress_events: list[str] = []  # populated via the existing observe hook
+    async with setup_ephemeral_qdrant(fixture) as qdrant_corpus:
+        counting_corpus = _CountingCorpus(qdrant_corpus)
         report = await run_query(
-            ctx, llm=fake_llm, embedding_client=fake_embed, corpus=corpus,
-            config=cfg, budget=Budget(cap_usd=2.0), sparse_encoder=cassette_sparse,
+            ctx, llm=fake_llm, embedding_client=fake_embed, corpus=counting_corpus,
+            config=cfg, budget=budget, sparse_encoder=cassette_sparse,
         )
-    assert len(report.candidates) > 0
-    # ... preserve any existing per-candidate assertions verbatim
+
+    # Group A — original contract assertions, ported verbatim:
+    assert report.input == ctx
+    assert 0 < len(report.candidates) <= cfg.N_synthesize
+    meta = report.meta
+    assert meta.K_retrieve == cfg.K_retrieve
+    assert meta.cost_usd_total == budget.spent_usd
+    assert meta.budget_exceeded is False
+    assert meta.trace_id is None
+    assert set(meta.models.keys()) == {"facet", "rerank", "synthesize"}
+    assert meta.models["facet"] == cfg.model_facet
+    assert meta.models["rerank"] == cfg.model_rerank
+    assert meta.models["synthesize"] == cfg.model_synthesize
+    assert "facet_extract" in progress_events
+
+    # Group B — query-introspection assertions via _CountingCorpus:
+    assert len(counting_corpus.queries) == 1
+    q = counting_corpus.queries[0]
+    assert q["k_retrieve"] == cfg.K_retrieve
+    assert q["strict_deaths"] == ctx.strict_deaths
 ```
+
+Note: the exact `_CountingCorpus.query()` signature must mirror the live
+`QdrantCorpus.query()` keyword arguments — verify against
+`slopmortem/corpus/qdrant_store.py` at implementation time. The
+`progress_events` plumbing is the same observe hook the original test used
+(`tests/test_pipeline_e2e.py:200-258`); port it verbatim.
 
 - [ ] **Step 2: Run the migrated test**
 

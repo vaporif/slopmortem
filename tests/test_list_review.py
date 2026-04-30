@@ -72,7 +72,7 @@ def test_cli_list_review_prints_queue(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
     fake_journal.list_pending_review = _afake
 
-    def _build(*_a: object, **_k: object) -> MagicMock:
+    async def _build(*_a: object, **_k: object) -> MagicMock:
         return fake_journal
 
     monkeypatch.setattr("slopmortem.cli._build_journal", _build)

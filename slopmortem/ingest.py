@@ -42,7 +42,7 @@ import logging
 import secrets
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
 import anyio
 from anyio import to_thread
@@ -226,11 +226,13 @@ class HaikuSlopClassifier:
             extra_body={"prompt_template_sha": prompt_template_sha("slop_judge")},
         )
         try:
-            parsed = json.loads(result.text)
+            parsed: object = json.loads(result.text)
         except json.JSONDecodeError:
             # Conservative on parse failure: keep the entry rather than silently drop.
             return 0.0
-        is_dead = parsed.get("is_dead_company") if isinstance(parsed, dict) else None
+        if not isinstance(parsed, dict):
+            return 1.0
+        is_dead = cast("dict[str, object]", parsed).get("is_dead_company")
         return 0.0 if is_dead is True else 1.0
 
 

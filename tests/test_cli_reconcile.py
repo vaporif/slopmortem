@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _fake_journal(*_a: object, **_k: object) -> MagicMock:
+async def _fake_journal(*_a: object, **_k: object) -> MagicMock:
     return MagicMock()
 
 

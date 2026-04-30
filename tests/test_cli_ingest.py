@@ -13,8 +13,12 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
-    """Return six MagicMock placeholders matching ``_build_ingest_deps``'s tuple shape."""
+async def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
+    """Return six MagicMock placeholders matching ``_build_ingest_deps``'s tuple shape.
+
+    Async because ``_build_ingest_deps`` is async (it ``await``s the journal's
+    ``init()`` to create the sqlite schema).
+    """
     return (
         MagicMock(name="llm"),
         MagicMock(name="embed"),
