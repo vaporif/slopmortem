@@ -25,6 +25,8 @@ from slopmortem.models import Synthesis
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from slopmortem.config import Config
     from slopmortem.llm.client import LLMClient
     from slopmortem.models import Candidate, InputContext
@@ -148,6 +150,7 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     *,
     model: str | None = None,
     max_tokens: int | None = None,
+    on_candidate_done: Callable[[BaseException | None], None] | None = None,
 ) -> list[Synthesis | BaseException]:
     """Cache-warm synthesize fan-out: one warm call, then :func:`gather_resilient`.
 
@@ -165,6 +168,10 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
         model: Optional model override.
         max_tokens: Optional cap on completion tokens, forwarded to each
             :func:`synthesize` call.
+        on_candidate_done: Optional callback fired exactly once per candidate
+            when its ``synthesize`` call settles. Receives ``None`` on success
+            or the raised :class:`BaseException` on failure. Intended for
+            progress-bar wiring on the CLI; pipeline pure path passes ``None``.
 
     Returns:
         A list the same length as *candidates*, each entry either a
@@ -174,18 +181,17 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     if not candidates:
         return []
 
-    first: Synthesis | BaseException
-    try:
-        first = await synthesize(
-            candidates[0], ctx, llm, config, model=model, max_tokens=max_tokens
-        )
-    except Exception as exc:  # noqa: BLE001 — record the failure as a list entry, not a raise
-        first = exc
+    async def _run_one(candidate: Candidate) -> Synthesis | BaseException:
+        try:
+            result: Synthesis | BaseException = await synthesize(
+                candidate, ctx, llm, config, model=model, max_tokens=max_tokens
+            )
+        except Exception as exc:  # noqa: BLE001 — record failure as a list entry
+            result = exc
+        if on_candidate_done is not None:
+            on_candidate_done(result if isinstance(result, BaseException) else None)
+        return result
 
-    rest_results = await gather_resilient(
-        *(
-            synthesize(c, ctx, llm, config, model=model, max_tokens=max_tokens)
-            for c in candidates[1:]
-        ),
-    )
+    first = await _run_one(candidates[0])
+    rest_results = await gather_resilient(*(_run_one(c) for c in candidates[1:]))
     return [first, *rest_results]

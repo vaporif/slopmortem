@@ -16,7 +16,7 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -27,7 +27,7 @@ from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis
-from slopmortem.pipeline import _join_to_candidates, cutoff_iso, run_query
+from slopmortem.pipeline import QueryPhase, _join_to_candidates, cutoff_iso, run_query
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -263,6 +263,33 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
     )
 
 
+class _RecordingQueryProgress:
+    """Test stub for :class:`slopmortem.pipeline.QueryProgress`.
+
+    Records every phase event into ``self.events`` as ``("start", phase, total)``,
+    ``("advance", phase, n)``, ``("end", phase)``, ``("log", message)``, or
+    ``("error", phase, message)`` tuples.
+    """
+
+    def __init__(self) -> None:
+        self.events: list[tuple[object, ...]] = []
+
+    def start_phase(self, phase: QueryPhase, total: int) -> None:
+        self.events.append(("start", phase, total))
+
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
+        self.events.append(("advance", phase, n))
+
+    def end_phase(self, phase: QueryPhase) -> None:
+        self.events.append(("end", phase))
+
+    def log(self, message: str) -> None:
+        self.events.append(("log", message))
+
+    def error(self, phase: QueryPhase, message: str) -> None:
+        self.events.append(("error", phase, message))
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -286,7 +313,7 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     # Override retrieve's default sparse encoder; avoids loading fastembed.
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
 
-    progress_events: list[str] = []
+    progress = _RecordingQueryProgress()
     report = await run_query(
         ctx,
         llm=fake_llm,
@@ -294,7 +321,7 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
         corpus=fake_corpus,
         config=cfg,
         budget=budget,
-        progress=progress_events.append,
+        progress=progress,
     )
 
     # Report shape
@@ -319,11 +346,21 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     assert meta.models["rerank"] == _RERANK_MODEL
     assert meta.models["synthesize"] == _SYNTH_MODEL
 
-    # Progress callback was invoked at every stage
-    assert "facet_extract" in progress_events
-    assert "retrieve" in progress_events
-    assert "rerank" in progress_events
-    assert any(p.startswith("synthesize") for p in progress_events)
+    # Progress hooks were invoked at every stage
+    phases_started = {evt[1] for evt in progress.events if evt[0] == "start"}
+    assert phases_started == {
+        QueryPhase.FACET_EXTRACT,
+        QueryPhase.RETRIEVE,
+        QueryPhase.RERANK,
+        QueryPhase.SYNTHESIZE,
+    }
+    # Synthesize must have advanced once per top_n candidate
+    synth_advances = sum(
+        cast("int", evt[2])
+        for evt in progress.events
+        if evt[0] == "advance" and evt[1] == QueryPhase.SYNTHESIZE
+    )
+    assert synth_advances == cfg.N_synthesize  # under fake fixtures all candidates settle
 
     # Corpus.query was invoked with the right knobs.
     assert len(fake_corpus.queries) == 1

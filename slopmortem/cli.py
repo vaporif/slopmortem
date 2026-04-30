@@ -79,14 +79,13 @@ from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.models import InputContext
-from slopmortem.pipeline import cutoff_iso, run_query
+from slopmortem.pipeline import QueryPhase, cutoff_iso, run_query
 from slopmortem.render import render
 from slopmortem.stages.facet_extract import extract_facets
 from slopmortem.stages.retrieve import retrieve
 from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from types import TracebackType
 
     from slopmortem.config import Config
@@ -97,6 +96,7 @@ if TYPE_CHECKING:
     from slopmortem.ingest import SlopClassifier
     from slopmortem.llm.client import LLMClient
     from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.models import Report
 
 logger = logging.getLogger(__name__)
 
@@ -420,15 +420,32 @@ async def _query(
     if debug_retrieve:
         await _debug_retrieve(ctx, llm=llm, embedder=embedder, corpus=corpus, config=config)
         return
-    report = await run_query(
-        ctx,
-        llm=llm,
-        embedding_client=embedder,
-        corpus=corpus,
-        config=config,
-        budget=budget,
-        progress=_make_progress(),
+
+    progress_ctx: contextlib.AbstractContextManager[RichQueryProgress | None] = (
+        RichQueryProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
+    err_console = Console(stderr=True)
+    try:
+        with progress_ctx as bar:
+            report = await run_query(
+                ctx,
+                llm=llm,
+                embedding_client=embedder,
+                corpus=corpus,
+                config=config,
+                budget=budget,
+                progress=bar,
+            )
+    except KeyboardInterrupt:
+        err_console.rule("[bold yellow]query cancelled (Ctrl-C)", style="yellow")
+        raise
+    except BaseException:
+        err_console.rule("[bold red]query failed", style="red")
+        err_console.print_exception(show_locals=False)
+        raise
+
+    if bar is not None:
+        _render_query_footer(bar.console, report, n_target=config.N_synthesize)
     typer.echo(render(report))
 
 
@@ -685,17 +702,6 @@ async def _build_ingest_deps(
     return llm, embedder, corpus, budget, journal, classifier
 
 
-def _make_progress() -> Callable[[str], None] | None:
-    """Build a stderr progress callback, or ``None`` when stderr is not a TTY."""
-    if not sys.stderr.isatty():
-        return None
-
-    def _p(msg: str) -> None:
-        print(f"slopmortem: {msg}", file=sys.stderr, flush=True)  # noqa: T201 — CLI progress
-
-    return _p
-
-
 # ---------------------------------------------------------------------------
 # ingest progress (Rich)
 # ---------------------------------------------------------------------------
@@ -831,6 +837,130 @@ def _render_ingest_result(console: Console, result: IngestResult) -> None:
 
 
 # ---------------------------------------------------------------------------
+# query progress (Rich)
+# ---------------------------------------------------------------------------
+
+_QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
+    QueryPhase.FACET_EXTRACT: "Extracting facets",
+    QueryPhase.RETRIEVE: "Retrieving candidates",
+    QueryPhase.RERANK: "Reranking candidates",
+    QueryPhase.SYNTHESIZE: "Synthesizing post-mortems",
+}
+
+
+class RichQueryProgress:
+    """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl.
+
+    Mirrors :class:`RichIngestProgress`: one Rich ``Progress`` instance with a
+    task per phase, lazy task creation so unreached phases don't render empty
+    bars, and a red error-count badge appended to the description when
+    synthesize fan-out has per-candidate failures.
+    """
+
+    def __init__(self) -> None:
+        """Build the underlying ``Progress`` and console; tasks are added lazily."""
+        self._console = Console(stderr=True)
+        self._progress = Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}", justify="left"),
+            BarColumn(
+                bar_width=None,
+                style="grey50",
+                complete_style="cyan",
+                finished_style="green",
+                pulse_style="cyan",
+            ),
+            MofNCompleteColumn(),
+            TextColumn("[dim]•"),
+            TimeElapsedColumn(),
+            TextColumn("[dim]eta"),
+            TimeRemainingColumn(),
+            console=self._console,
+            transient=False,
+        )
+        self._tasks: dict[QueryPhase, TaskID] = {}
+        self._phase_errors: dict[QueryPhase, int] = {}
+
+    def __enter__(self) -> Self:
+        """Start the live render."""
+        self._progress.__enter__()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Tear down the live render."""
+        self._progress.__exit__(exc_type, exc_val, exc_tb)
+
+    @property
+    def console(self) -> Console:
+        """Underlying Rich console; the CLI uses it for the post-run footer."""
+        return self._console
+
+    def _label(self, phase: QueryPhase) -> str:
+        styled = f"[bold cyan]{_QUERY_PHASE_LABELS[phase]}[/bold cyan]"
+        n = self._phase_errors.get(phase, 0)
+        if not n:
+            return styled
+        noun = "error" if n == 1 else "errors"
+        return f"{styled} [bold red]({n} {noun})[/bold red]"
+
+    def start_phase(self, phase: QueryPhase, total: int) -> None:
+        """Create or reset the bar for *phase* with the expected ``total``."""
+        if phase in self._tasks:
+            self._progress.reset(self._tasks[phase], total=total)
+            self._progress.update(self._tasks[phase], description=self._label(phase))
+            return
+        self._tasks[phase] = self._progress.add_task(self._label(phase), total=max(total, 1))
+
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
+        """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
+        tid = self._tasks.get(phase)
+        if tid is not None:
+            self._progress.advance(tid, n)
+
+    def end_phase(self, phase: QueryPhase) -> None:
+        """Complete *phase*'s bar and stop its spinner."""
+        tid = self._tasks.get(phase)
+        if tid is None:
+            return
+        task = self._progress.tasks[tid]
+        self._progress.update(
+            tid, completed=task.total or task.completed, description=self._label(phase)
+        )
+
+    def log(self, message: str) -> None:
+        """Write a one-off neutral status line above the progress display."""
+        self._console.log(message)
+
+    def error(self, phase: QueryPhase, message: str) -> None:
+        """Bump the error count for *phase* and log a red line above the bars."""
+        self._phase_errors[phase] = self._phase_errors.get(phase, 0) + 1
+        tid = self._tasks.get(phase)
+        if tid is not None:
+            self._progress.update(tid, description=self._label(phase))
+        self._console.log(f"[bold red]ERROR[/bold red] [{phase.value}] {message}")
+
+
+def _render_query_footer(console: Console, report: Report, n_target: int) -> None:
+    """Print a one-line summary footer to *console* after a query run."""
+    meta = report.pipeline_meta
+    parts = [
+        f"cost=${meta.cost_usd_total:.4f}",
+        f"latency={meta.latency_ms_total}ms",
+        f"synthesized={len(report.candidates)}/{n_target}",
+    ]
+    if meta.trace_id:
+        parts.append(f"trace={meta.trace_id}")
+    if meta.budget_exceeded:
+        parts.append("[bold red]budget_exceeded[/bold red]")
+    console.print("[bold cyan]done[/bold cyan] • " + " • ".join(parts))
+
+
+# ---------------------------------------------------------------------------
 # replay
 # ---------------------------------------------------------------------------
 
@@ -863,25 +993,31 @@ async def _replay(dataset: str) -> None:
     llm, embedder, corpus, budget = _build_deps(config)
     _set_corpus(corpus)
 
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        # ``json.loads`` returns ``Any`` by design; the per-site ignore narrows
-        # the unknown payload to ``object``. ``InputContext.model_validate`` is
-        # the strict boundary.
-        row: object = json.loads(line)  # pyright: ignore[reportAny]
-        ctx = InputContext.model_validate(row)
-        report = await run_query(
-            ctx,
-            llm=llm,
-            embedding_client=embedder,
-            corpus=corpus,
-            config=config,
-            budget=budget,
-            progress=_make_progress(),
-        )
-        typer.echo(render(report))
+    progress_ctx: contextlib.AbstractContextManager[RichQueryProgress | None] = (
+        RichQueryProgress() if sys.stderr.isatty() else contextlib.nullcontext()
+    )
+    with progress_ctx as bar:
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            # ``json.loads`` returns ``Any`` by design; the per-site ignore narrows
+            # the unknown payload to ``object``. ``InputContext.model_validate`` is
+            # the strict boundary.
+            row: object = json.loads(line)  # pyright: ignore[reportAny]
+            ctx = InputContext.model_validate(row)
+            report = await run_query(
+                ctx,
+                llm=llm,
+                embedding_client=embedder,
+                corpus=corpus,
+                config=config,
+                budget=budget,
+                progress=bar,
+            )
+            if bar is not None:
+                _render_query_footer(bar.console, report, n_target=config.N_synthesize)
+            typer.echo(render(report))
 
 
 # ---------------------------------------------------------------------------
