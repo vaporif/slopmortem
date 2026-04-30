@@ -25,7 +25,7 @@ bodies, so the runner emits ``True`` vacuously (mirroring how
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
@@ -70,10 +70,12 @@ def lifespan_months_positive(s: Synthesis) -> bool:
 # case-insensitively so "Million"/"million" both extract, but the substring
 # check stays case-sensitive (intentional strictness).
 _NUMERIC_CLAIM_RE = re.compile(
-    r"\$?(?:\d[\d,.]*\d|\d)"
-    r"(?:\s*(?:million|billion|[MBK]|%|months?|years?))?"
-    r"(?:\s+\w+)?",
-    re.IGNORECASE,
+    r"""
+    \$?(?:\d[\d,.]*\d|\d)                          # currency-prefixed digit cluster
+    (?:\s*(?:million|billion|[MBK]|%|months?|years?))?  # optional unit qualifier
+    (?:\s+\w+)?                                    # optional one trailing word
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
@@ -110,7 +112,11 @@ def claims_grounded_in_body(s: Synthesis, body: str) -> bool:
     for prose in rationales:
         if not prose:
             continue
-        for match in _NUMERIC_CLAIM_RE.findall(prose):
+        # ``re.Pattern.findall`` returns ``list[Any]`` because the element type
+        # depends on the pattern's groups. Our pattern has no capturing groups,
+        # so every element is a ``str`` (the whole match).
+        matches = cast("list[str]", _NUMERIC_CLAIM_RE.findall(prose))
+        for match in matches:
             if match not in body:
                 return False
     return True

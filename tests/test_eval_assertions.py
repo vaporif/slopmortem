@@ -182,7 +182,7 @@ def test_claims_grounded_scans_all_four_perspective_rationales() -> None:
     body = "Acme Corp had a long story."
     for kw in ("business_model", "market", "gtm", "stage_scale"):
         kwargs: dict[str, str] = {kw: "Hit 99 million users."}
-        s = _synth(similarity=_sim(**kwargs))  # pyright: ignore[reportArgumentType]
+        s = _synth(similarity=_sim(**kwargs))
         assert claims_grounded_in_body(s, body) is False, kw
 
 
