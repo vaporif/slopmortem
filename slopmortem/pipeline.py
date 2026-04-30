@@ -147,7 +147,7 @@ def _current_trace_id() -> str | None:
     name="query",
     ignore_inputs=["llm", "embedding_client", "corpus", "budget", "progress"],
 )
-async def run_query(  # noqa: PLR0913 — every dep is required wiring at the call site
+async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call site
     input_ctx: InputContext,
     *,
     llm: LLMClient,

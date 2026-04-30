@@ -52,7 +52,7 @@ async def test_tavily_search_calls_api_and_formats_results(
 
     out = await _tavily_search("acme failure", limit=2)
 
-    # Result is a string the LLM can read; contains URLs and titles, no raw HTML.
+    # Result is a string the LLM can read: contains URLs and titles, no raw HTML.
     assert "example.com/a" in out
     assert "example.com/b" in out
     assert "Co. shut down" in out

@@ -1,4 +1,4 @@
-"""``slopmortem ingest --reconcile`` walks Qdrant + disk + journal.
+"""``slopmortem ingest --reconcile`` walks Qdrant, disk, and journal.
 
 Six drift classes (spec line 604):
 
@@ -18,7 +18,7 @@ The default :func:`reconcile` call is scan-only and returns a
 
 Pass ``repair=True`` to apply repairs:
 
-* class (e) is fully fixed inline: orphaned ``.tmp`` files get deleted.
+* class (e) is fixed inline: orphaned ``.tmp`` files get deleted.
 * classes (a), (b), (c), (d), (f) need an embedding client and the full
   ingest pipeline, so the repair pass only records intent (e.g.
   ``needs_reembed``, ``needs_remerge``, ``pending_redo``,
@@ -90,7 +90,7 @@ def _read_front_matter(path: Path) -> dict[str, object]:
     parsed = yaml.safe_load(fm_text)  # pyright: ignore[reportAny]  # yaml is loosely typed
     if not isinstance(parsed, dict):
         return {}
-    # parsed is dict[Any, Any] from yaml — coerce to dict[str, object] explicitly.
+    # parsed is dict[Any, Any] from yaml; coerce to dict[str, object] explicitly.
     out: dict[str, object] = {}
     for k, v in parsed.items():  # pyright: ignore[reportUnknownVariableType]
         out[str(k)] = v  # pyright: ignore[reportUnknownArgumentType]
@@ -340,8 +340,8 @@ async def _apply_repairs(
     slop/facet/summarize stages, which the reconcile pass doesn't have.
     Those repairs surface as audit labels (``needs_reembed`` /
     ``needs_remerge`` / ``pending_redo`` / ``resolver_flipped_repair``) so
-    the next ingest pass picks up the work. Class (e) is repaired inline
-    by deleting orphaned ``.tmp`` files.
+    the next ingest pass picks up the work. Class (e) is repaired inline by
+    deleting orphaned ``.tmp`` files.
     """
     applied: list[str] = []
     # Class (f) wants corpus.delete_chunks_for_canonical, but the read-only

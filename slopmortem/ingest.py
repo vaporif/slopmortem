@@ -9,7 +9,7 @@ Pipeline (per spec lines 478-606):
    extracts the canonical body if HTML is present; entries below the length
    floor are dropped.
 3. Slop classify; ``slop_score > config.slop_threshold`` quarantines the doc
-   (no qdrant point, no merge journal row — separate ``quarantine_journal``
+   (no qdrant point, no merge journal row, separate ``quarantine_journal``
    table; body under ``post_mortems_root/quarantine/<content_sha256>.md``).
 4. Cache-warm one serial LLM call so the prompt cache is hot before fan-out.
 5. Fan-out facet_extract + summarize_for_rerank under a
@@ -79,7 +79,7 @@ if TYPE_CHECKING:
     from slopmortem.llm.embedding_client import EmbeddingClient
     from slopmortem.models import RawEntry
 
-# Sparse encoder shape — Callable[[text], {token_id: weight}].
+# Sparse encoder shape: Callable[[text], {token_id: weight}].
 type SparseEncoder = Callable[[str], dict[int, float]]
 
 logger = logging.getLogger(__name__)
@@ -105,13 +105,10 @@ _RELIABILITY_RANK: Final[dict[str, int]] = {
 # Sources whose entries are pre-filtered to "confirmed dead company" upstream
 # of slopmortem itself: curated YAML is human-reviewed, crunchbase_csv is
 # filtered to status=closed. Running the LLM dead-company classifier on these
-# is wasted spend AND systematically misclassifies — Wayback'd Crunchbase
+# is wasted spend AND systematically misclassifies; Wayback'd Crunchbase
 # homepages are pre-death marketing copy, not death narratives. Skip slop for
 # them entirely; HN and any future open-corpus sources still go through it.
 _PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_csv"})
-
-
-# ─── Protocols ─────────────────────────────────────────────────────────────────
 
 
 @runtime_checkable
@@ -135,7 +132,7 @@ class IngestPhase(StrEnum):
     """Closed set of phase keys used by :class:`IngestProgress`.
 
     StrEnum (rather than bare strings) gives us closed-set typing, IDE
-    autocomplete, and exhaustiveness checks — typos like ``"fanout"`` for
+    autocomplete, and exhaustiveness checks: typos like ``"fanout"`` for
     ``"fan_out"`` fail at parse time instead of silently no-op'ing.
     """
 
@@ -160,10 +157,10 @@ class IngestProgress(Protocol):
     def start_phase(self, phase: IngestPhase, total: int | None) -> None:
         """Announce *phase* with an expected ``total`` of advances.
 
-        ``total=None`` marks the phase as indeterminate — used when the
+        ``total=None`` marks the phase as indeterminate, used when the
         producer can't know the size up front (e.g. ``GATHER`` without
         ``--limit``). The Rich impl renders a pulsing bar instead of a
-        fake-totaled one so the ETA column honestly stays blank.
+        fake-totaled one so the ETA column stays blank.
         """
 
     def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
@@ -207,7 +204,7 @@ class SlopClassifier(Protocol):
         ...
 
 
-# ─── Test doubles (production stays in qdrant_store + classifier impl below) ───
+# Test doubles. Production stays in qdrant_store and the classifier impl below.
 
 
 @dataclass
@@ -262,15 +259,15 @@ class HaikuSlopClassifier:
 
     Only runs on open-corpus sources (HN). Pre-vetted sources (curated YAML,
     Crunchbase CSV) bypass slop in :func:`ingest` because their bodies are
-    either human-reviewed obituaries or Wayback'd live-era marketing pages —
-    neither benefits from a death-narrative LLM check.
+    either human-reviewed obituaries or Wayback'd live-era marketing pages,
+    neither of which benefits from a death-narrative LLM check.
 
     One LLM call per text. Returns 0.0 when Haiku says the text describes a
     specific dead company, else 1.0 (which exceeds ``slop_threshold=0.7``
     and quarantines the entry).
 
-    ``char_limit=6000`` is sized so the demise narrative — which can sit deep
-    in the body for older companies like Sun Microsystems or WeWork — falls
+    ``char_limit=6000`` is sized so the demise narrative (which can sit deep
+    in the body for older companies like Sun Microsystems or WeWork) falls
     inside the window. ~$6 extra per full HN pass vs a tighter 1500-char cap,
     and avoids false-negative quarantines on long obituaries.
     """
@@ -315,9 +312,6 @@ class HaikuSlopClassifier:
         return 0.0 if is_dead is True else 1.0
 
 
-# ─── Result type ───────────────────────────────────────────────────────────────
-
-
 @dataclass
 class IngestResult:
     """Roll-up of one ingest run for the operator and CI."""
@@ -335,9 +329,6 @@ class IngestResult:
     span_events: list[str] = field(default_factory=list)
 
 
-# ─── Internal helpers ──────────────────────────────────────────────────────────
-
-
 def _content_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -350,7 +341,7 @@ def _reliability_for(source: str) -> int:
     return _RELIABILITY_RANK.get(source, 9)
 
 
-def _skip_key(  # noqa: PLR0913 — the spec-defined tuple is wide
+def _skip_key(  # noqa: PLR0913 - the spec-defined tuple is wide
     *,
     content_hash: str,
     facet_sha: str,
@@ -373,13 +364,13 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     """Clip *text* so it encodes to at most *max_tokens* under cl100k_base.
 
     Anthropic's tokenizer isn't published; cl100k_base (used by GPT-4) is a
-    good proxy for cost-control purposes — Anthropic and OpenAI tokenizers
-    agree to within ~10% on English prose, which is well inside the
-    headroom for a truncation budget.
+    good proxy for cost-control purposes. Anthropic and OpenAI tokenizers
+    agree to within ~10% on English prose, well inside the headroom for a
+    truncation budget.
     """
     if max_tokens <= 0:
         return text
-    import tiktoken  # noqa: PLC0415 — heavy dep; lazy
+    import tiktoken  # noqa: PLC0415 - heavy dep; lazy
 
     enc = tiktoken.get_encoding("cl100k_base")
     tokens = enc.encode(text)
@@ -449,11 +440,11 @@ async def _gather_entries(
     limit: int | None = None,
     progress: IngestProgress | None = None,
 ) -> tuple[list[RawEntry], int]:
-    """Collect entries from every source. Per-source failures are logged + counted.
+    """Collect entries from every source. Per-source failures are logged and counted.
 
-    When *limit* is set, gather stops as soon as ``len(out) >= limit`` —
+    When *limit* is set, gather stops as soon as ``len(out) >= limit``;
     sources beyond the cap aren't started, and an in-progress source
-    breaks out of its async iterator. This makes ``--limit`` a true
+    breaks out of its async iterator. This makes ``--limit`` a real
     fast-path knob for smoke tests instead of just a post-gather slice.
 
     ``progress`` (when provided) gets one ``advance_phase(GATHER)`` per
@@ -473,7 +464,7 @@ async def _gather_entries(
                 bar.advance_phase(IngestPhase.GATHER)
                 if limit is not None and len(out) >= limit:
                     break
-        except Exception as exc:  # noqa: BLE001 — spec line 606: never abort the run.
+        except Exception as exc:  # noqa: BLE001 - spec line 606: never abort the run.
             logger.warning(
                 "ingest: source %r failed: %s",
                 type(src).__name__,
@@ -482,9 +473,6 @@ async def _gather_entries(
             span_events.append(SpanEvent.SOURCE_FETCH_FAILED.value)
             failures += 1
     return out, failures
-
-
-# ─── Stage helpers (facets, summarize, embed, chunk-and-upsert) ────────────────
 
 
 async def _facet_call(
@@ -551,7 +539,7 @@ async def _cache_warm(
         if creation == 0:
             span.append(SpanEvent.CACHE_WARM_FAILED.value)
             return False, 0, span
-    except Exception as exc:  # noqa: BLE001 — warming is best-effort
+    except Exception as exc:  # noqa: BLE001 - warming is best-effort
         logger.warning("ingest: cache warm failed: %s", exc)
         span.append(SpanEvent.CACHE_WARM_FAILED.value)
         return False, 0, span
@@ -559,7 +547,7 @@ async def _cache_warm(
         return True, creation, span
 
 
-def _build_payload(  # noqa: PLR0913 — payload assembly takes every store-time field
+def _build_payload(  # noqa: PLR0913 - payload assembly takes every store-time field
     *,
     facets: Facets,
     summary: str,
@@ -589,13 +577,13 @@ def _build_payload(  # noqa: PLR0913 — payload assembly takes every store-time
     )
 
 
-def _date_from_year(year: int):  # noqa: ANN202 — narrow internal helper
+def _date_from_year(year: int):  # noqa: ANN202 - narrow internal helper
     from datetime import date  # noqa: PLC0415
 
     return date(year, 1, 1)
 
 
-async def _embed_and_upsert(  # noqa: PLR0913 — every dependency is required at the chunk site
+async def _embed_and_upsert(  # noqa: PLR0913 - every dependency is required at the chunk site
     *,
     canonical_id: str,
     body: str,
@@ -629,9 +617,6 @@ async def _embed_and_upsert(  # noqa: PLR0913 — every dependency is required a
         )
         await corpus.upsert_chunk(point)
     return len(chunks)
-
-
-# ─── Per-entry pipeline ────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -680,7 +665,7 @@ async def _facet_summarize_fanout(
     return await gather_resilient(*(_run(text) for _, text in entries))
 
 
-async def _process_entry(  # noqa: PLR0913 — orchestration density is the contract
+async def _process_entry(  # noqa: PLR0913 - orchestration density is the contract
     entry: RawEntry,
     *,
     body: str,
@@ -828,9 +813,6 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
     return "processed"
 
 
-# ─── Public entry point ────────────────────────────────────────────────────────
-
-
 @observe(
     name="ingest",
     ignore_inputs=[
@@ -846,7 +828,7 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
         "progress",
     ],
 )
-async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration takes every dependency.
+async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes every dependency.
     *,
     sources: Sequence[Source],
     enrichers: Sequence[Enricher],
@@ -870,7 +852,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         sources: Concrete :class:`Source` adapters to fetch from. Per-source
             failures are logged and the run continues (spec line 606).
         enrichers: Optional pre-classifier enrichers (e.g. wayback fallback).
-        journal: SQLite merge journal — pending/complete writers + quarantine.
+        journal: SQLite merge journal: pending/complete writers and quarantine.
         corpus: :class:`Corpus` write surface. Production is :class:`QdrantCorpus`.
         llm: LLM client for facet_extract + summarize_for_rerank.
         embed_client: Dense embedding client. Vector dim is read at the
@@ -910,7 +892,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
 
     def _record_error(entry_label: str, exc: BaseException) -> None:
         # Without this, swallowed per-entry exceptions are invisible in
-        # Laminar — the parent span returns OK, the INGEST_ENTRY_FAILED event
+        # Laminar: the parent span returns OK, the INGEST_ENTRY_FAILED event
         # has no payload, and the only error context lives in stderr logs.
         if not Laminar.is_initialized():
             return
@@ -950,8 +932,8 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
 
         sparse_encoder = _encode_sparse
 
-    # ─── Step 1: pull every entry; per-source errors counted, run continues. ───
-    # `limit` short-circuits gathering — sources past the cap aren't started.
+    # Step 1: pull every entry; per-source errors counted, run continues.
+    # `limit` short-circuits gathering; sources past the cap aren't started.
     # ``total=limit`` when set gives Rich a real denominator so the ETA column
     # works; without ``--limit`` the count is unknown up front, so we pass
     # ``None`` (indeterminate, pulsing bar) rather than lying with ``0``.
@@ -963,14 +945,14 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
     progress.log(f"gathered {len(entries)} entries from {len(sources)} sources")
     result.source_failures = source_failures
 
-    # ─── Step 2: enrich + slop classify + length-floor. ───────────────────────
+    # Step 2: enrich, slop classify, length-floor.
     progress.start_phase(IngestPhase.CLASSIFY, total=len(entries))
     keepers: list[tuple[RawEntry, str]] = []  # (entry, body) post-extract.
     for entry in entries:
         result.seen += 1
         try:
             enriched = await _enrich_pipeline(entry, enrichers)
-        except Exception as exc:  # noqa: BLE001 — per-entry isolation.
+        except Exception as exc:  # noqa: BLE001 - per-entry isolation.
             logger.warning("ingest: enricher failed for %r: %s", entry.source_id, exc)
             progress.error(IngestPhase.CLASSIFY, f"enricher failed for {entry.source_id}: {exc}")
             _record_error(f"{entry.source}:{entry.source_id}", exc)
@@ -987,8 +969,8 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
 
         # Slop classify; quarantine routes do NOT reach LLM/embed/qdrant.
         # Pre-vetted sources skip the LLM judge: ``curated`` is human-reviewed
-        # YAML, and ``crunchbase_csv`` rows are pre-filtered to ``status=closed``
-        # — running the dead-company classifier on a Wayback'd live-era homepage
+        # YAML, and ``crunchbase_csv`` rows are pre-filtered to ``status=closed``.
+        # Running the dead-company classifier on a Wayback'd live-era homepage
         # would systematically mis-quarantine them since the body is marketing
         # copy, not a death narrative.
         if entry.source in _PRE_VETTED_SOURCES:
@@ -996,7 +978,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         else:
             try:
                 slop_score = await slop_classifier.score(body)
-            except Exception as exc:  # noqa: BLE001 — defensive: never abort on classifier failure.
+            except Exception as exc:  # noqa: BLE001 - defensive: never abort on classifier failure.
                 logger.warning("ingest: slop classifier failed: %s", exc)
                 progress.error(IngestPhase.CLASSIFY, f"slop classifier failed: {exc}")
                 slop_score = 0.0
@@ -1022,7 +1004,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
     skipped = result.skipped
     progress.log(f"classified: {len(keepers)} kept, {quarantined} quarantined, {skipped} skipped")
 
-    # ─── Dry-run early exit: only count, never write. ─────────────────────────
+    # Dry-run early exit: only count, never write.
     if dry_run:
         result.would_process = len(keepers)
         _emit_collected_events()
@@ -1032,7 +1014,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         _emit_collected_events()
         return result
 
-    # ─── Step 3: cache-warm one serial call so fan-out runs hot. ──────────────
+    # Step 3: cache-warm one serial call so fan-out runs hot.
     progress.start_phase(IngestPhase.CACHE_WARM, total=1)
     warmed, warm_creation, warm_events = await _cache_warm(
         llm=llm,
@@ -1046,12 +1028,12 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
     result.cache_creation_tokens_warm = warm_creation
     result.span_events.extend(warm_events)
 
-    # ─── Step 4: bounded fan-out for facets + summarize. ──────────────────────
+    # Step 4: bounded fan-out for facets and summarize.
     progress.start_phase(IngestPhase.FAN_OUT, total=len(keepers))
     fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
     progress.end_phase(IngestPhase.FAN_OUT)
 
-    # ─── Step 5: read-ratio probe on first 5 fan-out responses. ───────────────
+    # Step 5: read-ratio probe on first 5 fan-out responses.
     probe = [r for r in fanout if isinstance(r, _FanoutResult)][:_CACHE_READ_RATIO_PROBE_N]
     if probe:
         total_read = sum(r.cache_read for r in probe)
@@ -1062,7 +1044,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             if ratio < _CACHE_READ_RATIO_THRESHOLD:
                 result.span_events.append(SpanEvent.CACHE_READ_RATIO_LOW.value)
 
-    # ─── Step 6: per-entry sequential write phase. ────────────────────────────
+    # Step 6: per-entry sequential write phase.
     progress.start_phase(IngestPhase.WRITE, total=len(keepers))
     for (entry, body), fan in zip(keepers, fanout, strict=True):
         if isinstance(fan, BaseException):
@@ -1095,7 +1077,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
                 budget=budget,
                 sparse_encoder=sparse_encoder,
             )
-        except Exception as exc:  # noqa: BLE001 — spec line 606: run continues.
+        except Exception as exc:  # noqa: BLE001 - spec line 606: run continues.
             logger.warning(
                 "ingest: write phase failed for %s:%s: %s",
                 entry.source,
@@ -1112,7 +1094,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             progress.advance_phase(IngestPhase.WRITE)
             continue
         except BaseException as exc:
-            # CancelledError / SystemExit / etc. — ``except Exception`` above
+            # CancelledError / SystemExit / etc.; ``except Exception`` above
             # misses these. Surface what's escaping (which entry, what type)
             # via the progress error channel before letting it propagate so
             # the run terminates loud rather than silent.

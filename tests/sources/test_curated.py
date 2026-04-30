@@ -1,8 +1,8 @@
-"""Curated source — length floor, platform blocklist, happy path.
+"""Curated source: length floor, platform blocklist, happy path.
 
 The curated YAML loader is the entry point for hand-vetted post-mortems. It
 fetches each row's URL via ``safe_get``, runs it through ``extract_clean``,
-drops rows whose registrable_domain is in ``platform_domains.yml``, and skips
+drops rows whose ``registrable_domain`` is in ``platform_domains.yml``, and skips
 rows whose extracted text falls under the 500-char floor.
 """
 
@@ -88,9 +88,9 @@ async def test_curated_yields_long_text_rows(monkeypatch: pytest.MonkeyPatch) ->
     # Long-text rows for non-blocklisted hosts pass through.
     assert "https://example.com/long-postmortem" in urls
     assert "https://realdomain.example/another-long-postmortem" in urls
-    # Length-floor: too-short row is dropped.
+    # Length floor: too-short row is dropped.
     assert "https://example.org/too-short-page" not in urls
-    # Blocklist: medium.com and substack.com rows never even fetch.
+    # Blocklist: medium.com and substack.com rows never fetch.
     assert "https://medium.com/@user/blocked-platform-post" not in urls
     assert "https://username.substack.com/p/blocked-platform-post" not in urls
     # safe_get must NOT be called for blocklisted hosts.
@@ -132,7 +132,7 @@ async def test_curated_entry_has_expected_fields(monkeypatch: pytest.MonkeyPatch
     assert target.markdown_text is not None
     assert "ExampleCorp" in target.markdown_text
     assert isinstance(target.fetched_at, datetime)
-    # fetched_at is UTC-aware
+    # fetched_at is UTC-aware.
     assert target.fetched_at.tzinfo is not None
     assert target.fetched_at.tzinfo.utcoffset(target.fetched_at) == UTC.utcoffset(target.fetched_at)
 
@@ -166,5 +166,5 @@ async def test_curated_skips_robots_disallowed(monkeypatch: pytest.MonkeyPatch) 
     src = CuratedSource(yaml_path=FIXTURE)
     entries = [e async for e in src.fetch()]
     assert entries == []
-    # No URLs were fetched at all because robots blocked everything.
+    # No URLs were fetched because robots blocked everything.
     assert fake_get.call_count == 0

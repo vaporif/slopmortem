@@ -201,8 +201,6 @@ def _pair_key(canonical_a: str, canonical_b: str) -> str:
     return f"{lo}{hi}"
 
 
-# ─── Module-private SQLite helpers (founding-year cache + tier-3 decisions) ────
-
 
 _TIER3_DECISIONS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS tier3_decisions (
@@ -476,9 +474,6 @@ async def _is_parent_subsidiary_suspect(journal: MergeJournal, domain: str, new_
     return new_suffix is not None
 
 
-# ─── Public API ────────────────────────────────────────────────────────────────
-
-
 async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     entry: RawEntry,
     *,
@@ -535,7 +530,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
 
     span_events: list[str] = []
 
-    # ─── Step 1: alias precheck (atomic terminal write, runs first). ────
     if alias_hint is not None:
         await journal.upsert_alias_blocked(
             canonical_id=alias_hint.canonical_id,
@@ -550,7 +544,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             span_events=span_events,
         )
 
-    # ─── Step 2: choose tier-1 vs tier-2 candidate. ────────────────────────────
     domain, is_platform = _candidate_tier1_id(entry.url or "")
     candidate_id = domain
     use_tier2 = is_platform or not domain
@@ -573,8 +566,8 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     if use_tier2:
         candidate_id = _tier2_canonical(name, sector)
 
-    # ─── Step 3: tier-3 fuzzy matching (only when on a tier-2 id and an
-    # existing tier-2 sibling is journal-resident under the same sector). ─────
+    # Tier-3 fuzzy matching only fires when on a tier-2 id and an existing
+    # tier-2 sibling is journal-resident under the same sector.
     candidate_id = await _maybe_tier3_collapse(
         db_path=db_path,
         journal=journal,
@@ -591,7 +584,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         tiebreaker_max_tokens=tiebreaker_max_tokens,
     )
 
-    # ─── Step 4: resolver-flip precheck. ──────────────────────────────────────
     prior = await journal.lookup_canonical_for_source(entry.source, entry.source_id)
     if prior is not None and prior != candidate_id:
         await journal.upsert_resolver_flipped(
@@ -607,7 +599,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             span_events=span_events,
         )
 
-    # ─── Step 5: write founding_year cache (if provided), classify create/merge. ─
     if founding_year is not None and _looks_tier1(candidate_id):
         # content_sha256 keyed cache: the spec asks for content_sha256 as
         # the second key component, but we don't have the merged content

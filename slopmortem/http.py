@@ -96,7 +96,7 @@ async def safe_get(
     url: str,
     *,
     user_agent: str = USER_AGENT,
-    timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
+    timeout: float = 30.0,  # noqa: ASYNC109 - caller-controlled timeout is part of the public API
 ) -> httpx.Response:
     """Fetch *url* via httpx after enforcing scheme and DNS-pinned SSRF checks."""
     host = _resolve_and_validate(url)
@@ -111,7 +111,7 @@ async def safe_post(
     json: dict[str, object] | None = None,
     headers: dict[str, str] | None = None,
     user_agent: str = USER_AGENT,
-    timeout: float = 30.0,  # noqa: ASYNC109 — caller-controlled timeout is part of the public API
+    timeout: float = 30.0,  # noqa: ASYNC109 - caller-controlled timeout is part of the public API
 ) -> httpx.Response:
     """POST *json* to *url* via httpx after enforcing the same SSRF policy as ``safe_get``.
 

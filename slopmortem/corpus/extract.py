@@ -2,7 +2,7 @@
 
 Pipeline (spec line 244): sanitize HTML -> trafilatura -> readability
 fallback -> length floor (<500 chars => empty). The sanitizer runs BEFORE
-trafilatura: trafilatura otherwise treats HTML comments, JSON-LD, hidden
+trafilatura. trafilatura otherwise treats HTML comments, JSON-LD, hidden
 nodes, and attribute text as visible, opening an indirect-injection surface.
 
 The stripped surfaces are pinned by the hostile-fixture test in
@@ -115,7 +115,7 @@ def _readability_extract(html: str) -> str:
     try:
         doc = Document(html)
         summary_html = doc.summary(html_partial=True)
-    except Exception:  # noqa: BLE001 — readability raises a grab-bag of types from lxml
+    except Exception:  # noqa: BLE001 — readability raises various types from lxml
         return ""
     try:
         root = lxml.html.fromstring(summary_html)

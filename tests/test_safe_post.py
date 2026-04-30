@@ -1,4 +1,4 @@
-"""Regression tests for ``safe_post``: scheme + DNS-pinned SSRF guard, body passthrough."""
+"""Regression tests for ``safe_post``: scheme and DNS-pinned SSRF guard, body passthrough."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ async def test_safe_post_passes_json_body_through(monkeypatch: pytest.MonkeyPatc
     def _stub(_host: str) -> list[str]:
         return ["1.2.3.4"]
 
-    # Bypass DNS resolution so we don't actually hit the network.
+    # Bypass DNS resolution so the test doesn't actually hit the network.
     monkeypatch.setattr("slopmortem.http._resolve_all", _stub)
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
@@ -104,7 +104,7 @@ async def test_safe_post_uses_dns_pinning_helper_shared_with_safe_get(
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     # Skip the actual transport creation in safe_get's DNS-pinned path
-    # by avoiding real I/O — the AsyncClient methods above are stubbed.
+    # by avoiding real I/O; the AsyncClient methods above are stubbed.
     monkeypatch.setattr(httpx, "AsyncHTTPTransport", MagicMock)
 
     from slopmortem.http import safe_get  # local import keeps top of file lean  # noqa: PLC0415

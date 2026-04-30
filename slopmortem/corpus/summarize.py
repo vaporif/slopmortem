@@ -3,7 +3,7 @@
 Runs at ingest time, between :mod:`facet_extract` and :mod:`embed_dense`.
 The 400-token cap is a contract on the LLM's output, enforced by the
 ``Stay under 120 words`` directive in
-``slopmortem/llm/prompts/summarize.j2``, and checked by the rerank stage
+``slopmortem/llm/prompts/summarize.j2``, and checked by the rerank stage,
 which budgets ``K * summary`` tokens for its input window.
 """
 

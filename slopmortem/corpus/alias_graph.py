@@ -3,11 +3,11 @@
 The retrieve stage emits parent-collapsed candidates (one per ``canonical_id``),
 but an M&A, rebrand, or pivot can leave two canonicals for what's really one
 lifecycle. The ``aliases`` SQLite table (see :mod:`slopmortem.corpus.merge`)
-records those lineage edges; this helper groups candidates into connected
+records those lineage edges. This helper groups candidates into connected
 components and returns the top-scoring representative per component, with the
 other canonicals stashed on its ``alias_canonicals`` list.
 
-Pure-Python, no I/O. Callers fetch alias edges however they prefer (per-id
+Pure Python, no I/O. Callers fetch alias edges however they prefer (per-id
 calls to :meth:`MergeJournal.fetch_aliases` or a one-shot scan of the
 ``aliases`` table) and pass them in.
 """
@@ -54,7 +54,7 @@ def collapse_alias_components(
     Returns:
         One :class:`Candidate` per connected component, in descending score
         order. The representative is the highest-scoring candidate in its
-        component; the other canonicals in the component are stored on the
+        component. The other canonicals in the component are stored on the
         representative's ``alias_canonicals`` list (preserving any prior
         contents).
     """

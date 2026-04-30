@@ -1,6 +1,6 @@
 """Re-score quarantined docs; declassify survivors out of the quarantine tree.
 
-Spec ref: §Quarantine and reclassify line 252 — ``slopmortem ingest --reclassify``
+Spec ref: Quarantine and reclassify line 252. ``slopmortem ingest --reclassify``
 re-runs the classifier when the threshold or model changes; declassified docs
 flow back toward entity resolution at the next normal ``ingest`` run.
 
@@ -19,7 +19,7 @@ Deviation from the originating plan: the plan also called for inserting a
 ``canonical_id TEXT NOT NULL`` constraint plus the resolver-flip semantics
 in :func:`slopmortem.corpus.entity_resolution.resolve_entity` make this
 unsafe without a real ``canonical_id``, which only entity resolution can
-assign. We therefore drop the quarantine row and move the file; re-pickup
+assign. We therefore drop the quarantine row and move the file. Re-pickup
 relies on the next normal ingest re-fetching the entry through its source
 adapter and running entity resolution from scratch.
 """

@@ -1,8 +1,8 @@
-"""Wayback enricher — recovers content for curated rows whose live URL is dead.
+"""Wayback enricher: recovers content for curated rows whose live URL is dead.
 
 * No-op when ``raw_html`` is already populated.
 * When ``raw_html`` is empty, hit Wayback's availability API, fetch the snapshot
-  URL it returns, and stash the result in ``raw_html`` + ``markdown_text``.
+  URL it returns, and stash the result in ``raw_html`` and ``markdown_text``.
 """
 
 from __future__ import annotations
@@ -74,7 +74,6 @@ async def test_wayback_fetches_snapshot_when_html_missing(
     }
     snapshot_html = _long_body("ACME ARCHIVED CONTENT")
     responses = {
-        # Availability API call
         "https://archive.org/wayback/available?url=https%3A%2F%2Facme.example%2Fpost": _FakeResp(
             json_payload=availability_payload
         ),

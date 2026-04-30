@@ -4,7 +4,7 @@ Two invariants:
 
 1. Pydantic args model -> OpenAI input schema -> back to args round-trips
    without drift. The schema ships to the LLM; the model validates the
-   LLM's tool call. The two must agree.
+   LLM's tool call, so the two must agree.
 2. The tool implementation module imports nothing from ``subprocess``,
    ``os.system``, ``shutil.rmtree``, or ``shutil.copy``. Corpus tools have
    no reason to shell out, and the synthesis path is sandboxed by
@@ -21,11 +21,11 @@ from slopmortem.llm.tools import to_openai_input_schema
 
 
 def test_tool_signatures_round_trip():
-    """Pydantic args -> SDK schema -> back to args. No drift."""
+    """Pydantic args -> SDK schema -> back to args; no drift."""
     for tool in (get_post_mortem, search_corpus):
         schema = to_openai_input_schema(tool.args_model)
         assert isinstance(schema, dict)
-        # round-trip a sample
+        # Round-trip a sample.
         if tool.name == "get_post_mortem":
             sample: dict[str, object] = {"canonical_id": "acme.com"}
         else:

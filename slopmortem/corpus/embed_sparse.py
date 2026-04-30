@@ -1,5 +1,5 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-"""BM25 sparse embedder. Thin wrapper around :mod:`fastembed`.
+"""BM25 sparse embedder, a wrapper around :mod:`fastembed`.
 
 The Qdrant collection needs ``Modifier.IDF`` for the fastembed BM25 model;
 without IDF, sparse retrieval falls back to raw token-frequency matching.
