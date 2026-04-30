@@ -127,9 +127,16 @@ class WaybackEnricher:
         payload = await self._fetch_json(_availability_url(entry.url))
         snapshot_url = _pick_snapshot_url(payload)
         if not snapshot_url:
+            logger.info("wayback: no snapshot for %s", entry.url)
             return entry
         html = await self._fetch(snapshot_url)
         if not html:
             return entry
         markdown_text = extract_clean(html) or None
+        logger.info(
+            "wayback: recovered %s (%d bytes html, %d chars text)",
+            entry.url,
+            len(html),
+            len(markdown_text or ""),
+        )
         return entry.model_copy(update={"raw_html": html, "markdown_text": markdown_text})
