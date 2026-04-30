@@ -52,6 +52,7 @@ import typer
 from lmnr import Laminar, observe
 from openai import AsyncOpenAI
 from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -723,6 +724,9 @@ class _StackedBar:
             yield from self._bar.__rich_console__(console, options)  # type: ignore[attr-defined]
             if i < self._height - 1:
                 yield Segment.line()
+
+    def __rich_measure__(self, console: Console, options: ConsoleOptions) -> Measurement:
+        return Measurement.get(console, options, self._bar)
 
 
 class _ThickBarColumn(BarColumn):
