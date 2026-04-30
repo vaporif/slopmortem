@@ -57,6 +57,7 @@ from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
     Progress,
+    ProgressBar,
     SpinnerColumn,
     Task,
     TaskID,
@@ -715,13 +716,13 @@ class _StackedBar:
     between copies to stack them vertically.
     """
 
-    def __init__(self, bar: object, height: int) -> None:
+    def __init__(self, bar: ProgressBar, height: int) -> None:
         self._bar = bar
         self._height = height
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         for i in range(self._height):
-            yield from self._bar.__rich_console__(console, options)  # type: ignore[attr-defined]
+            yield from self._bar.__rich_console__(console, options)
             if i < self._height - 1:
                 yield Segment.line()
 

@@ -1,3 +1,5 @@
+set quiet := true
+
 # Redirect caches under the project so sandbox/Library restrictions don't bite.
 export XDG_CACHE_HOME := env_var_or_default("XDG_CACHE_HOME", justfile_directory() / ".uv-cache")
 
