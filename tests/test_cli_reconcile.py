@@ -18,7 +18,7 @@ async def _fake_journal(*_a: object, **_k: object) -> MagicMock:
     return MagicMock()
 
 
-def _fake_corpus(*_a: object, **_k: object) -> MagicMock:
+async def _fake_corpus(*_a: object, **_k: object) -> MagicMock:
     return MagicMock()
 
 

@@ -189,6 +189,45 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
     )
 
 
+async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
+    """Re-run the slop classifier across quarantined rows and print the summary."""
+    journal = await _build_journal(config, post_mortems_root)
+    # reclassify is a live operation that must hit the slop judge for real;
+    # construct only the LLM (no embedder/qdrant) and route it into the
+    # Haiku-backed classifier.
+    budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
+    openrouter_sdk = AsyncOpenAI(
+        api_key=config.openrouter_api_key.get_secret_value(),
+        base_url=config.openrouter_base_url,
+    )
+    llm = OpenRouterClient(sdk=openrouter_sdk, budget=budget, model=config.model_summarize)
+    classifier = _build_slop_classifier(dry_run=False, llm=llm, model=config.model_summarize)
+    report = await reclassify_quarantined(
+        journal=journal,
+        slop_classifier=classifier,
+        post_mortems_root=post_mortems_root,
+        slop_threshold=config.slop_threshold,
+    )
+    counts = f"total={report.total} declassified={report.declassified}"
+    tail = f"still_slop={report.still_slop} errors={report.errors}"
+    typer.echo(f"reclassify: {counts} {tail}")
+
+
+async def _run_reconcile(config: Config, post_mortems_root: Path) -> None:
+    """Run the six-drift-class scan with ``repair=True`` and print the report."""
+    journal = await _build_journal(config, post_mortems_root)
+    corpus = await _build_ingest_corpus(config, post_mortems_root)
+    report = await reconcile(
+        journal=journal,
+        corpus=corpus,
+        post_mortems_root=post_mortems_root,
+        repair=True,
+    )
+    typer.echo(f"reconcile: {len(report.rows)} drift findings, {len(report.applied)} repaired")
+    for r in report.rows:
+        typer.echo(f"  drift_class={r.drift_class}\t{r.path}\t{r.detail}")
+
+
 @observe(name="cli.ingest")
 async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide.
     *,
@@ -223,41 +262,12 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
 
     # Spec: §Quarantine and reclassify line 252.
     if reclassify:
-        journal = await _build_journal(config, post_mortems_root)
-        # reclassify is a live operation that must hit the slop judge for real;
-        # construct only the LLM (no embedder/qdrant) and route it into the
-        # Haiku-backed classifier.
-        budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
-        openrouter_sdk = AsyncOpenAI(
-            api_key=config.openrouter_api_key.get_secret_value(),
-            base_url=config.openrouter_base_url,
-        )
-        llm = OpenRouterClient(sdk=openrouter_sdk, budget=budget, model=config.model_summarize)
-        classifier = _build_slop_classifier(dry_run=False, llm=llm, model=config.model_summarize)
-        report = await reclassify_quarantined(
-            journal=journal,
-            slop_classifier=classifier,
-            post_mortems_root=post_mortems_root,
-            slop_threshold=config.slop_threshold,
-        )
-        counts = f"total={report.total} declassified={report.declassified}"
-        tail = f"still_slop={report.still_slop} errors={report.errors}"
-        typer.echo(f"reclassify: {counts} {tail}")
+        await _run_reclassify(config, post_mortems_root)
         return
 
     # Spec: §Atomicity / six drift classes (a-f).
     if reconcile_flag:
-        journal = await _build_journal(config, post_mortems_root)
-        corpus = await _build_ingest_corpus(config, post_mortems_root)
-        report = await reconcile(
-            journal=journal,
-            corpus=corpus,
-            post_mortems_root=post_mortems_root,
-            repair=True,
-        )
-        typer.echo(f"reconcile: {len(report.rows)} drift findings, {len(report.applied)} repaired")
-        for r in report.rows:
-            typer.echo(f"  drift_class={r.drift_class}\t{r.path}\t{r.detail}")
+        await _run_reconcile(config, post_mortems_root)
         return
 
     llm, embedder, corpus, budget, journal, classifier = await _build_ingest_deps(
@@ -308,6 +318,11 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
                 limit=limit,
                 progress=bar,
             )
+    except KeyboardInterrupt:
+        # Ctrl-C is a ``BaseException``; without surfacing it explicitly the
+        # user just sees the prompt return with no signal that the run stopped.
+        err_console.rule("[bold yellow]ingest cancelled (Ctrl-C)", style="yellow")
+        raise
     except Exception:
         err_console.rule("[bold red]ingest failed", style="red")
         err_console.print_exception(show_locals=False)
