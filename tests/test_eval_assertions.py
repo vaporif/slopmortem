@@ -197,19 +197,25 @@ def test_claims_grounded_trailing_period_does_not_break_match() -> None:
 
 def test_claims_grounded_case_sensitive_regex_and_substring() -> None:
     # Pins the post-IGNORECASE-removal behavior so a future contributor doesn't
-    # reintroduce ``re.IGNORECASE`` on _NUMERIC_CLAIM_RE.
+    # reintroduce ``re.IGNORECASE`` on _NUMERIC_CLAIM_RE. With the flag gone,
+    # both the regex match and the substring check are case-sensitive and
+    # consistent: lowercase synthesis prose (the common case) extracts a
+    # full lowercase token that matches a lowercase body verbatim.
     #
     # Path A: lowercase prose vs lowercase body -> qualifier matches, full
-    # token "1.7 million customers" appears verbatim -> True.
+    # token "1.7 million customers" extracted, found verbatim in body -> True.
     s_lower = _synth(why_similar="Reached 1.7 million customers.")
     body_lower = "they reached 1.7 million customers globally"
     assert claims_grounded_in_body(s_lower, body_lower) is True
 
     # Path B: capitalized "Million" in prose vs lowercase "million" in body.
-    # With IGNORECASE removed, the qualifier alternation no longer matches
-    # ``Million``, so findall extracts only the bare digit ``1.7`` (plus the
-    # following word via the trailing-word group). Body contains ``1.7``, so
-    # the substring check still passes -> True.
+    # Without IGNORECASE, the ``million`` alternation does not match capital
+    # ``Million``, but the ``[MBK]`` character class still matches the bare
+    # ``M``. findall therefore returns ``'1.7 M'`` (no trailing-word group --
+    # next char ``illion`` has no leading whitespace). Body lacks ``'1.7 M'``
+    # (its ``m`` is lowercase) -> False. Re-adding IGNORECASE would extract
+    # ``'1.7 Million customers'`` and still miss -> behavior is the same here,
+    # but the assertion documents the case-sensitive substring contract.
     s_mixed = _synth(why_similar="Reached 1.7 Million customers.")
     body_mixed = "they reached 1.7 million customers globally"
-    assert claims_grounded_in_body(s_mixed, body_mixed) is True
+    assert claims_grounded_in_body(s_mixed, body_mixed) is False
