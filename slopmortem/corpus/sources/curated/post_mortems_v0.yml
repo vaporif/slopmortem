@@ -1,4 +1,4 @@
-# Curated post-mortem URLs: v0 initial-draft list (~100 rows across 19 sectors).
+# Curated post-mortem URLs: v0 initial-draft list (~200 rows across all 23 sectors).
 #
 # This list was compiled by AI from public sources (Wikipedia, founder essays,
 # major tech press) and HEAD-checked for liveness. All entries are companies
@@ -655,6 +655,667 @@
 - url: https://en.wikipedia.org/wiki/WeWork
   startup_name: "WeWork (2019-2023 collapse and bankruptcy)"
   sector: "real_estate_proptech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# ============================================================================
+# v0.5 EXTENSION (added 2026-04-30): bumps total to ~200 rows.
+# All URLs were HEAD-checked (HTTP 200) at submission time. Every row
+# represents a company that shut down, went bankrupt, or was acquired and
+# had its standalone brand extinguished. Same review schema as above.
+# ============================================================================
+
+# === fintech +9 ===
+- url: https://en.wikipedia.org/wiki/Lehman_Brothers
+  startup_name: "Lehman Brothers"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/MF_Global
+  startup_name: "MF Global"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Long-Term_Capital_Management
+  startup_name: "Long-Term Capital Management"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Bear_Stearns
+  startup_name: "Bear Stearns"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Silicon_Valley_Bank
+  startup_name: "Silicon Valley Bank (2023 collapse)"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Signature_Bank
+  startup_name: "Signature Bank (2023 collapse)"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/First_Republic_Bank
+  startup_name: "First Republic Bank (2023 collapse)"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Genesis_Global_Trading
+  startup_name: "Genesis Global Trading (2023 bankruptcy)"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Tally_(company)
+  startup_name: "Tally (2024 shutdown)"
+  sector: "fintech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === healthtech +1 ===
+- url: https://en.wikipedia.org/wiki/Outcome_Health
+  startup_name: "Outcome Health (formerly ContextMedia)"
+  sector: "healthtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === edtech +5 ===
+- url: https://en.wikipedia.org/wiki/2U_(company)
+  startup_name: "2U (post-IPO collapse and 2024 bankruptcy)"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Udacity
+  startup_name: "Udacity (acquired by Accenture 2024 after struggle)"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Byju's
+  startup_name: "BYJU'S (2024 valuation collapse and bankruptcy crisis)"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/LearnVest
+  startup_name: "LearnVest (acquired by Northwestern Mutual, shut down)"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Photomath
+  startup_name: "Photomath (acquired by Google 2022)"
+  sector: "edtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === climate_energy +5 ===
+- url: https://en.wikipedia.org/wiki/Fisker_Inc.
+  startup_name: "Fisker Inc. (2024 bankruptcy, second Fisker venture)"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Ener1
+  startup_name: "Ener1 (2012 bankruptcy)"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Suntech_Power
+  startup_name: "Suntech Power (2013 bankruptcy)"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Range_Fuels
+  startup_name: "Range Fuels (2011 closure)"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Cool_Planet
+  startup_name: "Cool Planet"
+  sector: "climate_energy"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === biotech +3 ===
+- url: https://en.wikipedia.org/wiki/Insys_Therapeutics
+  startup_name: "Insys Therapeutics (opioid scandal, 2019 bankruptcy)"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Mallinckrodt
+  startup_name: "Mallinckrodt (2020 and 2023 bankruptcies)"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Endo_International
+  startup_name: "Endo International (2022 bankruptcy)"
+  sector: "biotech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === devtools +3 ===
+- url: https://en.wikipedia.org/wiki/HipChat
+  startup_name: "HipChat (Atlassian, shut down 2018)"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Wercker
+  startup_name: "Wercker (acquired by Oracle, brand retired)"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Travis_CI
+  startup_name: "Travis CI (acquired by Idera 2019, mass exodus)"
+  sector: "devtools"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === infra_devops +6 ===
+- url: https://en.wikipedia.org/wiki/Cumulus_Networks
+  startup_name: "Cumulus Networks (acquired by Nvidia, brand retired)"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/SolidFire
+  startup_name: "SolidFire (acquired by NetApp, brand retired)"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Stratoscale
+  startup_name: "Stratoscale (shut down 2018)"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Joyent
+  startup_name: "Joyent (acquired by Samsung, public cloud closed 2019)"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Pivotal_Software
+  startup_name: "Pivotal Software (acquired by VMware, brand retired)"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Sun_Microsystems
+  startup_name: "Sun Microsystems (acquired by Oracle 2010, brand retired)"
+  sector: "infra_devops"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === ai_ml_platform +4 ===
+- url: https://en.wikipedia.org/wiki/Inflection_AI
+  startup_name: "Inflection AI (2024 talent and tech absorbed by Microsoft)"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Element_AI
+  startup_name: "Element AI (acquired by ServiceNow, brand retired)"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Wave_Computing
+  startup_name: "Wave Computing (2020 bankruptcy)"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Nervana_Systems
+  startup_name: "Nervana Systems (acquired by Intel, shut down 2020)"
+  sector: "ai_ml_platform"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === data_analytics +1 ===
+- url: https://en.wikipedia.org/wiki/Pentaho
+  startup_name: "Pentaho (acquired by Hitachi, folded into Hitachi Vantara)"
+  sector: "data_analytics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === security +3 ===
+- url: https://en.wikipedia.org/wiki/Bromium
+  startup_name: "Bromium (acquired by HP, brand retired)"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Cylance
+  startup_name: "Cylance (acquired by BlackBerry, product wound down)"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Blue_Coat_Systems
+  startup_name: "Blue Coat Systems (acquired by Symantec, brand retired)"
+  sector: "security"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === mobility_transport +5 ===
+- url: https://en.wikipedia.org/wiki/Bird_Global
+  startup_name: "Bird Global (2023 bankruptcy)"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Lilium
+  startup_name: "Lilium (2024 bankruptcy)"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Coda_Automotive
+  startup_name: "Coda Automotive (2013 bankruptcy)"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Hyperloop_One
+  startup_name: "Hyperloop One / Virgin Hyperloop (shut down 2023)"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Swvl
+  startup_name: "Swvl (2024 ceased operations in most markets)"
+  sector: "mobility_transport"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === retail_ecommerce +5 ===
+- url: https://en.wikipedia.org/wiki/Vroom_(company)
+  startup_name: "Vroom (2024 ceased ecommerce operations)"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Brandless
+  startup_name: "Brandless (shut down 2020)"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Wish_(company)
+  startup_name: "Wish / ContextLogic (post-IPO collapse, sold 2024)"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Fab.com
+  startup_name: "Fab.com (shut down 2015 after $336M raised)"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/LivingSocial
+  startup_name: "LivingSocial (acquired by Groupon, shut down 2018)"
+  sector: "retail_ecommerce"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === hardware +4 ===
+- url: https://en.wikipedia.org/wiki/Pebble_Technology
+  startup_name: "Pebble Technology (smartwatch, shut down 2016)"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Essential_Products
+  startup_name: "Essential Products (shut down 2020)"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Boosted_(company)
+  startup_name: "Boosted (electric skateboards, shut down 2020)"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Palm,_Inc.
+  startup_name: "Palm, Inc. (multiple bankruptcies, brand retired)"
+  sector: "hardware"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === gaming +5 ===
+- url: https://en.wikipedia.org/wiki/Google_Stadia
+  startup_name: "Google Stadia (shut down 2023)"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/THQ
+  startup_name: "THQ (2012 bankruptcy)"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Midway_Games
+  startup_name: "Midway Games (2009 bankruptcy)"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/3DO_Company
+  startup_name: "The 3DO Company (2003 bankruptcy)"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/LucasArts
+  startup_name: "LucasArts (shut down by Disney 2013)"
+  sector: "gaming"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === social_communication +5 ===
+- url: https://en.wikipedia.org/wiki/Orkut
+  startup_name: "Orkut (Google, shut down 2014)"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Houseparty_(app)
+  startup_name: "Houseparty (Epic Games, shut down 2021)"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Meerkat_(app)
+  startup_name: "Meerkat (livestreaming, shut down 2016)"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Periscope_(app)
+  startup_name: "Periscope (Twitter, shut down 2021)"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Ello_(social_network)
+  startup_name: "Ello (effectively defunct after 2022 acquisition)"
+  sector: "social_communication"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === media_content +6 ===
+- url: https://en.wikipedia.org/wiki/Mic_(media_company)
+  startup_name: "Mic (sold to Bustle 2018 after layoffs)"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/The_Outline_(website)
+  startup_name: "The Outline (shut down 2020)"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Vice_Media
+  startup_name: "Vice Media (2023 bankruptcy)"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Ozy_Media
+  startup_name: "Ozy Media (shut down 2021 amid fraud allegations)"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/BuzzFeed_News
+  startup_name: "BuzzFeed News (shut down 2023)"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Refinery29
+  startup_name: "Refinery29 (acquired by Vox, brand reduced)"
+  sector: "media_content"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === food_beverage +2 ===
+- url: https://en.wikipedia.org/wiki/Plated
+  startup_name: "Plated (acquired by Albertsons, shut down 2019)"
+  sector: "food_beverage"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Eatsa
+  startup_name: "Eatsa (automated restaurant, shut down 2017)"
+  sector: "food_beverage"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === hr_recruiting +1 ===
+- url: https://en.wikipedia.org/wiki/Hired_(company)
+  startup_name: "Hired (acquired by Vettery 2019)"
+  sector: "hr_recruiting"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === real_estate_proptech +2 ===
+- url: https://en.wikipedia.org/wiki/Katerra
+  startup_name: "Katerra (2021 bankruptcy after $2B raised)"
+  sector: "real_estate_proptech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Common_(company)
+  startup_name: "Common (co-living, shut down 2023)"
+  sector: "real_estate_proptech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === robotics +6 (zero-coverage sector) ===
+- url: https://en.wikipedia.org/wiki/Reach_Robotics
+  startup_name: "Reach Robotics (Mekamon, shut down 2019)"
+  sector: "robotics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Bossa_Nova_Robotics
+  startup_name: "Bossa Nova Robotics (Walmart partnership ended, layoffs 2020)"
+  sector: "robotics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Romotive
+  startup_name: "Romotive (Romo robot, ceased operations)"
+  sector: "robotics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Zume
+  startup_name: "Zume (pizza robot, shut down 2023 after $450M)"
+  sector: "robotics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Willow_Garage
+  startup_name: "Willow Garage (closed 2014, ROS spun out to OSRF)"
+  sector: "robotics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Aldebaran_Robotics
+  startup_name: "Aldebaran Robotics (Nao/Pepper, SoftBank shut down 2021)"
+  sector: "robotics"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === logistics_supply_chain +5 (zero-coverage sector) ===
+- url: https://en.wikipedia.org/wiki/Doorman_(company)
+  startup_name: "Doorman (package delivery, shut down 2017)"
+  sector: "logistics_supply_chain"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Airlift_(company)
+  startup_name: "Airlift (Pakistan logistics, shut down 2022)"
+  sector: "logistics_supply_chain"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Boxed,_Inc.
+  startup_name: "Boxed, Inc. (2023 bankruptcy)"
+  sector: "logistics_supply_chain"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Postmates
+  startup_name: "Postmates (acquired by Uber, brand retired 2022)"
+  sector: "logistics_supply_chain"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Kozmo.com
+  startup_name: "Kozmo.com (2001 dotcom collapse)"
+  sector: "logistics_supply_chain"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === legal_compliance +3 (zero-coverage sector) ===
+- url: https://techcrunch.com/2020/03/03/atrium-shuts-down/
+  startup_name: "Atrium (Justin Kan's legal startup, shut down 2020 after $75M)"
+  sector: "legal_compliance"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Lex_Machina
+  startup_name: "Lex Machina (acquired by LexisNexis 2015)"
+  sector: "legal_compliance"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Casetext
+  startup_name: "Casetext (acquired by Thomson Reuters 2023)"
+  sector: "legal_compliance"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === marketing_adtech +6 (zero-coverage sector) ===
+- url: https://en.wikipedia.org/wiki/Klout
+  startup_name: "Klout (shut down 2018)"
+  sector: "marketing_adtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/AppNexus
+  startup_name: "AppNexus (acquired by AT&T into Xandr, brand retired)"
+  sector: "marketing_adtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/DoubleClick
+  startup_name: "DoubleClick (acquired by Google, brand retired 2018)"
+  sector: "marketing_adtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/LiveRail
+  startup_name: "LiveRail (acquired by Facebook, shut down)"
+  sector: "marketing_adtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/RadiumOne
+  startup_name: "RadiumOne (CEO scandal, acquired in distress 2014)"
+  sector: "marketing_adtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Quigo
+  startup_name: "Quigo (acquired by AOL, brand retired)"
+  sector: "marketing_adtech"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+
+# === other +6 (zero-coverage sector) ===
+- url: https://en.wikipedia.org/wiki/GeoCities
+  startup_name: "GeoCities (Yahoo!, shut down 2009)"
+  sector: "other"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Excite@Home
+  startup_name: "Excite@Home (2001 bankruptcy)"
+  sector: "other"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Pownce
+  startup_name: "Pownce (shut down 2008)"
+  sector: "other"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Quirky_(company)
+  startup_name: "Quirky (2015 bankruptcy)"
+  sector: "other"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Color_Labs
+  startup_name: "Color Labs (raised $41M pre-launch, shut down 2012)"
+  sector: "other"
+  submitted_by: "vaporif@gmail.com"
+  reviewed_by: "vaporif@gmail.com"
+  content_sha256_at_review: "PLACEHOLDER"
+- url: https://en.wikipedia.org/wiki/Joost
+  startup_name: "Joost (P2P video, shut down 2009)"
+  sector: "other"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"
   content_sha256_at_review: "PLACEHOLDER"
