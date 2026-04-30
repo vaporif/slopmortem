@@ -18,7 +18,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from lmnr import Laminar
+from lmnr import Laminar, observe
 
 from slopmortem.budget import BudgetExceededError
 from slopmortem.models import PipelineMeta, Report, Synthesis
@@ -80,6 +80,10 @@ def _current_trace_id() -> str | None:
     return str(tid) if tid is not None else None
 
 
+@observe(
+    name="query",
+    ignore_inputs=["llm", "embedding_client", "corpus", "budget", "progress"],
+)
 async def run_query(  # noqa: PLR0913 — every dep is required wiring at the call site
     input_ctx: InputContext,
     *,

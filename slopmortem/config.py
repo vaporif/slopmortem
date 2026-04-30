@@ -58,9 +58,10 @@ class Config(BaseSettings):
     tavily_api_key: SecretStr = SecretStr("")
     laminar_api_key: SecretStr = SecretStr("")
 
-    # Env vars the CLI reads via ``os.environ`` directly. Declared here so
-    # that ``extra="forbid"`` doesn't reject ``.env`` lines for them — typos
-    # in TOML knobs still raise, but a populated ``.env`` doesn't break load.
+    # Infrastructure knobs populated from env (``LMNR_*``, ``QDRANT_*``,
+    # ``POST_MORTEMS_ROOT``, ``MERGE_JOURNAL_PATH``). Declared here so the
+    # CLI can read them off ``Config`` instead of ``os.environ`` and so
+    # ``extra="forbid"`` doesn't reject ``.env`` entries for them.
     lmnr_project_api_key: SecretStr = SecretStr("")
     lmnr_base_url: str = ""
     lmnr_allow_remote: str = ""

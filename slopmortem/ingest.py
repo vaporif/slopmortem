@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
 import anyio
 from anyio import to_thread
+from lmnr import observe
 
 from slopmortem._time import utcnow_iso
 from slopmortem.concurrency import gather_resilient
@@ -149,27 +150,21 @@ class IngestProgress(Protocol):
     """
 
     def start_phase(self, phase: IngestPhase, total: int) -> None:
-        """Announce the start of *phase* with an expected ``total`` of advances."""
-        ...
+        """Announce *phase* with an expected ``total`` of advances."""
 
     def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
-        """Advance the bar for *phase* by ``n``."""
-        ...
+        """Advance *phase*'s bar by ``n``."""
 
     def end_phase(self, phase: IngestPhase) -> None:
-        """Mark *phase* as complete; the bar fills to its declared total."""
-        ...
+        """Mark *phase* complete."""
 
     def log(self, message: str) -> None:
-        """Emit a one-off status line alongside the progress display."""
-        ...
+        """Emit a one-off status line."""
 
     def error(self, phase: IngestPhase, message: str) -> None:
-        """Record an error against *phase* and surface it as a red status line."""
-        ...
+        """Record an error against *phase*."""
 
 
-@dataclass
 class NullProgress:
     """No-op :class:`IngestProgress` used when no display surface is attached."""
 
@@ -787,6 +782,21 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
 # ─── Public entry point ────────────────────────────────────────────────────────
 
 
+@observe(
+    name="ingest",
+    ignore_inputs=[
+        "sources",
+        "enrichers",
+        "journal",
+        "corpus",
+        "llm",
+        "embed_client",
+        "budget",
+        "slop_classifier",
+        "sparse_encoder",
+        "progress",
+    ],
+)
 async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration takes every dependency.
     *,
     sources: Sequence[Source],

@@ -25,6 +25,7 @@ the quarantine tree; ``--tavily-enrich`` appends a :class:`TavilyEnricher`
 to the enrichers list.
 """
 
+import contextlib
 import functools
 import json
 import logging
@@ -45,7 +46,7 @@ os.environ.setdefault("GLOG_minloglevel", "2")
 
 import anyio  # must follow the GRPC env-var setup above
 import typer
-from lmnr import Laminar
+from lmnr import Laminar, observe
 from openai import AsyncOpenAI
 from rich.console import Console
 from rich.progress import (
@@ -71,7 +72,7 @@ from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
 from slopmortem.corpus.sources.tavily import TavilyEnricher
 from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.corpus.tools_impl import _set_corpus
-from slopmortem.ingest import IngestPhase, ingest
+from slopmortem.ingest import IngestPhase, IngestResult, ingest
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
@@ -188,6 +189,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
     )
 
 
+@observe(name="cli.ingest")
 async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide.
     *,
     dry_run: bool,
@@ -280,26 +282,10 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
 
     # TTY-gated: only attach the Rich progress display when stderr is a real
     # terminal. Piped invocations (CI, ``> file``) get a quiet run.
-    if sys.stderr.isatty():
-        with RichIngestProgress() as bar:
-            result = await ingest(
-                sources=sources,
-                enrichers=enrichers,
-                journal=journal,
-                corpus=corpus,
-                llm=llm,
-                embed_client=embedder,
-                budget=budget,
-                slop_classifier=classifier,
-                config=config,
-                post_mortems_root=post_mortems_root,
-                dry_run=dry_run,
-                force=force,
-                limit=limit,
-                progress=bar,
-            )
-        _render_ingest_result(bar.console, result)
-    else:
+    progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
+        RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
+    )
+    with progress_ctx as bar:
         result = await ingest(
             sources=sources,
             enrichers=enrichers,
@@ -314,7 +300,11 @@ async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide
             dry_run=dry_run,
             force=force,
             limit=limit,
+            progress=bar,
         )
+    if bar is not None:
+        _render_ingest_result(bar.console, result)
+    else:
         typer.echo(f"slopmortem ingest result: {result}")
 
 
@@ -357,6 +347,7 @@ def query_cmd(
     anyio.run(functools.partial(_query, description=description, name=name, years=years))
 
 
+@observe(name="cli.query")
 async def _query(*, description: str, name: str | None, years: int | None) -> None:
     """Async impl for ``slopmortem query``. Wires production deps and dispatches."""
     config = load_config()
@@ -481,12 +472,7 @@ async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJourna
     return journal
 
 
-def _build_slop_classifier(
-    *,
-    dry_run: bool,
-    llm: LLMClient | None = None,
-    model: str | None = None,
-) -> SlopClassifier:
+def _build_slop_classifier(*, dry_run: bool, llm: LLMClient, model: str) -> SlopClassifier:
     """Construct the slop classifier.
 
     Dry-run uses :class:`FakeSlopClassifier` so the run requires no API key
@@ -494,7 +480,7 @@ def _build_slop_classifier(
     which sends one Haiku call per entry and quarantines anything that
     isn't a specific dead-company narrative.
     """
-    if dry_run or llm is None or model is None:
+    if dry_run:
         from slopmortem.ingest import FakeSlopClassifier  # noqa: PLC0415
 
         return FakeSlopClassifier()
@@ -603,9 +589,9 @@ class RichIngestProgress:
             TextColumn("{task.description}", justify="left"),
             BarColumn(
                 bar_width=None,
-                style="grey50",  # empty / to-do portion (default was red)
-                complete_style="cyan",  # filled while task is in flight
-                finished_style="green",  # bar after the task is fully complete
+                style="grey50",
+                complete_style="cyan",
+                finished_style="green",
                 pulse_style="cyan",
             ),
             MofNCompleteColumn(),
@@ -639,13 +625,12 @@ class RichIngestProgress:
         return self._console
 
     def _label(self, phase: IngestPhase) -> str:
-        """Build the display string for *phase*, including a red error count if any."""
-        base = _INGEST_PHASE_LABELS[phase]
-        styled = f"[bold cyan]{base}[/bold cyan]"
+        styled = f"[bold cyan]{_INGEST_PHASE_LABELS[phase]}[/bold cyan]"
         n = self._phase_errors.get(phase, 0)
-        if n > 0:
-            return f"{styled} [bold red]({n} error{'s' if n != 1 else ''})[/bold red]"
-        return styled
+        if not n:
+            return styled
+        noun = "error" if n == 1 else "errors"
+        return f"{styled} [bold red]({n} {noun})[/bold red]"
 
     def start_phase(self, phase: IngestPhase, total: int) -> None:
         """Create or reset the bar for *phase* with the expected ``total``."""
@@ -667,8 +652,9 @@ class RichIngestProgress:
         if tid is None:
             return
         task = self._progress.tasks[tid]
-        target = task.total if task.total is not None else task.completed
-        self._progress.update(tid, completed=target, description=self._label(phase))
+        self._progress.update(
+            tid, completed=task.total or task.completed, description=self._label(phase)
+        )
 
     def log(self, message: str) -> None:
         """Write a one-off neutral status line above the progress display."""
@@ -677,25 +663,24 @@ class RichIngestProgress:
     def error(self, phase: IngestPhase, message: str) -> None:
         """Bump the error count for *phase* and log a red line above the bars."""
         self._phase_errors[phase] = self._phase_errors.get(phase, 0) + 1
-        # Refresh the description so the red error tally appears next to the bar.
         tid = self._tasks.get(phase)
         if tid is not None:
             self._progress.update(tid, description=self._label(phase))
         self._console.log(f"[bold red]ERROR[/bold red] [{phase.value}] {message}")
 
 
-def _render_ingest_result(console: Console, result: object) -> None:
+def _render_ingest_result(console: Console, result: IngestResult) -> None:
     """Print ``IngestResult`` as a two-column Rich table on *console*."""
     rows: list[tuple[str, str]] = [
-        ("seen", str(getattr(result, "seen", 0))),
-        ("processed", str(getattr(result, "processed", 0))),
-        ("would_process", str(getattr(result, "would_process", 0))),
-        ("quarantined", str(getattr(result, "quarantined", 0))),
-        ("skipped", str(getattr(result, "skipped", 0))),
-        ("errors", str(getattr(result, "errors", 0))),
-        ("source_failures", str(getattr(result, "source_failures", 0))),
-        ("cache_warmed", str(getattr(result, "cache_warmed", False))),
-        ("dry_run", str(getattr(result, "dry_run", False))),
+        ("seen", str(result.seen)),
+        ("processed", str(result.processed)),
+        ("would_process", str(result.would_process)),
+        ("quarantined", str(result.quarantined)),
+        ("skipped", str(result.skipped)),
+        ("errors", str(result.errors)),
+        ("source_failures", str(result.source_failures)),
+        ("cache_warmed", str(result.cache_warmed)),
+        ("dry_run", str(result.dry_run)),
     ]
     table = Table(title="Ingest result", show_header=False, expand=False)
     table.add_column("Field", style="bold cyan", no_wrap=True)
@@ -726,6 +711,7 @@ def replay_cmd(
     anyio.run(_replay, dataset)
 
 
+@observe(name="cli.replay")
 async def _replay(dataset: str) -> None:
     path = Path("tests/evals/datasets") / f"{dataset}.jsonl"
     if not path.exists():
