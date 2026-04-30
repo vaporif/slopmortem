@@ -265,6 +265,29 @@ class PipelineMeta(BaseModel):
     budget_exceeded: bool
 
 
+class TopRisk(BaseModel):
+    """One cluster of similar lessons across candidates.
+
+    Attributes:
+        summary: A short canonical statement of the lesson (the shortest member
+            of the cluster, in original casing).
+        candidate_ids: Which candidates raised this lesson (deduped, ordered as
+            encountered while iterating over syntheses).
+        frequency: ``len(candidate_ids)``; a denormalized convenience for
+            renderers so they don't have to recompute it.
+    """
+
+    summary: str
+    candidate_ids: list[str]
+    frequency: int
+
+
+class TopRisks(BaseModel):
+    """Cross-candidate dedup of lessons, ranked by frequency descending."""
+
+    clusters: list[TopRisk] = Field(default_factory=list)
+
+
 class Report(BaseModel):
     """The user-visible output: input echo, synthesized candidates, and pipeline meta."""
 
@@ -272,6 +295,7 @@ class Report(BaseModel):
     generated_at: datetime
     candidates: list[Synthesis]
     pipeline_meta: PipelineMeta
+    top_risks: TopRisks = Field(default_factory=TopRisks)
 
 
 class ToolSpec(BaseModel):
