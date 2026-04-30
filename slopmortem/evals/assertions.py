@@ -1,25 +1,16 @@
-"""Pure assertions over a :class:`Synthesis`, used by the eval runner.
+"""Pure assertions over a Synthesis, used by the eval runner.
 
-Regression semantics (also documented on the runner):
-
-- An assertion that returned ``True`` in the recorded baseline but ``False``
-  in the current run is a **regression**. The runner exits non-zero in that
-  case.
-- An assertion missing from the baseline is treated as forward-compat — the
-  runner emits a warning but does not fail.
-- An assertion that flipped from ``False`` -> ``True`` is an improvement,
-  not a regression.
+Regression semantics live in the runner module docstring; these functions
+are just the predicates.
 
 These functions are pure: no I/O, no async, no module-level state. The
-runner constructs the ``allowed_hosts`` set itself, because the read-side
-:class:`slopmortem.corpus.store.Corpus` Protocol does not expose the
-candidate ``payload.sources`` needed for a per-candidate domain check.
+runner constructs the allowed_hosts set itself, because the read-side
+Corpus Protocol does not expose payload.sources.
 
-``claims_grounded_in_body`` requires the candidate ``body`` text. The runner
-fetches that via the private ``_EvalCorpus.lookup_payload`` in deterministic
-mode. In ``--live`` mode the public Corpus Protocol does not expose payload
-bodies, so the runner emits ``True`` vacuously (mirroring how
-``all_sources_in_allowed_domains`` collapses to the fixed allowlist there).
+claims_grounded_in_body requires the candidate body. In --live mode the
+public Corpus Protocol does not expose bodies, so the runner emits True
+vacuously (mirroring how all_sources_in_allowed_domains collapses to the
+fixed allowlist there).
 """
 
 from __future__ import annotations
@@ -33,15 +24,15 @@ if TYPE_CHECKING:
 
 
 def where_diverged_nonempty(s: Synthesis) -> bool:
-    """Return True iff ``s.where_diverged`` has at least one non-whitespace char."""
+    """True iff where_diverged has at least one non-whitespace char."""
     return bool(s.where_diverged and s.where_diverged.strip())
 
 
 def all_sources_in_allowed_domains(s: Synthesis, allowed_hosts: set[str]) -> bool:
-    """Return True iff every URL in ``s.sources`` resolves to a host in *allowed_hosts*.
+    """True iff every URL in s.sources resolves to a host in allowed_hosts.
 
-    Empty ``s.sources`` is vacuously True. URLs that ``urlparse`` cannot
-    resolve to a hostname (``hostname is None``) count as a miss.
+    Empty s.sources is vacuously True. URLs that urlparse cannot resolve
+    to a hostname count as a miss.
     """
     for url in s.sources:
         host = urlparse(url).hostname
@@ -53,25 +44,15 @@ def all_sources_in_allowed_domains(s: Synthesis, allowed_hosts: set[str]) -> boo
 
 
 def lifespan_months_positive(s: Synthesis) -> bool:
-    """Return True iff ``s.lifespan_months`` is unknown (None) or strictly positive."""
+    """True iff lifespan_months is None or strictly positive."""
     if s.lifespan_months is None:
         return True
     return s.lifespan_months > 0
 
 
-# Match a numeric token plus optional unit qualifier plus optional one trailing
-# word. The trailing word is what catches fabricated qualifiers like
-# "1.7 million US customers" -> regex extracts "1.7 million US"; substring check
-# against body "1.7 million customers" then fails.
-#
-# Digit cluster: ``\d[\d,.]*\d`` requires both ends to be digits, so a sentence-
-# terminating ``.`` is excluded (single-digit ``\d`` covers the standalone case).
-# Currency prefix ``$`` is optional. Both the regex match and the substring
-# check are case-sensitive; lowercase synthesis prose is the common case, and
-# accidental capitalization in prose simply won't match the qualifier
-# alternation (the digit still matches).
-# re.VERBOSE is required so the inline ``#`` annotations and indented multi-line
-# layout below are not treated as literal regex characters.
+# Trailing-word capture catches fabricated qualifiers: "1.7 million US customers"
+# matches as "1.7 million US", which then fails the substring check against body
+# "1.7 million customers". re.VERBOSE allows the inline `#` annotations.
 _NUMERIC_CLAIM_RE = re.compile(
     r"""
     \$?(?:\d[\d,.]*\d|\d)                          # currency-prefixed digit cluster
@@ -83,27 +64,11 @@ _NUMERIC_CLAIM_RE = re.compile(
 
 
 def claims_grounded_in_body(s: Synthesis, body: str) -> bool:
-    """Return True iff every numeric-looking claim in *s* appears verbatim in *body*.
+    """True iff every numeric-looking claim in s appears verbatim in body.
 
-    Scans ``s.why_similar`` and the four ``s.similarity.*.rationale`` strings.
-    Verbatim is intentional — we want to catch "1.7 million US customers" when
-    the body only says "1.7 million customers".
-
-    Cheap regression gate. Scans these prose strings on *s*:
-
-    - ``s.why_similar``
-    - ``s.similarity.business_model.rationale``
-    - ``s.similarity.market.rationale``
-    - ``s.similarity.gtm.rationale``
-    - ``s.similarity.stage_scale.rationale``
-
-    Each numeric token (with optional currency prefix, optional unit, optional
-    one trailing word) must appear as a substring in *body*. Empty prose is
-    vacuously True. A non-empty body is required when any claim contains a
-    digit; an empty body with any numeric claim returns False.
-
-    False positives are tolerated by design — the runner has ``--write-baseline``
-    to re-record when the rule legitimately disagrees.
+    Scans why_similar and the four similarity.*.rationale strings. False
+    positives are tolerated; re-record the baseline when the rule
+    legitimately disagrees.
     """
     rationales = (
         s.why_similar,
@@ -115,9 +80,6 @@ def claims_grounded_in_body(s: Synthesis, body: str) -> bool:
     for prose in rationales:
         if not prose:
             continue
-        # ``re.Pattern.findall`` returns ``list[Any]`` because the element type
-        # depends on the pattern's groups. Our pattern has no capturing groups,
-        # so every element is a ``str`` (the whole match).
         matches = cast("list[str]", _NUMERIC_CLAIM_RE.findall(prose))
         for match in matches:
             if match not in body:

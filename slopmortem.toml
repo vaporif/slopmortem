@@ -13,7 +13,7 @@ N_synthesize = 5
 ingest_concurrency = 20
 
 # Per-non-"other" facet match boost added on top of the dense score in
-# Qdrant's formula query. Small by design — facets are a tiebreaker, not
+# Qdrant's formula query. Small by design: facets are a tiebreaker, not
 # the primary signal. See corpus/qdrant_store.py.
 facet_boost = 0.01
 
@@ -51,7 +51,7 @@ openrouter_base_url = "https://openrouter.ai/api/v1"
 
 # Per-stage model ids. Cheap stages (facet, summarize) use Haiku; the
 # reasoning stages (rerank, synthesize) use Sonnet. Any OpenRouter model
-# id works — but switching breaks recorded cassettes until re-recorded.
+# id works, but switching breaks recorded cassettes until re-recorded.
 model_facet = "anthropic/claude-haiku-4.5"
 model_summarize = "anthropic/claude-haiku-4.5"
 model_rerank = "anthropic/claude-sonnet-4.6"
@@ -81,7 +81,7 @@ embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 
 # OpenRouter retry policy on transient errors (5xx, 429, mid-stream
 # overloaded_error). Auth errors and 402 (insufficient credit) are
-# fatal — never retried. Backoff is exponential with 25% jitter.
+# fatal: never retried. Backoff is exponential with 25% jitter.
 retry_max_attempts = 3
 retry_initial_backoff = 1.0
 

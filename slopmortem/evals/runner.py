@@ -60,12 +60,11 @@ baseline that also has ``candidates_count=0`` passes.
 Live-mode limitation
 --------------------
 
-In ``--live`` mode, ``allowed_hosts`` for the ``all_sources_in_allowed_domains``
-assertion is reduced to the fixed allowlist
-(:data:`slopmortem.stages.synthesize._FIXED_HOST_ALLOWLIST`) only. The
-public :class:`Corpus` Protocol does not expose payload sources, and we
-deliberately do not extend it. Deterministic mode tightens this by including
-each candidate's own payload sources via the private in-memory corpus.
+In ``--live`` mode, ``allowed_hosts`` for ``all_sources_in_allowed_domains``
+is reduced to ``_FIXED_HOST_ALLOWLIST`` only. The public Corpus Protocol
+does not expose payload sources, and we deliberately do not extend it.
+Deterministic mode tightens this by including each candidate's own payload
+sources via the private in-memory corpus.
 """
 
 from __future__ import annotations
@@ -202,8 +201,10 @@ def _rerank_payload(canonical_ids: list[str]) -> str:
 
 
 def _synthesis_payload(canonical_id: str) -> str:
-    """Canned LLMSynthesis JSON. failure_date/lifespan_months are derived
-    by the pipeline from CandidatePayload, so the LLM no longer emits them.
+    """Canned LLMSynthesis JSON.
+
+    failure_date/lifespan_months are derived by the pipeline from
+    CandidatePayload, so the LLM no longer emits them.
     """
     return json.dumps(
         {

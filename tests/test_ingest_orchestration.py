@@ -118,7 +118,7 @@ def _entry(
     *,
     source: str = "curated",
     source_id: str = "1",
-    url: str = "https://acme.com",
+    url: str | None = "https://acme.com",
 ) -> RawEntry:
     return RawEntry(
         source=source,

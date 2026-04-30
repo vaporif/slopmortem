@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from slopmortem.models import Candidate, InputContext
 
 
-def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, Any]:
+def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Build the ``render_prompt("synthesize", ...)`` kwargs for *candidate*.
 
     Shared by the production stage and tests so both stay in lockstep when
@@ -55,6 +55,7 @@ def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, A
         "price_point": facets.price_point,
     }
 
+
 # Fixed host allowlist applied on top of the per-candidate
 # ``payload.sources`` hosts. ``web.archive.org`` is intentionally NOT
 # included: Wayback proxies arbitrary URLs and bypasses host-level
@@ -67,14 +68,7 @@ _INJECTION_MARKER = "prompt_injection_attempted"
 
 
 def _emit_event(event: SpanEvent) -> None:
-    """Emit *event* as a Laminar span event when tracing is initialized.
-
-    Tests monkeypatch this to observe emissions; in production the body fires
-    ``Laminar.event(name=str(event))`` when ``Laminar.is_initialized()`` is
-    true. ``Laminar.event`` already guards on initialization itself, but we
-    check here to keep the seam explicit and avoid surprise traces from
-    misconfigured fixtures.
-    """
+    """Emit event as a Laminar span event when tracing is initialized."""
     if Laminar.is_initialized():
         Laminar.event(name=str(event))
 
@@ -146,12 +140,11 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
 
     allowed_hosts = _build_allowed_hosts(candidate.payload.sources)
     filtered_sources = [url for url in llm_parsed.sources if _hostname(url) in allowed_hosts]
-    parsed = Synthesis.from_llm(
+    return Synthesis.from_llm(
         llm_parsed.model_copy(update={"sources": filtered_sources}),
         founding_date=candidate.payload.founding_date,
         failure_date=candidate.payload.failure_date,
     )
-    return parsed
 
 
 def _hostname(url: str) -> str | None:
