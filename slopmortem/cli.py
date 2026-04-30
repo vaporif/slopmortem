@@ -338,15 +338,18 @@ def _maybe_init_tracing(config: Config) -> None:
     is unset). If tracing is enabled in config but the project API key is
     missing, log to stderr and skip Laminar init. Tracing is best-effort.
     """
-    base_url = os.environ.get("LMNR_BASE_URL")
+    base_url = config.lmnr_base_url or os.environ.get("LMNR_BASE_URL") or None
+    allow_remote_raw = config.lmnr_allow_remote or os.environ.get("LMNR_ALLOW_REMOTE", "")
     init_tracing(
         base_url=base_url,
-        allow_remote=bool(os.environ.get("LMNR_ALLOW_REMOTE")),
+        allow_remote=bool(allow_remote_raw),
     )
     if not config.enable_tracing:
         return
-    api_key = os.environ.get("LMNR_PROJECT_API_KEY")
-    if api_key is None or api_key == "":
+    api_key = config.lmnr_project_api_key.get_secret_value() or os.environ.get(
+        "LMNR_PROJECT_API_KEY", ""
+    )
+    if not api_key:
         print(  # noqa: T201 — CLI surface; intentional stderr write
             "slopmortem: LMNR_PROJECT_API_KEY missing; tracing disabled",
             file=sys.stderr,
