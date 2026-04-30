@@ -587,7 +587,13 @@ class RichIngestProgress:
         self._progress = Progress(
             SpinnerColumn(),
             TextColumn("[bold cyan]{task.description}", justify="left"),
-            BarColumn(bar_width=None),
+            BarColumn(
+                bar_width=None,
+                style="grey50",          # empty / to-do portion (default was red)
+                complete_style="cyan",   # filled while task is in flight
+                finished_style="green",  # bar after the task is fully complete
+                pulse_style="cyan",
+            ),
             MofNCompleteColumn(),
             TextColumn("[dim]•"),
             TimeElapsedColumn(),
