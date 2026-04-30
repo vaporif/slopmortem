@@ -36,6 +36,17 @@ import anyio
 import typer
 from lmnr import Laminar
 from openai import AsyncOpenAI
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+from rich.table import Table
 
 from slopmortem.budget import Budget
 from slopmortem.config import load_config
@@ -254,22 +265,44 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     if tavily_enrich:
         enrichers.append(TavilyEnricher())
 
-    result = await ingest(
-        sources=sources,
-        enrichers=enrichers,
-        journal=journal,
-        corpus=corpus,
-        llm=llm,
-        embed_client=embedder,
-        budget=budget,
-        slop_classifier=classifier,
-        config=config,
-        post_mortems_root=post_mortems_root,
-        dry_run=dry_run,
-        force=force,
-        limit=limit,
-    )
-    typer.echo(f"slopmortem ingest result: {result}")
+    # TTY-gated: only attach the Rich progress display when stderr is a real
+    # terminal. Piped invocations (CI, ``> file``) get a quiet run.
+    if sys.stderr.isatty():
+        with RichIngestProgress() as bar:
+            result = await ingest(
+                sources=sources,
+                enrichers=enrichers,
+                journal=journal,
+                corpus=corpus,
+                llm=llm,
+                embed_client=embedder,
+                budget=budget,
+                slop_classifier=classifier,
+                config=config,
+                post_mortems_root=post_mortems_root,
+                dry_run=dry_run,
+                force=force,
+                limit=limit,
+                progress=bar,
+            )
+        _render_ingest_result(bar.console, result)
+    else:
+        result = await ingest(
+            sources=sources,
+            enrichers=enrichers,
+            journal=journal,
+            corpus=corpus,
+            llm=llm,
+            embed_client=embedder,
+            budget=budget,
+            slop_classifier=classifier,
+            config=config,
+            post_mortems_root=post_mortems_root,
+            dry_run=dry_run,
+            force=force,
+            limit=limit,
+        )
+        typer.echo(f"slopmortem ingest result: {result}")
 
 
 def _default_curated_yaml() -> Path:
@@ -522,6 +555,110 @@ def _make_progress() -> Callable[[str], None] | None:
         print(f"slopmortem: {msg}", file=sys.stderr, flush=True)  # noqa: T201 — CLI progress
 
     return _p
+
+
+# ---------------------------------------------------------------------------
+# ingest progress (Rich)
+# ---------------------------------------------------------------------------
+
+# Phase keys must match what ``slopmortem.ingest.ingest`` advances.
+_INGEST_PHASE_LABELS: dict[str, str] = {
+    "gather": "Gathering entries from sources",
+    "classify": "Classifying / slop-filtering",
+    "cache_warm": "Warming prompt cache",
+    "fan_out": "Facets + summarize fan-out",
+    "write": "Entity-resolve / chunk / qdrant",
+}
+
+
+class RichIngestProgress:
+    """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl.
+
+    Holds one :class:`rich.progress.Progress` instance with a task per phase.
+    Task IDs are created lazily on ``start_phase`` so phases the run skips
+    (e.g. cache_warm in dry-run) don't appear as empty bars. ``log`` writes a
+    grey one-liner above the bars via the same console, so messages don't
+    fight the progress redraw.
+    """
+
+    def __init__(self) -> None:
+        """Build the underlying ``Progress`` and console; tasks are added lazily."""
+        self._console = Console(stderr=True)
+        self._progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}", justify="left"),
+            BarColumn(bar_width=None),
+            MofNCompleteColumn(),
+            TextColumn("[dim]•"),
+            TimeElapsedColumn(),
+            TextColumn("[dim]eta"),
+            TimeRemainingColumn(),
+            console=self._console,
+            transient=False,
+        )
+        self._tasks: dict[str, int] = {}
+
+    def __enter__(self) -> RichIngestProgress:
+        """Start the live render."""
+        self._progress.__enter__()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        """Tear down the live render."""
+        self._progress.__exit__(*exc)
+
+    @property
+    def console(self) -> Console:
+        """Underlying Rich console; the CLI uses it for the post-run table."""
+        return self._console
+
+    def start_phase(self, phase: str, total: int) -> None:
+        """Create or reset the bar for *phase* with the expected ``total``."""
+        label = _INGEST_PHASE_LABELS.get(phase, phase)
+        if phase in self._tasks:
+            self._progress.reset(self._tasks[phase], total=total)
+            return
+        self._tasks[phase] = self._progress.add_task(label, total=max(total, 1))
+
+    def advance_phase(self, phase: str, n: int = 1) -> None:
+        """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
+        tid = self._tasks.get(phase)
+        if tid is not None:
+            self._progress.advance(tid, n)
+
+    def end_phase(self, phase: str) -> None:
+        """Complete *phase*'s bar and stop its spinner."""
+        tid = self._tasks.get(phase)
+        if tid is None:
+            return
+        task = self._progress.tasks[tid]
+        target = task.total if task.total is not None else task.completed
+        self._progress.update(tid, completed=target)
+
+    def log(self, message: str) -> None:
+        """Write a one-off line above the progress display."""
+        self._console.log(message)
+
+
+def _render_ingest_result(console: Console, result: object) -> None:
+    """Print ``IngestResult`` as a two-column Rich table on *console*."""
+    rows: list[tuple[str, str]] = [
+        ("seen", str(getattr(result, "seen", 0))),
+        ("processed", str(getattr(result, "processed", 0))),
+        ("would_process", str(getattr(result, "would_process", 0))),
+        ("quarantined", str(getattr(result, "quarantined", 0))),
+        ("skipped", str(getattr(result, "skipped", 0))),
+        ("errors", str(getattr(result, "errors", 0))),
+        ("source_failures", str(getattr(result, "source_failures", 0))),
+        ("cache_warmed", str(getattr(result, "cache_warmed", False))),
+        ("dry_run", str(getattr(result, "dry_run", False))),
+    ]
+    table = Table(title="Ingest result", show_header=False, expand=False)
+    table.add_column("Field", style="bold cyan", no_wrap=True)
+    table.add_column("Value", style="white")
+    for k, v in rows:
+        table.add_row(k, v)
+    console.print(table)
 
 
 # ---------------------------------------------------------------------------
