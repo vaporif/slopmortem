@@ -98,7 +98,7 @@ class OpenRouterClient:
         self._initial_backoff = initial_backoff
         self._sleep: Callable[[float], Awaitable[None]] = sleep or anyio.sleep
 
-    async def complete(  # noqa: C901, PLR0912, PLR0913, PLR0915 - mirrors OpenAI chat.create kwargs.
+    async def complete(  # noqa: C901, PLR0913 - mirrors OpenAI chat.create kwargs.
         self,
         prompt: str,
         *,
@@ -110,7 +110,7 @@ class OpenRouterClient:
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
     ) -> CompletionResult:
-        """Run a chat completion, including the tool-call loop, cache re-warming, and retries."""
+        """Run a chat completion, including the tool-call loop and transient-error retries."""
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
         registered = {t.name: t for t in (tools or [])}
@@ -146,24 +146,7 @@ class OpenRouterClient:
 
                 if fr == "stop":
                     if cache and cache_write == 0:
-                        # Cache should have warmed but didn't. Try one re-warm; if it
-                        # still comes back empty, log CACHE_WARM_FAILED and continue.
-                        retry_resp = await self._call_with_retry(
-                            messages=messages,
-                            tools=tools_payload,
-                            **base_kw,
-                        )
-                        retry_usage = retry_resp.usage
-                        if retry_usage is not None:
-                            ptd = getattr(retry_usage, "prompt_tokens_details", None)
-                            cache_read += getattr(ptd, "cached_tokens", 0) or 0 if ptd else 0
-                            cache_write += getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
-                            cost += getattr(retry_usage, "cost", 0.0) or 0.0
-                        retry_choice = retry_resp.choices[0]
-                        if retry_choice.finish_reason == "stop":
-                            choice = retry_choice
-                        if cache_write == 0:
-                            self._emit(SpanEvent.CACHE_WARM_FAILED)
+                        self._emit(SpanEvent.CACHE_WARM_FAILED)
                     return CompletionResult(
                         text=choice.message.content or "",
                         stop_reason="stop",

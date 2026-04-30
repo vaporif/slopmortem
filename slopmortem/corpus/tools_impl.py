@@ -39,9 +39,10 @@ __all__ = [
 
 
 class GetPostMortemArgs(BaseModel):
-    """Arguments for ``get_post_mortem``: canonical id of the candidate."""
+    """Arguments for ``get_post_mortem``: canonical id and read budget."""
 
     canonical_id: str
+    max_chars: int = 8000
 
 
 class SearchCorpusArgs(BaseModel):
@@ -87,11 +88,14 @@ def _set_corpus(c: Corpus) -> None:
     _corpus = c
 
 
-async def _get_post_mortem(canonical_id: str) -> str:
+async def _get_post_mortem(canonical_id: str, max_chars: int = 8000) -> str:
     if _corpus is None:
         msg = "corpus not initialized"
         raise RuntimeError(msg)
-    return await _corpus.get_post_mortem(canonical_id)
+    body = await _corpus.get_post_mortem(canonical_id)
+    if max_chars > 0 and len(body) > max_chars:
+        return body[:max_chars] + f"\n\n[...truncated; full body is {len(body)} chars...]"
+    return body
 
 
 async def _search_corpus(
@@ -184,7 +188,11 @@ async def _tavily_extract(url: str) -> str:
 
 get_post_mortem = ToolSpec(
     name="get_post_mortem",
-    description="Fetch the full canonical post-mortem text for a candidate.",
+    description=(
+        "Fetch the canonical post-mortem text for a candidate, truncated to "
+        "max_chars (default 8000). If truncated, the response ends with a "
+        "marker indicating the full length; raise max_chars to read more."
+    ),
     args_model=GetPostMortemArgs,
     fn=_get_post_mortem,
 )

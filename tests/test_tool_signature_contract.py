@@ -31,7 +31,11 @@ def test_tool_signatures_round_trip():
         else:
             sample = {"q": "scrap", "limit": 3}
         parsed = tool.args_model.model_validate(sample)
-        assert parsed.model_dump(exclude_none=True).keys() <= sample.keys() | {"facets", "limit"}
+        assert parsed.model_dump(exclude_none=True).keys() <= sample.keys() | {
+            "facets",
+            "limit",
+            "max_chars",
+        }
 
 
 def test_no_subprocess_imports_in_tools():

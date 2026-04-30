@@ -20,7 +20,7 @@ just init-env                        # interactive — fill OPENROUTER_API_KEY, 
 docker compose up -d qdrant          # Qdrant on :6333
 slopmortem embed-prefetch            # one-time ~550 MB ONNX download
 just ingest                          # 50 entries with all enrichers; or `just ingest-all`
-just query "your pitch here"         # full pipeline; or `just query-debug` to skip rerank+synth
+just query "your pitch here"         # ~$0.005, run whenever; or `just query-debug` to skip rerank+synth
 ```
 
 Ingest picks up curated + HN automatically. Add `--crunchbase-csv PATH` for a Crunchbase dump — the repo ships the 2015 `notpeter/crunchbase-data` mirror as a git submodule under `external/crunchbase-data/`. Run `git submodule update --init` once to fetch it, then `just crunchbase` to produce a closed-only slice (~6.2K rows at `data/crunchbase/companies-closed.csv`, tracked in this repo) and point `--crunchbase-csv` at it. `--enrich-wayback` chases 404s through the Wayback Machine (recommended alongside the Crunchbase slice — most 2015 dead-startup homepages are gone), and `--tavily-enrich` fills missing context from Tavily search. `--dry-run` counts without writing; `--force` bypasses the per-source skip key.

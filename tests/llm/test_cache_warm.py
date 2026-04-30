@@ -46,29 +46,26 @@ def fake_sdk():
     return sdk
 
 
-async def test_cache_true_with_zero_writes_triggers_rewarm_retry(fake_sdk):
-    fake_sdk.chat.completions.create.side_effect = [
-        _resp(content="warm-up", usage=_usage(prompt_cached=0, prompt_cache_write=0)),
-        _resp(content="warmed", usage=_usage(prompt_cached=0, prompt_cache_write=50)),
-    ]
+async def test_cache_true_with_zero_writes_does_not_retry(fake_sdk):
+    fake_sdk.chat.completions.create.return_value = _resp(
+        content="warm-up", usage=_usage(prompt_cached=0, prompt_cache_write=0)
+    )
     c = OpenRouterClient(sdk=fake_sdk, budget=Budget(2.0))
     r = await c.complete("hi", cache=True)
-    assert r.cache_creation_tokens == 50
-    # Two SDK calls: original + re-warm retry.
-    assert fake_sdk.chat.completions.create.await_count == 2
+    assert r.cache_creation_tokens == 0
+    assert r.text == "warm-up"
+    assert fake_sdk.chat.completions.create.await_count == 1
 
 
-async def test_cache_warm_failed_emitted_when_retry_still_zero(fake_sdk, monkeypatch):
-    fake_sdk.chat.completions.create.side_effect = [
-        _resp(usage=_usage(prompt_cache_write=0)),
-        _resp(usage=_usage(prompt_cache_write=0)),
-    ]
+async def test_cache_warm_failed_emitted_when_first_write_zero(fake_sdk, monkeypatch):
+    fake_sdk.chat.completions.create.return_value = _resp(usage=_usage(prompt_cache_write=0))
     c = OpenRouterClient(sdk=fake_sdk, budget=Budget(2.0))
     emitted: list[SpanEvent] = []
     monkeypatch.setattr(c, "_emit", emitted.append)
     r = await c.complete("hi", cache=True)
     assert r.cache_creation_tokens == 0
     assert SpanEvent.CACHE_WARM_FAILED in emitted
+    assert fake_sdk.chat.completions.create.await_count == 1
 
 
 async def test_no_rewarm_when_cache_false(fake_sdk):
