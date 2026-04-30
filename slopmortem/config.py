@@ -66,7 +66,10 @@ class Config(BaseSettings):
     lmnr_base_url: str = ""
     lmnr_allow_remote: str = ""
     qdrant_host: str = "localhost"
-    qdrant_port: int = 6333
+    # Non-standard 16333 so the project's docker-compose Qdrant doesn't collide
+    # with a pre-existing 6333 instance on the dev box. The container internally
+    # still serves 6333; only the host-side publish port is bumped.
+    qdrant_port: int = 16333
     qdrant_collection: str = "slopmortem"
     post_mortems_root: str = "./post_mortems"
     merge_journal_path: str = ""
