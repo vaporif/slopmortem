@@ -14,6 +14,8 @@ from slopmortem.models import (
     Report,
     SimilarityScores,
     Synthesis,
+    TopRisk,
+    TopRisks,
 )
 from slopmortem.render import render
 
@@ -87,6 +89,16 @@ def _report() -> Report:
             budget_remaining_usd=1.58,
             budget_exceeded=False,
         ),
+        top_risks=TopRisks(
+            clusters=[
+                TopRisk(
+                    summary="target larger ACVs",
+                    candidate_ids=["acme-corp"],
+                    frequency=1,
+                ),
+                TopRisk(summary="be honest", candidate_ids=["beta-co"], frequency=1),
+            ]
+        ),
     )
 
 
@@ -130,6 +142,22 @@ def test_render_keeps_sources_as_plain_text() -> None:
     # in ``where_diverged`` prose, the autolink stripper killed it.
     assert "[click here]" not in md
     assert "[click](" not in md
+
+
+def test_render_emits_top_risks_section_when_present() -> None:
+    md = render(_report())
+    assert "## Top risks across all comparables" in md
+    # Numbered list items render with the "Raised by:" annotation.
+    assert "Raised by:" in md
+    # The total denominator is the candidate count (2 in this fixture).
+    assert "(1/2)" in md
+
+
+def test_render_omits_top_risks_when_empty() -> None:
+    report = _report()
+    report_no_risks = report.model_copy(update={"top_risks": TopRisks(clusters=[])})
+    md = render(report_no_risks)
+    assert "## Top risks across all comparables" not in md
 
 
 def test_render_is_pure_no_io() -> None:

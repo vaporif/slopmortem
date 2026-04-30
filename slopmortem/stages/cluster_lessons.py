@@ -43,7 +43,7 @@ def _normalize(text: str) -> frozenset[str]:
 
 
 def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
-    """Jaccard similarity ``|A ∩ B| / |A ∪ B|``; 0.0 when both empty."""
+    """Jaccard similarity ``|A & B| / |A | B|``; 0.0 when both empty."""
     if not a and not b:
         return 0.0
     union = a | b
@@ -61,7 +61,7 @@ class _Cluster:
     the canonical summary at the end without re-normalizing.
     """
 
-    __slots__ = ("centroid", "candidate_ids", "members")
+    __slots__ = ("candidate_ids", "centroid", "members")
 
     def __init__(self, *, candidate_id: str, text: str, tokens: frozenset[str]) -> None:
         self.centroid: frozenset[str] = tokens
@@ -124,9 +124,7 @@ def cluster_lessons(syntheses: list[Synthesis]) -> TopRisks:
             # own cluster — never merged, since Jaccard against anything is
             # either 0 or undefined.
             if not tokens:
-                clusters.append(
-                    _Cluster(candidate_id=syn.candidate_id, text=lesson, tokens=tokens)
-                )
+                clusters.append(_Cluster(candidate_id=syn.candidate_id, text=lesson, tokens=tokens))
                 continue
 
             best_idx: int | None = None
@@ -140,13 +138,9 @@ def cluster_lessons(syntheses: list[Synthesis]) -> TopRisks:
                     best_idx = idx
 
             if best_idx is not None and best_score >= _JACCARD_THRESHOLD:
-                clusters[best_idx].add(
-                    candidate_id=syn.candidate_id, text=lesson, tokens=tokens
-                )
+                clusters[best_idx].add(candidate_id=syn.candidate_id, text=lesson, tokens=tokens)
             else:
-                clusters.append(
-                    _Cluster(candidate_id=syn.candidate_id, text=lesson, tokens=tokens)
-                )
+                clusters.append(_Cluster(candidate_id=syn.candidate_id, text=lesson, tokens=tokens))
 
     top_risks = [
         TopRisk(

@@ -65,7 +65,14 @@ def test_single_synthesis_distinct_lessons_yield_one_cluster_each() -> None:
         assert cluster.candidate_ids == ["acme"]
 
 
-def test_paraphrased_lessons_merge_above_threshold() -> None:
+def test_inflection_difference_does_not_merge_without_stemming() -> None:
+    """V1 is bag-of-words without stemming, so "segregate" != "segregated".
+
+    Documenting the limitation: the brief's canonical "segregate customer
+    assets" / "customer assets must be segregated" pairing actually scores
+    Jaccard = 2/6 ≈ 0.33 (below 0.5 threshold) because "segregate" and
+    "segregated" are distinct tokens. Stemming is a follow-up task.
+    """
     a = _synthesis(
         candidate_id="acme",
         name="Acme",
@@ -77,16 +84,7 @@ def test_paraphrased_lessons_merge_above_threshold() -> None:
         lessons=["customer assets must be segregated"],
     )
     result = cluster_lessons([a, b])
-
-    # Both lessons normalize to {"segregate","customer","assets"} vs
-    # {"customer","assets","must","be","segregated"} — Jaccard 2/6 ≈ 0.33,
-    # below threshold. Lemma-style merging is out of scope for v1; the brief's
-    # canonical example actually relies on shared tokens. Assert what the
-    # algorithm DOES do: tokens "segregate" and "segregated" are distinct
-    # bag-of-words tokens, so they don't merge here. We adjust expectations:
-    # the brief's example assumes either stemming or the more-common case
-    # where both phrasings share the verb form. Verify the ACTUAL behavior:
-    assert len(result.clusters) == 2  # noqa: PLR2004 - structural assertion
+    assert len(result.clusters) == 2
 
 
 def test_paraphrased_lessons_with_shared_tokens_merge() -> None:
@@ -109,7 +107,7 @@ def test_paraphrased_lessons_with_shared_tokens_merge() -> None:
     result = cluster_lessons([a, b])
     assert len(result.clusters) == 1
     cluster = result.clusters[0]
-    assert cluster.frequency == 2  # noqa: PLR2004 - structural assertion
+    assert cluster.frequency == 2
     assert sorted(cluster.candidate_ids) == ["acme", "beta"]
     # Shortest member's original text wins.
     assert cluster.summary == "segregate customer assets"
@@ -127,7 +125,7 @@ def test_unrelated_lessons_do_not_merge() -> None:
         lessons=["avoid SMB churn"],
     )
     result = cluster_lessons([a, b])
-    assert len(result.clusters) == 2  # noqa: PLR2004 - structural assertion
+    assert len(result.clusters) == 2
     summaries = {c.summary for c in result.clusters}
     assert summaries == {"target larger ACVs", "avoid SMB churn"}
 
@@ -141,9 +139,9 @@ def test_cluster_sort_order_frequency_desc() -> None:
         _synthesis(candidate_id="c", name="C", lessons=[shared]),
     ]
     result = cluster_lessons(syns)
-    assert len(result.clusters) == 2  # noqa: PLR2004 - structural assertion
+    assert len(result.clusters) == 2
     # Highest-frequency cluster first.
-    assert result.clusters[0].frequency == 3  # noqa: PLR2004 - structural assertion
+    assert result.clusters[0].frequency == 3
     assert result.clusters[0].summary == shared
     assert result.clusters[1].frequency == 1
 
@@ -181,7 +179,7 @@ def test_stop_word_resilience() -> None:
     result = cluster_lessons([a, b])
     assert len(result.clusters) == 1
     cluster = result.clusters[0]
-    assert cluster.frequency == 2  # noqa: PLR2004 - structural assertion
+    assert cluster.frequency == 2
     assert sorted(cluster.candidate_ids) == ["acme", "beta"]
     # Shortest original text wins as canonical summary.
     assert cluster.summary == "focus on regulation"
@@ -213,4 +211,4 @@ def test_empty_token_lessons_get_their_own_clusters() -> None:
     result = cluster_lessons([syn])
     # Each empty-token lesson becomes its own cluster (never merged with
     # anything, including each other, since centroid Jaccard is 0).
-    assert len(result.clusters) == 2  # noqa: PLR2004 - structural assertion
+    assert len(result.clusters) == 2
