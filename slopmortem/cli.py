@@ -57,12 +57,15 @@ from rich.progress import (
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
+    Task,
     TaskID,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
+from rich.segment import Segment
 from rich.table import Table
+from rich.text import Text
 
 from slopmortem.budget import Budget
 from slopmortem.config import load_config
@@ -703,6 +706,53 @@ _INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 }
 
 
+class _StackedBar:
+    """Render *bar* ``height`` times on consecutive rows.
+
+    Rich's :class:`ProgressBar` yields segments without a trailing newline,
+    so ``Group`` of N bars renders inline; we drop explicit ``Segment.line``
+    between copies to stack them vertically.
+    """
+
+    def __init__(self, bar: object, height: int) -> None:
+        self._bar = bar
+        self._height = height
+
+    def __rich_console__(self, console: Console, options: object):
+        for i in range(self._height):
+            yield from self._bar.__rich_console__(console, options)  # type: ignore[attr-defined]
+            if i < self._height - 1:
+                yield Segment.line()
+
+
+class _ThickBarColumn(BarColumn):
+    """:class:`BarColumn` whose bar spans ``height`` terminal rows.
+
+    Rich bars are one row tall; a :class:`_StackedBar` wrapper repeats the
+    bar so it reads as a chunkier marker without changing layout — adjacent
+    columns auto-pad to the tallest cell in the row.
+    """
+
+    height = 1
+
+    def render(self, task: Task) -> _StackedBar:  # type: ignore[override]
+        return _StackedBar(super().render(task), self.height)
+
+
+class _OptionalMofNCompleteColumn(MofNCompleteColumn):
+    """:class:`MofNCompleteColumn` that hides for single-shot phases.
+
+    Tasks with ``total <= 1`` carry no useful count — the bar's pulse-then-
+    fill already conveys done/not-done. Returning empty text drops the
+    cell and avoids ``0/1 → 1/1`` noise.
+    """
+
+    def render(self, task: Task) -> Text:
+        if task.total is None or task.total <= 1:
+            return Text("")
+        return super().render(task)
+
+
 class _RichPhaseProgress[PhaseT: StrEnum]:
     """Rich-backed phase progress shared by ingest and query pipelines.
 
@@ -714,24 +764,21 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
     def __init__(
         self,
         labels: dict[PhaseT, str],
-        *,
-        allow_indeterminate: bool,
     ) -> None:
         """Build the underlying ``Progress`` and console; tasks are added lazily."""
         self._labels = labels
-        self._allow_indeterminate = allow_indeterminate
         self._console = Console(stderr=True)
         self._progress = Progress(
             SpinnerColumn(),
             TextColumn("{task.description}", justify="left"),
-            BarColumn(
-                bar_width=None,
+            _ThickBarColumn(
+                bar_width=40,
                 style="grey50",
                 complete_style="cyan",
                 finished_style="green",
                 pulse_style="cyan",
             ),
-            MofNCompleteColumn(),
+            _OptionalMofNCompleteColumn(),
             TextColumn("[dim]•"),
             TimeElapsedColumn(),
             TextColumn("[dim]eta"),
@@ -772,14 +819,15 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
     def start_phase(self, phase: PhaseT, total: int | None) -> None:
         """Create or reset the bar for *phase* with the expected ``total``.
 
-        When ``allow_indeterminate`` is True, ``total=None`` means Rich pulses
-        the bar (ETA blank); otherwise totals are clamped to ``max(total, 1)``.
+        Phases with no granular progress (``total`` is ``None`` or ``<= 1``)
+        are pulsed instead of rendered as an instant 0→1 bar; ``end_phase``
+        snaps them to filled on completion.
         """
+        bar_total = total if total and total > 1 else None
         if phase in self._tasks:
-            self._progress.reset(self._tasks[phase], total=total)
+            self._progress.reset(self._tasks[phase], total=bar_total)
             self._progress.update(self._tasks[phase], description=self._label(phase))
             return
-        bar_total = total if self._allow_indeterminate else max(total or 0, 1)
         self._tasks[phase] = self._progress.add_task(self._label(phase), total=bar_total)
 
     def advance_phase(self, phase: PhaseT, n: int = 1) -> None:
@@ -792,17 +840,18 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
         """Complete *phase*'s bar and stop its spinner.
 
         For indeterminate phases (``total is None``), freeze the bar by
-        setting ``total = completed``; otherwise Rich keeps it pulsing.
+        setting ``total = max(completed, 1)``; otherwise fill to ``total``.
         """
         tid = self._tasks.get(phase)
         if tid is None:
             return
         task = self._progress.tasks[tid]
-        if self._allow_indeterminate and task.total is None:
+        if task.total is None:
+            completed = max(task.completed, 1)
             self._progress.update(
                 tid,
-                total=task.completed,
-                completed=task.completed,
+                total=completed,
+                completed=completed,
                 description=self._label(phase),
             )
             return
@@ -827,8 +876,8 @@ class RichIngestProgress(_RichPhaseProgress[IngestPhase]):
     """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl."""
 
     def __init__(self) -> None:
-        """Build with ingest phase labels; ``GATHER`` uses indeterminate bars."""
-        super().__init__(_INGEST_PHASE_LABELS, allow_indeterminate=True)
+        """Build with ingest phase labels."""
+        super().__init__(_INGEST_PHASE_LABELS)
 
 
 def _render_ingest_result(console: Console, result: IngestResult) -> None:
@@ -864,8 +913,8 @@ class RichQueryProgress(_RichPhaseProgress[QueryPhase]):
     """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl."""
 
     def __init__(self) -> None:
-        """Build with query phase labels; all phases have determinate totals."""
-        super().__init__(_QUERY_PHASE_LABELS, allow_indeterminate=False)
+        """Build with query phase labels."""
+        super().__init__(_QUERY_PHASE_LABELS)
 
 
 def _render_query_footer(console: Console, report: Report, n_target: int) -> None:
