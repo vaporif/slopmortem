@@ -20,11 +20,19 @@ from urllib.robotparser import RobotFileParser
 import anyio
 import httpx
 
-from slopmortem.http import SSRFBlockedError, safe_get
+from slopmortem.http import USER_AGENT, SSRFBlockedError, safe_get
 
 DEFAULT_RPS: Final = 1.0
-USER_AGENT: Final = "slopmortem/0.1.0 (+https://github.com/vaporif/premortem)"
 HTTP_BAD_REQUEST: Final = 400
+
+__all__ = [
+    "DEFAULT_RPS",
+    "HTTP_BAD_REQUEST",
+    "USER_AGENT",
+    "reset_throttle_state",
+    "respect_robots",
+    "throttle_for",
+]
 
 # Process-wide last-call timestamps and robots.txt cache.
 _last_call: dict[str, float] = {}
