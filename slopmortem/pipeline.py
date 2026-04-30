@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 _DAYS_PER_YEAR = 365
 
 
-def _cutoff_iso(years_filter: int | None) -> str | None:
+def cutoff_iso(years_filter: int | None) -> str | None:
     """Convert a years-back recency filter into an ISO-8601 date string.
 
     Retrieve takes ISO-8601 dates (``YYYY-MM-DD``), not full timestamps. Floor
@@ -153,13 +153,13 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
 
         if progress is not None:
             progress("retrieve")
-        cutoff_iso = _cutoff_iso(input_ctx.years_filter)
+        cutoff = cutoff_iso(input_ctx.years_filter)
         retrieved = await retrieve(
             description=input_ctx.description,
             facets=facets,
             corpus=corpus,
             embedding_client=embedding_client,
-            cutoff_iso=cutoff_iso,
+            cutoff_iso=cutoff,
             strict_deaths=config.strict_deaths,
             k_retrieve=config.K_retrieve,
             sparse_encoder=sparse_encoder,

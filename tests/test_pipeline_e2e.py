@@ -27,7 +27,7 @@ from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis
-from slopmortem.pipeline import _cutoff_iso, _join_to_candidates, run_query
+from slopmortem.pipeline import _join_to_candidates, cutoff_iso, run_query
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -485,12 +485,12 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
 # ---------------------------------------------------------------------------
 
 
-def test_cutoff_iso_none_returns_none() -> None:
-    assert _cutoff_iso(None) is None
+def testcutoff_iso_none_returns_none() -> None:
+    assert cutoff_iso(None) is None
 
 
-def test_cutoff_iso_returns_iso_date_string() -> None:
-    out = _cutoff_iso(years_filter=5)
+def testcutoff_iso_returns_iso_date_string() -> None:
+    out = cutoff_iso(years_filter=5)
     assert out is not None
     # Must be parseable as a date.
     date.fromisoformat(out)

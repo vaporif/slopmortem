@@ -79,8 +79,10 @@ from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.models import InputContext
-from slopmortem.pipeline import run_query
+from slopmortem.pipeline import cutoff_iso, run_query
 from slopmortem.render import render
+from slopmortem.stages.facet_extract import extract_facets
+from slopmortem.stages.retrieve import retrieve
 from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
@@ -366,6 +368,14 @@ def query_cmd(
             help="Only consider candidates whose failure_date falls within this many years.",
         ),
     ] = None,
+    debug_retrieve: Annotated[
+        bool,
+        typer.Option(
+            "--debug-retrieve",
+            help="Run facet_extract + retrieve only; print the candidate list and exit. "
+            "Skips rerank and synthesize so retrieval can be inspected in isolation.",
+        ),
+    ] = False,
 ) -> None:
     """Run the synthesis pipeline against *description* and print a Markdown report.
 
@@ -375,17 +385,34 @@ def query_cmd(
     When the API key is missing but tracing is enabled, a one-line warning goes
     to stderr and the run continues without tracing.
     """
-    anyio.run(functools.partial(_query, description=description, name=name, years=years))
+    anyio.run(
+        functools.partial(
+            _query,
+            description=description,
+            name=name,
+            years=years,
+            debug_retrieve=debug_retrieve,
+        )
+    )
 
 
 @observe(name="cli.query")
-async def _query(*, description: str, name: str | None, years: int | None) -> None:
+async def _query(
+    *,
+    description: str,
+    name: str | None,
+    years: int | None,
+    debug_retrieve: bool = False,
+) -> None:
     """Async impl for ``slopmortem query``. Wires production deps and dispatches."""
     config = load_config()
     _maybe_init_tracing(config)
     llm, embedder, corpus, budget = _build_deps(config)
     _set_corpus(corpus)
     ctx = InputContext(name=name or "(unnamed)", description=description, years_filter=years)
+    if debug_retrieve:
+        await _debug_retrieve(ctx, llm=llm, embedder=embedder, corpus=corpus, config=config)
+        return
     report = await run_query(
         ctx,
         llm=llm,
@@ -396,6 +423,57 @@ async def _query(*, description: str, name: str | None, years: int | None) -> No
         progress=_make_progress(),
     )
     typer.echo(render(report))
+
+
+async def _debug_retrieve(
+    ctx: InputContext,
+    *,
+    llm: OpenRouterClient,
+    embedder: EmbeddingClient,
+    corpus: QdrantCorpus,
+    config: Config,
+) -> None:
+    """Run facet_extract + retrieve and print the candidate list to stdout."""
+    facets = await extract_facets(ctx.description, llm, model=config.model_facet)
+    cutoff = cutoff_iso(ctx.years_filter)
+    candidates = await retrieve(
+        description=ctx.description,
+        facets=facets,
+        corpus=corpus,
+        embedding_client=embedder,
+        cutoff_iso=cutoff,
+        strict_deaths=config.strict_deaths,
+        k_retrieve=config.K_retrieve,
+    )
+
+    typer.echo(f"# debug-retrieve  input={ctx.name!r}  cutoff={cutoff or 'none'}")
+    typer.echo(
+        f"facets: sector={facets.sector} business_model={facets.business_model} "
+        f"customer_type={facets.customer_type} geography={facets.geography} "
+        f"monetization={facets.monetization} sub_sector={facets.sub_sector} "
+        f"product_type={facets.product_type} price_point={facets.price_point} "
+        f"founding_year={facets.founding_year} failure_year={facets.failure_year}"
+    )
+    typer.echo(f"retrieved: {len(candidates)} (k_retrieve={config.K_retrieve})")
+    typer.echo("")
+    for i, c in enumerate(candidates, start=1):
+        p = c.payload
+        founded = p.founding_date.isoformat() if p.founding_date else "?"
+        failed = p.failure_date.isoformat() if p.failure_date else "?"
+        summary = p.summary.replace("\n", " ").strip()
+        if len(summary) > 200:  # noqa: PLR2004 — display truncation
+            summary = summary[:197] + "..."
+        typer.echo(
+            f"[{i}] score={c.score:.4f}  {p.name}  "
+            f"({p.facets.sector}/{p.facets.business_model}, founded={founded}, failed={failed})"
+        )
+        typer.echo(f"    id={c.canonical_id}  provenance={p.provenance}  slop={p.slop_score:.2f}")
+        if c.alias_canonicals:
+            typer.echo(f"    aliases: {', '.join(c.alias_canonicals)}")
+        if p.sources:
+            typer.echo(f"    sources: {len(p.sources)} ({p.sources[0]}{'...' if len(p.sources) > 1 else ''})")
+        typer.echo(f"    summary: {summary}")
+        typer.echo("")
 
 
 def _maybe_init_tracing(config: Config) -> None:
