@@ -2,7 +2,7 @@
 
 Writes go to ``<path>.tmp`` then :meth:`Path.replace` (POSIX-atomic). Front
 matter is YAML between ``---`` delimiters. Paths always go through
-:func:`safe_path`: no concatenation, no traversal.
+:func:`safe_path`, no concatenation, no traversal.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 # Front-matter values are JSON-y (str / int / float / bool / list / dict / None).
 # Pyright's `reportExplicitAny` blocks the obvious `Any` annotation, so we use
-# `object` and round-trip through `yaml.safe_dump` which accepts anything.
+# `object` and round-trip through `yaml.safe_dump`, which accepts anything.
 type FrontMatter = dict[str, object]
 
 
@@ -43,6 +43,7 @@ def _write_sync(path: Path, contents: str) -> None:
         # don't leak a .tmp.
         if tmp.exists():
             tmp.unlink()
+
 
 
 async def write_canonical_atomic(

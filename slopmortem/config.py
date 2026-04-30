@@ -15,7 +15,7 @@ from pydantic_settings import (
 
 
 class Config(BaseSettings):
-    """All knobs slopmortem reads at startup — TOML overrides env, env overrides defaults."""
+    """All knobs slopmortem reads at startup. TOML overrides env, env overrides defaults."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -43,7 +43,7 @@ class Config(BaseSettings):
     # Per-stage output caps. OpenRouter requires holding upfront credit for the
     # model's max output, so leaving these unset reserves the full 64K Anthropic
     # ceiling and surfaces as HTTP 402 on low-balance keys. Values are sized to
-    # each stage's actual output shape with comfortable slack.
+    # each stage's actual output shape with slack.
     max_tokens_facet: int = 2000
     max_tokens_summarize: int = 1500
     max_tokens_rerank: int = 4000

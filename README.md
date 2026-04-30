@@ -75,6 +75,10 @@ The eval harness lives in `slopmortem/evals/`. `just eval` runs the seed dataset
 
 </details>
 
+## Examples
+
+Sample runs with pitch, rendered report, and Laminar trace live under [`docs/examples/`](docs/examples/).
+
 ## Design notes
 
 Full spec is in [`docs/specs/2026-04-27-slopmortem-design.md`](docs/specs/2026-04-27-slopmortem-design.md). The pre-implementation punch list of contract bugs to close before code is in [`docs/specs/2026-04-28-design-spec-blockers.md`](docs/specs/2026-04-28-design-spec-blockers.md).

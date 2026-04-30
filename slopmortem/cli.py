@@ -778,13 +778,17 @@ class RichIngestProgress:
         noun = "error" if n == 1 else "errors"
         return f"{styled} [bold red]({n} {noun})[/bold red]"
 
-    def start_phase(self, phase: IngestPhase, total: int) -> None:
-        """Create or reset the bar for *phase* with the expected ``total``."""
+    def start_phase(self, phase: IngestPhase, total: int | None) -> None:
+        """Create or reset the bar for *phase* with the expected ``total``.
+
+        ``total=None`` -> indeterminate (Rich pulses the bar; ETA blank).
+        Used by ``GATHER`` when no ``--limit`` caps the run.
+        """
         if phase in self._tasks:
             self._progress.reset(self._tasks[phase], total=total)
             self._progress.update(self._tasks[phase], description=self._label(phase))
             return
-        self._tasks[phase] = self._progress.add_task(self._label(phase), total=max(total, 1))
+        self._tasks[phase] = self._progress.add_task(self._label(phase), total=total)
 
     def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
         """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
@@ -793,11 +797,24 @@ class RichIngestProgress:
             self._progress.advance(tid, n)
 
     def end_phase(self, phase: IngestPhase) -> None:
-        """Complete *phase*'s bar and stop its spinner."""
+        """Complete *phase*'s bar and stop its spinner.
+
+        For indeterminate phases (``total is None``), freeze the bar by
+        setting ``total = completed`` — otherwise Rich keeps it pulsing
+        even after the work is done.
+        """
         tid = self._tasks.get(phase)
         if tid is None:
             return
         task = self._progress.tasks[tid]
+        if task.total is None:
+            self._progress.update(
+                tid,
+                total=task.completed,
+                completed=task.completed,
+                description=self._label(phase),
+            )
+            return
         self._progress.update(
             tid, completed=task.total or task.completed, description=self._label(phase)
         )

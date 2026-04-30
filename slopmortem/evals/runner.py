@@ -5,17 +5,17 @@ Usage:
         [--live] [--record] [--write-baseline]
 
 Modes:
-    DEFAULT (cassettes) — uses FakeLLMClient + FakeEmbeddingClient backed by
+    DEFAULT (cassettes): uses FakeLLMClient + FakeEmbeddingClient backed by
         committed cassettes under tests/fixtures/cassettes/evals/<row_id>/,
         plus an ephemeral Qdrant collection seeded from
         tests/fixtures/corpus_fixture.jsonl. No env vars beyond a running
         Qdrant. This is what `just eval` and CI run.
-    --live — wires real production deps via slopmortem.cli._build_deps.
+    --live: wires real production deps via slopmortem.cli._build_deps.
         Operator-invoked, out of CI scope. Costs real money.
-    --record — re-record cassettes against the live API. Calls
+    --record: re-record cassettes against the live API. Calls
         record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
-    --scope <row_id> — restrict record or replay to a single row.
-    --write-baseline — write the current run's results to --baseline (v2
+    --scope <row_id>: restrict record or replay to a single row.
+    --write-baseline: write the current run's results to --baseline (v2
         envelope, merging into any existing v2).
 
 Baseline JSON shape (normative)::

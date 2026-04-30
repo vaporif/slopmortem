@@ -63,9 +63,9 @@ def _resolve_and_validate(url: str) -> str:
 
     Returns the original *url*'s host (for the ``Host`` header). Raises
     :class:`SSRFBlockedError` on any policy failure: non-http(s) scheme,
-    missing host, IMDS hostname, unresolvable host, or any resolved
-    address falling inside the blocklist (loopback / link-local / private /
-    multicast / reserved / unspecified / CGNAT / ULA / IPv6 link-local).
+    missing host, IMDS hostname, unresolvable host, or any resolved address
+    falling inside the blocklist (loopback, link-local, private, multicast,
+    reserved, unspecified, CGNAT, ULA, IPv6 link-local).
 
     Shared by :func:`safe_get` and :func:`safe_post` so a single code path
     enforces the policy.
@@ -115,7 +115,7 @@ async def safe_post(
 ) -> httpx.Response:
     """POST *json* to *url* via httpx after enforcing the same SSRF policy as ``safe_get``.
 
-    Mirrors :func:`safe_get`'s scheme + DNS validation by routing through
+    Mirrors :func:`safe_get`'s scheme and DNS validation by routing through
     the shared :func:`_resolve_and_validate` helper. Used by the Tavily
     synthesis tools (``/search`` and ``/extract`` are POST-only).
     """

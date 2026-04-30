@@ -157,8 +157,14 @@ class IngestProgress(Protocol):
     actual failures and the implementation paints those red.
     """
 
-    def start_phase(self, phase: IngestPhase, total: int) -> None:
-        """Announce *phase* with an expected ``total`` of advances."""
+    def start_phase(self, phase: IngestPhase, total: int | None) -> None:
+        """Announce *phase* with an expected ``total`` of advances.
+
+        ``total=None`` marks the phase as indeterminate — used when the
+        producer can't know the size up front (e.g. ``GATHER`` without
+        ``--limit``). The Rich impl renders a pulsing bar instead of a
+        fake-totaled one so the ETA column honestly stays blank.
+        """
 
     def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
         """Advance *phase*'s bar by ``n``."""
@@ -176,7 +182,7 @@ class IngestProgress(Protocol):
 class NullProgress:
     """No-op :class:`IngestProgress` used when no display surface is attached."""
 
-    def start_phase(self, phase: IngestPhase, total: int) -> None:
+    def start_phase(self, phase: IngestPhase, total: int | None) -> None:
         """No-op."""
 
     def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
@@ -441,6 +447,7 @@ async def _gather_entries(
     *,
     span_events: list[str],
     limit: int | None = None,
+    progress: IngestProgress | None = None,
 ) -> tuple[list[RawEntry], int]:
     """Collect entries from every source. Per-source failures are logged + counted.
 
@@ -448,9 +455,14 @@ async def _gather_entries(
     sources beyond the cap aren't started, and an in-progress source
     breaks out of its async iterator. This makes ``--limit`` a true
     fast-path knob for smoke tests instead of just a post-gather slice.
+
+    ``progress`` (when provided) gets one ``advance_phase(GATHER)`` per
+    entry so Rich's speed sampler has a rate to extrapolate an ETA from
+    when ``limit`` gives the bar a known total.
     """
     out: list[RawEntry] = []
     failures = 0
+    bar = progress or NullProgress()
     for src in sources:
         if limit is not None and len(out) >= limit:
             break
@@ -458,6 +470,7 @@ async def _gather_entries(
             iterable = src.fetch()
             async for entry in iterable:
                 out.append(entry)
+                bar.advance_phase(IngestPhase.GATHER)
                 if limit is not None and len(out) >= limit:
                     break
         except Exception as exc:  # noqa: BLE001 — spec line 606: never abort the run.
@@ -787,7 +800,7 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
         summary=fan.summary,
         body=merged,
         slop_score=slop_score,
-        sources_seen=[f"{entry.source}:{entry.source_id}"],
+        sources_seen=[entry.url] if entry.url else [f"{entry.source}:{entry.source_id}"],
         text_id=text_id,
         name=name,
         provenance=entry.source,
@@ -939,9 +952,12 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
 
     # ─── Step 1: pull every entry; per-source errors counted, run continues. ───
     # `limit` short-circuits gathering — sources past the cap aren't started.
-    progress.start_phase(IngestPhase.GATHER, total=limit or 0)
+    # ``total=limit`` when set gives Rich a real denominator so the ETA column
+    # works; without ``--limit`` the count is unknown up front, so we pass
+    # ``None`` (indeterminate, pulsing bar) rather than lying with ``0``.
+    progress.start_phase(IngestPhase.GATHER, total=limit)
     entries, source_failures = await _gather_entries(
-        sources, span_events=result.span_events, limit=limit
+        sources, span_events=result.span_events, limit=limit, progress=progress
     )
     progress.end_phase(IngestPhase.GATHER)
     progress.log(f"gathered {len(entries)} entries from {len(sources)} sources")

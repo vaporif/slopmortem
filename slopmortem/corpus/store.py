@@ -1,4 +1,4 @@
-"""Corpus protocol: the read-side interface that stored docs are queried through."""
+"""Corpus protocol: read-side interface for querying stored docs."""
 
 from __future__ import annotations
 
@@ -22,14 +22,14 @@ class Corpus(Protocol):
         strict_deaths: bool,
         k_retrieve: int,
     ) -> list[Candidate]:
-        """Hybrid retrieve the top-K candidates by dense and sparse vectors, filtered by facets.
+        """Hybrid retrieve top-K candidates by dense and sparse vectors, filtered by facets.
 
         Args:
             dense: Dense query vector.
             sparse: Sparse query vector as ``{token_id: weight}``.
             facets: Soft-boost facets; ``"other"`` values must be skipped.
             cutoff_iso: ISO-8601 lower bound for the recency filter, or
-                ``None`` to disable the filter entirely.
+                ``None`` to disable the filter.
             strict_deaths: When ``True``, only retrieve docs with a known
                 ``failure_date >= cutoff_iso``.
             k_retrieve: Final number of parent candidates to return.
@@ -43,5 +43,5 @@ class Corpus(Protocol):
     async def search_corpus(
         self, q: str, facets: dict[str, str] | None = None
     ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]  # Protocol — implementations vary
-        """Plain-text search the corpus for additional candidates, optionally filtered by facets."""
+        """Plain-text search for additional candidates, optionally filtered by facets."""
         ...

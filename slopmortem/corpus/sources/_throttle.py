@@ -36,7 +36,6 @@ __all__ = [
     "throttle_for",
 ]
 
-# Process-wide last-call timestamps and robots.txt cache.
 _last_call: dict[str, float] = {}
 _robots_cache: dict[str, RobotFileParser | None] = {}
 _robots_lock = anyio.Lock()

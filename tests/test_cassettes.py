@@ -66,10 +66,10 @@ def test_template_sha_stable_across_calls() -> None:
 
 
 def test_llm_cassette_key_separator_isolates_system_from_prompt() -> None:
-    # \x1f-separated; absent system → empty prefix.
+    # \x1f-separated; absent system means empty prefix.
     a = llm_cassette_key(prompt="ab", system=None, template_sha="t", model="m")
     b = llm_cassette_key(prompt="b", system="a", template_sha="t", model="m")
-    # If we had used naive concat, both would equal "ab"; the \x1f separator must distinguish them.
+    # Naive concat would make both equal "ab"; the \x1f separator distinguishes them.
     assert a[2] != b[2]
 
 
@@ -93,7 +93,7 @@ def test_slugify_model_replaces_slash_colon_at() -> None:
     assert _slugify_model("Qdrant/bm25") == "Qdrant_bm25"
     assert _slugify_model("nomic-ai/nomic-embed-text-v1.5") == "nomic-ai_nomic-embed-text-v1.5"
     # Idempotent on already-safe input.
-    assert _slugify_model("plain-name_v1.5") == "plain-name_v1.5"
+    assert _slugify_model("plain-name_v1.5") == "plain-name_v1.5"  # noqa: comment retained intentionally
 
 
 def test_llm_cassette_round_trip(tmp_path: Path) -> None:

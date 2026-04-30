@@ -26,7 +26,7 @@ class LLMClient(Protocol):
     """Async chat-completion contract that real and fake LLM backends implement."""
 
     # ``Any`` here is intentional: tools/response_format/extra_body are SDK passthroughs.
-    async def complete(  # noqa: PLR0913 — mirrors OpenAI chat.create
+    async def complete(  # noqa: PLR0913 - mirrors OpenAI chat.create
         self,
         prompt: str,
         *,

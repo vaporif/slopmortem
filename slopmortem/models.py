@@ -40,10 +40,10 @@ def _load_taxonomy() -> dict[str, frozenset[str]]:
 
 # Dynamic Literal types built from taxonomy.yml at module-load time. Pydantic v2
 # emits the values as ``"enum": [...]`` in the JSON schema, which Anthropic's
-# grammar-constrained sampler then enforces — eliminating the entire class of
-# hallucinations like ``geography="japan"`` (Haiku used to invent country names
-# instead of the regional ``apac`` bucket) or ``customer_type="b2c"`` (instead
-# of the taxonomy's ``consumer``).
+# grammar-constrained sampler then enforces, eliminating hallucinations like
+# ``geography="japan"`` (Haiku used to invent country names instead of the
+# regional ``apac`` bucket) or ``customer_type="b2c"`` (instead of the
+# taxonomy's ``consumer``).
 _TAX = _load_taxonomy()
 _SECTOR_VALUES: tuple[str, ...] = tuple(sorted(_TAX["sector"]))
 _BUSINESS_MODEL_VALUES: tuple[str, ...] = tuple(sorted(_TAX["business_model"]))
@@ -91,7 +91,7 @@ class Facets(BaseModel):
     Closed enums are typed as ``Literal[*taxonomy_values]`` so Pydantic emits a
     JSON-schema ``enum`` constraint, which Anthropic's grammar-constrained
     sampler then enforces. The post-hoc validator that previously coerced
-    out-of-taxonomy values to ``"other"`` is gone — values that aren't in the
+    out-of-taxonomy values to ``"other"`` is gone; values that aren't in the
     enum can no longer reach this class because the LLM can't generate them.
     """
 

@@ -1,4 +1,4 @@
-"""Source / Enricher Protocols, verbatim from spec lines 354-356.
+"""Source and Enricher Protocols, verbatim from spec lines 354-356.
 
 * ``Source`` is a primary producer: ``fetch()`` -> ``AsyncIterable[RawEntry]``.
 * ``Enricher`` is a secondary that fills fields on an existing ``RawEntry``.
