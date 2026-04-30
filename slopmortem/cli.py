@@ -28,14 +28,25 @@ to the enrichers list.
 import functools
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
 
-import anyio
-import typer
-from lmnr import Laminar
-from openai import AsyncOpenAI
+# Silence gRPC C-Core's INFO-level log channel BEFORE the Laminar import below
+# transitively pulls in grpcio. Without this, the OTLP exporter's connection
+# pool prints ``ev_poll_posix.cc:593 FD from fork parent still in poll list``
+# on every poll-loop wake-up, which interleaves with the Rich progress redraws
+# and turns the terminal into a smear of glog noise. ``ERROR`` keeps real
+# failures visible while killing the chatty INFO/WARNING traffic.
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
+os.environ.setdefault("GRPC_TRACE", "")
+os.environ.setdefault("GLOG_minloglevel", "2")
+
+import anyio  # noqa: E402 — must follow the GRPC env-var setup above
+import typer  # noqa: E402
+from lmnr import Laminar  # noqa: E402
+from openai import AsyncOpenAI  # noqa: E402
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -59,7 +70,7 @@ from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
 from slopmortem.corpus.sources.tavily import TavilyEnricher
 from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.corpus.tools_impl import _set_corpus
-from slopmortem.ingest import ingest
+from slopmortem.ingest import IngestPhase, ingest
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
@@ -561,13 +572,14 @@ def _make_progress() -> Callable[[str], None] | None:
 # ingest progress (Rich)
 # ---------------------------------------------------------------------------
 
-# Phase keys must match what ``slopmortem.ingest.ingest`` advances.
-_INGEST_PHASE_LABELS: dict[str, str] = {
-    "gather": "Gathering entries from sources",
-    "classify": "Classifying / slop-filtering",
-    "cache_warm": "Warming prompt cache",
-    "fan_out": "Facets + summarize fan-out",
-    "write": "Entity-resolve / chunk / qdrant",
+# Phase labels keyed on the IngestPhase enum so any new phase added in
+# ``slopmortem.ingest`` flags here at type-check time as a missing label.
+_INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
+    IngestPhase.GATHER: "Gathering entries from sources",
+    IngestPhase.CLASSIFY: "Classifying / slop-filtering",
+    IngestPhase.CACHE_WARM: "Warming prompt cache",
+    IngestPhase.FAN_OUT: "Facets + summarize fan-out",
+    IngestPhase.WRITE: "Entity-resolve / chunk / qdrant",
 }
 
 
@@ -586,7 +598,7 @@ class RichIngestProgress:
         self._console = Console(stderr=True)
         self._progress = Progress(
             SpinnerColumn(),
-            TextColumn("[bold cyan]{task.description}", justify="left"),
+            TextColumn("{task.description}", justify="left"),
             BarColumn(
                 bar_width=None,
                 style="grey50",          # empty / to-do portion (default was red)
@@ -602,7 +614,8 @@ class RichIngestProgress:
             console=self._console,
             transient=False,
         )
-        self._tasks: dict[str, int] = {}
+        self._tasks: dict[IngestPhase, int] = {}
+        self._phase_errors: dict[IngestPhase, int] = {}
 
     def __enter__(self) -> RichIngestProgress:
         """Start the live render."""
@@ -618,32 +631,50 @@ class RichIngestProgress:
         """Underlying Rich console; the CLI uses it for the post-run table."""
         return self._console
 
-    def start_phase(self, phase: str, total: int) -> None:
+    def _label(self, phase: IngestPhase) -> str:
+        """Build the display string for *phase*, including a red error count if any."""
+        base = _INGEST_PHASE_LABELS[phase]
+        styled = f"[bold cyan]{base}[/bold cyan]"
+        n = self._phase_errors.get(phase, 0)
+        if n > 0:
+            return f"{styled} [bold red]({n} error{'s' if n != 1 else ''})[/bold red]"
+        return styled
+
+    def start_phase(self, phase: IngestPhase, total: int) -> None:
         """Create or reset the bar for *phase* with the expected ``total``."""
-        label = _INGEST_PHASE_LABELS.get(phase, phase)
         if phase in self._tasks:
             self._progress.reset(self._tasks[phase], total=total)
+            self._progress.update(self._tasks[phase], description=self._label(phase))
             return
-        self._tasks[phase] = self._progress.add_task(label, total=max(total, 1))
+        self._tasks[phase] = self._progress.add_task(self._label(phase), total=max(total, 1))
 
-    def advance_phase(self, phase: str, n: int = 1) -> None:
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
         """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
         tid = self._tasks.get(phase)
         if tid is not None:
             self._progress.advance(tid, n)
 
-    def end_phase(self, phase: str) -> None:
+    def end_phase(self, phase: IngestPhase) -> None:
         """Complete *phase*'s bar and stop its spinner."""
         tid = self._tasks.get(phase)
         if tid is None:
             return
         task = self._progress.tasks[tid]
         target = task.total if task.total is not None else task.completed
-        self._progress.update(tid, completed=target)
+        self._progress.update(tid, completed=target, description=self._label(phase))
 
     def log(self, message: str) -> None:
-        """Write a one-off line above the progress display."""
+        """Write a one-off neutral status line above the progress display."""
         self._console.log(message)
+
+    def error(self, phase: IngestPhase, message: str) -> None:
+        """Bump the error count for *phase* and log a red line above the bars."""
+        self._phase_errors[phase] = self._phase_errors.get(phase, 0) + 1
+        # Refresh the description so the red error tally appears next to the bar.
+        tid = self._tasks.get(phase)
+        if tid is not None:
+            self._progress.update(tid, description=self._label(phase))
+        self._console.log(f"[bold red]ERROR[/bold red] [{phase.value}] {message}")
 
 
 def _render_ingest_result(console: Console, result: object) -> None:

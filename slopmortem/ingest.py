@@ -42,6 +42,7 @@ import logging
 import secrets
 import uuid
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
 import anyio
@@ -121,25 +122,41 @@ class Corpus(Protocol):
         ...
 
 
+class IngestPhase(StrEnum):
+    """Closed set of phase keys used by :class:`IngestProgress`.
+
+    StrEnum (rather than bare strings) gives us closed-set typing, IDE
+    autocomplete, and exhaustiveness checks — typos like ``"fanout"`` for
+    ``"fan_out"`` fail at parse time instead of silently no-op'ing.
+    """
+
+    GATHER = "gather"
+    CLASSIFY = "classify"
+    CACHE_WARM = "cache_warm"
+    FAN_OUT = "fan_out"
+    WRITE = "write"
+
+
 @runtime_checkable
 class IngestProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem ingest``.
 
     Methods are no-op-safe: a default :class:`NullProgress` keeps the
     orchestrator decoupled from any specific UI library, while the CLI
-    wires a Rich-based implementation. ``log`` is a side channel for
-    one-off status lines (cache-warm result, source failures, etc.).
+    wires a Rich-based implementation. ``log`` is for neutral status lines
+    (cache-warm result, classification summary); ``error`` is reserved for
+    actual failures and the implementation paints those red.
     """
 
-    def start_phase(self, phase: str, total: int) -> None:
+    def start_phase(self, phase: IngestPhase, total: int) -> None:
         """Announce the start of *phase* with an expected ``total`` of advances."""
         ...
 
-    def advance_phase(self, phase: str, n: int = 1) -> None:
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
         """Advance the bar for *phase* by ``n``."""
         ...
 
-    def end_phase(self, phase: str) -> None:
+    def end_phase(self, phase: IngestPhase) -> None:
         """Mark *phase* as complete; the bar fills to its declared total."""
         ...
 
@@ -147,21 +164,28 @@ class IngestProgress(Protocol):
         """Emit a one-off status line alongside the progress display."""
         ...
 
+    def error(self, phase: IngestPhase, message: str) -> None:
+        """Record an error against *phase* and surface it as a red status line."""
+        ...
+
 
 @dataclass
 class NullProgress:
     """No-op :class:`IngestProgress` used when no display surface is attached."""
 
-    def start_phase(self, phase: str, total: int) -> None:  # noqa: ARG002
+    def start_phase(self, phase: IngestPhase, total: int) -> None:  # noqa: ARG002
         """No-op."""
 
-    def advance_phase(self, phase: str, n: int = 1) -> None:  # noqa: ARG002
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:  # noqa: ARG002
         """No-op."""
 
-    def end_phase(self, phase: str) -> None:  # noqa: ARG002
+    def end_phase(self, phase: IngestPhase) -> None:  # noqa: ARG002
         """No-op."""
 
     def log(self, message: str) -> None:  # noqa: ARG002
+        """No-op."""
+
+    def error(self, phase: IngestPhase, message: str) -> None:  # noqa: ARG002
         """No-op."""
 
 
@@ -607,7 +631,7 @@ async def _facet_summarize_fanout(
             facets = await _facet_call(text, llm=llm, model=config.model_facet)
         async with limiter:
             summary, cr, cc = await _summarize_call(text, llm=llm, model=config.model_summarize)
-        bar.advance_phase("fan_out")
+        bar.advance_phase(IngestPhase.FAN_OUT)
         return _FanoutResult(facets=facets, summary=summary, cache_read=cr, cache_creation=cc)
 
     return await gather_resilient(*(_run(text) for _, text in entries))
@@ -823,16 +847,16 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
 
     # ─── Step 1: pull every entry; per-source errors counted, run continues. ───
     # `limit` short-circuits gathering — sources past the cap aren't started.
-    progress.start_phase("gather", total=limit or 0)
+    progress.start_phase(IngestPhase.GATHER, total=limit or 0)
     entries, source_failures = await _gather_entries(
         sources, span_events=result.span_events, limit=limit
     )
-    progress.end_phase("gather")
+    progress.end_phase(IngestPhase.GATHER)
     progress.log(f"gathered {len(entries)} entries from {len(sources)} sources")
     result.source_failures = source_failures
 
     # ─── Step 2: enrich + slop classify + length-floor. ───────────────────────
-    progress.start_phase("classify", total=len(entries))
+    progress.start_phase(IngestPhase.CLASSIFY, total=len(entries))
     keepers: list[tuple[RawEntry, str]] = []  # (entry, body) post-extract.
     for entry in entries:
         result.seen += 1
@@ -840,15 +864,18 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             enriched = await _enrich_pipeline(entry, enrichers)
         except Exception as exc:  # noqa: BLE001 — per-entry isolation.
             logger.warning("ingest: enricher failed for %r: %s", entry.source_id, exc)
+            progress.error(
+                IngestPhase.CLASSIFY, f"enricher failed for {entry.source_id}: {exc}"
+            )
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
-            progress.advance_phase("classify")
+            progress.advance_phase(IngestPhase.CLASSIFY)
             continue
 
         body = _entry_summary_text(enriched, max_tokens=config.max_doc_tokens)
         if not body:
             result.skipped += 1
-            progress.advance_phase("classify")
+            progress.advance_phase(IngestPhase.CLASSIFY)
             continue
 
         # Slop classify; quarantine routes do NOT reach LLM/embed/qdrant.
@@ -864,6 +891,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
                 slop_score = await slop_classifier.score(body)
             except Exception as exc:  # noqa: BLE001 — defensive: never abort on classifier failure.
                 logger.warning("ingest: slop classifier failed: %s", exc)
+                progress.error(IngestPhase.CLASSIFY, f"slop classifier failed: {exc}")
                 slop_score = 0.0
 
         if slop_score > config.slop_threshold:
@@ -877,12 +905,12 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
                 )
             result.quarantined += 1
             result.span_events.append(SpanEvent.SLOP_QUARANTINED.value)
-            progress.advance_phase("classify")
+            progress.advance_phase(IngestPhase.CLASSIFY)
             continue
 
         keepers.append((enriched, body))
-        progress.advance_phase("classify")
-    progress.end_phase("classify")
+        progress.advance_phase(IngestPhase.CLASSIFY)
+    progress.end_phase(IngestPhase.CLASSIFY)
     progress.log(f"classified: {len(keepers)} kept, {result.quarantined} quarantined, {result.skipped} skipped")
 
     # ─── Dry-run early exit: only count, never write. ─────────────────────────
@@ -894,22 +922,22 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         return result
 
     # ─── Step 3: cache-warm one serial call so fan-out runs hot. ──────────────
-    progress.start_phase("cache_warm", total=1)
+    progress.start_phase(IngestPhase.CACHE_WARM, total=1)
     warmed, warm_creation, warm_events = await _cache_warm(
         llm=llm,
         model=config.model_summarize,
         seed_text=keepers[0][1][:1000],
     )
-    progress.advance_phase("cache_warm")
-    progress.end_phase("cache_warm")
+    progress.advance_phase(IngestPhase.CACHE_WARM)
+    progress.end_phase(IngestPhase.CACHE_WARM)
     result.cache_warmed = warmed
     result.cache_creation_tokens_warm = warm_creation
     result.span_events.extend(warm_events)
 
     # ─── Step 4: bounded fan-out for facets + summarize. ──────────────────────
-    progress.start_phase("fan_out", total=len(keepers))
+    progress.start_phase(IngestPhase.FAN_OUT, total=len(keepers))
     fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
-    progress.end_phase("fan_out")
+    progress.end_phase(IngestPhase.FAN_OUT)
 
     # ─── Step 5: read-ratio probe on first 5 fan-out responses. ───────────────
     probe = [r for r in fanout if isinstance(r, _FanoutResult)][:_CACHE_READ_RATIO_PROBE_N]
@@ -923,15 +951,19 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
                 result.span_events.append(SpanEvent.CACHE_READ_RATIO_LOW.value)
 
     # ─── Step 6: per-entry sequential write phase. ────────────────────────────
-    progress.start_phase("write", total=len(keepers))
+    progress.start_phase(IngestPhase.WRITE, total=len(keepers))
     for (entry, body), fan in zip(keepers, fanout, strict=True):
         if isinstance(fan, BaseException):
             logger.warning(
                 "ingest: fan-out failed for %s:%s: %s", entry.source, entry.source_id, fan
             )
+            progress.error(
+                IngestPhase.FAN_OUT,
+                f"fan-out failed for {entry.source}:{entry.source_id}: {fan}",
+            )
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
-            progress.advance_phase("write")
+            progress.advance_phase(IngestPhase.WRITE)
             continue
         try:
             outcome = await _process_entry(
@@ -957,15 +989,19 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
                 entry.source_id,
                 exc,
             )
+            progress.error(
+                IngestPhase.WRITE,
+                f"write phase failed for {entry.source}:{entry.source_id}: {exc}",
+            )
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
-            progress.advance_phase("write")
+            progress.advance_phase(IngestPhase.WRITE)
             continue
         if outcome == "processed":
             result.processed += 1
         elif outcome == "skipped":
             result.skipped += 1
-        progress.advance_phase("write")
-    progress.end_phase("write")
+        progress.advance_phase(IngestPhase.WRITE)
+    progress.end_phase(IngestPhase.WRITE)
 
     return result
