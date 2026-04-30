@@ -29,8 +29,8 @@ __all__ = [
     "DEFAULT_RPS",
     "HTTP_BAD_REQUEST",
     "USER_AGENT",
-    "respect_robots",
     "reset_throttle_state",
+    "respect_robots",
     "throttle_for",
 ]
 
