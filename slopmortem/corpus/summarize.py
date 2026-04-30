@@ -23,6 +23,7 @@ async def summarize_for_rerank(
     *,
     model: str | None = None,
     source_id: str = "",
+    max_tokens: int | None = None,
 ) -> str:
     """Produce a one-paragraph summary used as ``payload.summary`` by ``llm_rerank``.
 
@@ -44,5 +45,6 @@ async def summarize_for_rerank(
         model=model,
         cache=True,
         extra_body={"prompt_template_sha": prompt_template_sha("summarize")},
+        max_tokens=max_tokens,
     )
     return result.text.strip()

@@ -445,6 +445,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
             cache: bool = False,
             response_format: dict[str, Any] | None = None,
             extra_body: dict[str, Any] | None = None,
+            max_tokens: int | None = None,
         ) -> CompletionResult:
             await asyncio.sleep(0.5)
             return await self.inner.complete(
@@ -455,6 +456,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
                 cache=cache,
                 response_format=response_format,
                 extra_body=extra_body,
+                max_tokens=max_tokens,
             )
 
     slow_llm = _SlowFakeLLMClient(inner=FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL))

@@ -40,6 +40,17 @@ class Config(BaseSettings):
     model_rerank: str = "anthropic/claude-sonnet-4.6"
     model_synthesize: str = "anthropic/claude-sonnet-4.6"
 
+    # Per-stage output caps. OpenRouter requires holding upfront credit for the
+    # model's max output, so leaving these unset reserves the full 64K Anthropic
+    # ceiling and surfaces as HTTP 402 on low-balance keys. Values are sized to
+    # each stage's actual output shape with comfortable slack.
+    max_tokens_facet: int = 2000
+    max_tokens_summarize: int = 1500
+    max_tokens_rerank: int = 4000
+    max_tokens_synthesize: int = 16000
+    max_tokens_slop_judge: int = 64
+    max_tokens_tiebreaker: int = 256
+
     embedding_provider: str = "fastembed"
     embed_model_id: str = "nomic-ai/nomic-embed-text-v1.5"
     embed_cache_dir: Path | None = None

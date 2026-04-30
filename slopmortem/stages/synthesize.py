@@ -60,6 +60,7 @@ async def synthesize(
     config: Config,
     *,
     model: str | None = None,
+    max_tokens: int | None = None,
 ) -> Synthesis:
     """Generate a single :class:`Synthesis` for *candidate* against the user pitch in *ctx*.
 
@@ -111,6 +112,7 @@ async def synthesize(
             "provider": {"require_parameters": True},
             "prompt_template_sha": prompt_template_sha("synthesize"),
         },
+        max_tokens=max_tokens,
     )
     parsed = Synthesis.model_validate_json(result.text)
 
@@ -143,6 +145,7 @@ async def synthesize_all(
     config: Config,
     *,
     model: str | None = None,
+    max_tokens: int | None = None,
 ) -> list[Synthesis | BaseException]:
     """Cache-warm synthesize fan-out: one warm call, then :func:`gather_resilient`.
 
@@ -169,11 +172,16 @@ async def synthesize_all(
 
     first: Synthesis | BaseException
     try:
-        first = await synthesize(candidates[0], ctx, llm, config, model=model)
+        first = await synthesize(
+            candidates[0], ctx, llm, config, model=model, max_tokens=max_tokens
+        )
     except Exception as exc:  # noqa: BLE001 — record the failure as a list entry, not a raise
         first = exc
 
     rest_results = await gather_resilient(
-        *(synthesize(c, ctx, llm, config, model=model) for c in candidates[1:]),
+        *(
+            synthesize(c, ctx, llm, config, model=model, max_tokens=max_tokens)
+            for c in candidates[1:]
+        ),
     )
     return [first, *rest_results]

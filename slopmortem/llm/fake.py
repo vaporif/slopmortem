@@ -52,6 +52,7 @@ class _Call:
     response_format: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
     extra_body: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
     prompt_hash: str | None = None
+    max_tokens: int | None = None
 
 
 @dataclass
@@ -81,6 +82,7 @@ class FakeLLMClient:
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
         """Look up a canned response keyed by ``(prompt_template_sha, model, prompt_hash)``."""
         eff_model = model or self.default_model
@@ -116,6 +118,7 @@ class FakeLLMClient:
                 cache=cache,
                 response_format=response_format,
                 extra_body=extra_body,
+                max_tokens=max_tokens,
             )
         )
         key = (template_sha, eff_model, prompt_hash)

@@ -15,13 +15,20 @@ if TYPE_CHECKING:
 
 
 @observe(name="stage.facet_extract")
-async def extract_facets(text: str, llm: LLMClient, model: str | None = None) -> Facets:
+async def extract_facets(
+    text: str,
+    llm: LLMClient,
+    model: str | None = None,
+    *,
+    max_tokens: int | None = None,
+) -> Facets:
     """Extract a :class:`Facets` bundle from *text* via one strict-mode JSON call.
 
     Args:
         text: Source description text the LLM extracts facets from.
         llm: Async LLM client honoring the :class:`LLMClient` Protocol.
         model: Optional model override; ``None`` lets the client pick its default.
+        max_tokens: Optional output cap forwarded to the LLM client.
 
     Returns:
         The parsed :class:`Facets` instance, taxonomy-validated by the model's
@@ -43,5 +50,6 @@ async def extract_facets(text: str, llm: LLMClient, model: str | None = None) ->
             },
         },
         extra_body={"prompt_template_sha": prompt_template_sha("facet_extract")},
+        max_tokens=max_tokens,
     )
     return Facets.model_validate_json(result.text)

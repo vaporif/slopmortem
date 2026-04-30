@@ -272,6 +272,7 @@ class HaikuSlopClassifier:
     llm: LLMClient
     model: str
     char_limit: int = 6000
+    max_tokens: int | None = None
 
     async def score(self, text: str) -> float:
         """Ask Haiku whether *text* describes a dead company; map to 0.0 or 1.0."""
@@ -295,6 +296,7 @@ class HaikuSlopClassifier:
                 },
             },
             extra_body={"prompt_template_sha": prompt_template_sha("slop_judge")},
+            max_tokens=self.max_tokens,
         )
         try:
             parsed: object = json.loads(result.text)
@@ -472,15 +474,27 @@ async def _gather_entries(
 # ─── Stage helpers (facets, summarize, embed, chunk-and-upsert) ────────────────
 
 
-async def _facet_call(text: str, *, llm: LLMClient, model: str | None) -> Facets:
+async def _facet_call(
+    text: str,
+    *,
+    llm: LLMClient,
+    model: str | None,
+    max_tokens: int | None = None,
+) -> Facets:
     # Delegates to the dedicated stage; strict-mode validation propagates as
     # ``ValidationError`` to the per-entry isolator at line ~840.
     from slopmortem.stages.facet_extract import extract_facets  # noqa: PLC0415
 
-    return await extract_facets(text, llm, model)
+    return await extract_facets(text, llm, model, max_tokens=max_tokens)
 
 
-async def _summarize_call(text: str, *, llm: LLMClient, model: str | None) -> tuple[str, int, int]:
+async def _summarize_call(
+    text: str,
+    *,
+    llm: LLMClient,
+    model: str | None,
+    max_tokens: int | None = None,
+) -> tuple[str, int, int]:
     """Return ``(summary, cache_read, cache_creation)``."""
     from slopmortem.corpus.summarize import summarize_for_rerank  # noqa: PLC0415
 
@@ -491,6 +505,7 @@ async def _summarize_call(text: str, *, llm: LLMClient, model: str | None) -> tu
         model=model,
         cache=True,
         extra_body={"prompt_template_sha": prompt_template_sha("summarize")},
+        max_tokens=max_tokens,
     )
     summary = res.text.strip()
     _ = summarize_for_rerank  # imported to keep public surface alive in the module
@@ -502,6 +517,7 @@ async def _cache_warm(
     llm: LLMClient,
     model: str | None,
     seed_text: str,
+    max_tokens: int | None = None,
 ) -> tuple[bool, int, list[str]]:
     """Run one serial summarize call to warm the prompt cache.
 
@@ -516,6 +532,7 @@ async def _cache_warm(
             model=model,
             cache=True,
             extra_body={"prompt_template_sha": prompt_template_sha("summarize")},
+            max_tokens=max_tokens,
         )
         creation = res.cache_creation_tokens or 0
         if creation == 0:
@@ -631,9 +648,19 @@ async def _facet_summarize_fanout(
 
     async def _run(text: str) -> _FanoutResult:
         async with limiter:
-            facets = await _facet_call(text, llm=llm, model=config.model_facet)
+            facets = await _facet_call(
+                text,
+                llm=llm,
+                model=config.model_facet,
+                max_tokens=config.max_tokens_facet,
+            )
         async with limiter:
-            summary, cr, cc = await _summarize_call(text, llm=llm, model=config.model_summarize)
+            summary, cr, cc = await _summarize_call(
+                text,
+                llm=llm,
+                model=config.model_summarize,
+                max_tokens=config.max_tokens_summarize,
+            )
         bar.advance_phase(IngestPhase.FAN_OUT)
         return _FanoutResult(facets=facets, summary=summary, cache_read=cr, cache_creation=cc)
 
@@ -674,6 +701,7 @@ async def _process_entry(  # noqa: PLR0913 — orchestration density is the cont
         founding_year=fan.facets.founding_year,
         llm_client=llm,
         haiku_model_id=config.model_facet,
+        tiebreaker_max_tokens=config.max_tokens_tiebreaker,
     )
     span_events.extend(res.span_events)
     if res.action in ("alias_blocked", "resolver_flipped"):
@@ -994,6 +1022,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         llm=llm,
         model=config.model_summarize,
         seed_text=keepers[0][1][:1000],
+        max_tokens=config.max_tokens_summarize,
     )
     progress.advance_phase(IngestPhase.CACHE_WARM)
     progress.end_phase(IngestPhase.CACHE_WARM)

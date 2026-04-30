@@ -33,6 +33,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
     config: Config,
     *,
     model: str | None = None,
+    max_tokens: int | None = None,
 ) -> LlmRerankResult:
     """Rerank ``candidates`` against ``pitch`` via one structured-output LLM call.
 
@@ -97,6 +98,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
             },
         },
         extra_body={"prompt_template_sha": prompt_template_sha("llm_rerank")},
+        max_tokens=max_tokens,
     )
     parsed = LlmRerankResult.model_validate_json(result.text)
     if len(parsed.ranked) != config.N_synthesize:

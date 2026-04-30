@@ -149,7 +149,12 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
     try:
         if progress is not None:
             progress("facet_extract")
-        facets = await extract_facets(input_ctx.description, llm, model=config.model_facet)
+        facets = await extract_facets(
+            input_ctx.description,
+            llm,
+            model=config.model_facet,
+            max_tokens=config.max_tokens_facet,
+        )
 
         if progress is not None:
             progress("retrieve")
@@ -174,6 +179,7 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             llm,
             config,
             model=config.model_rerank,
+            max_tokens=config.max_tokens_rerank,
         )
 
         top_n = _join_to_candidates(retrieved, reranked.ranked)[: config.N_synthesize]
@@ -181,7 +187,12 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
         if progress is not None:
             progress(f"synthesize 0/{len(top_n)}")
         synth_results = await synthesize_all(
-            top_n, input_ctx, llm, config, model=config.model_synthesize
+            top_n,
+            input_ctx,
+            llm,
+            config,
+            model=config.model_synthesize,
+            max_tokens=config.max_tokens_synthesize,
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
         if progress is not None:

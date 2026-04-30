@@ -10,16 +10,17 @@ Pipeline diagram, query/ingest flow, and source layout live in [`docs/architectu
 
 Dev shell is a Nix flake. With direnv: `direnv allow` and the shell loads on `cd`. Without: `nix develop`. The shellHook calls `uv venv` + `uv sync --frozen`, so Python is ready by the time the prompt returns. Then `just` for the rest.
 
-Secrets go in `.env` (gitignored): `OPENROUTER_API_KEY` is required; `OPENAI_API_KEY` only if you flip `embedding_provider` to OpenAI; `TAVILY_API_KEY` only if you enable Tavily; `LMNR_PROJECT_API_KEY` only if `enable_tracing = true`. Knobs live in `slopmortem.toml` with comments.
+Secrets go in `.env` (gitignored). `just init-env` walks the prompts: `OPENROUTER_API_KEY` is required; `OPENAI_API_KEY` only if you flip `embedding_provider` to OpenAI; `TAVILY_API_KEY` only if you enable Tavily; `LMNR_PROJECT_API_KEY` only if `enable_tracing = true`. The recipe is idempotent — re-run it any time and press Enter on keys you already have set. Knobs live in `slopmortem.toml` with comments.
 
 First-run sequence:
 
 ```
 direnv allow                         # or: nix develop
+just init-env                        # interactive — fill OPENROUTER_API_KEY, skip the rest
 docker compose up -d qdrant          # Qdrant on :6333
 slopmortem embed-prefetch            # one-time ~550 MB ONNX download
-slopmortem ingest                    # curated YAML + HN by default; ~$7.50 first run
-slopmortem query "your pitch here"   # ~$0.50, run whenever
+just ingest                          # 50 entries with all enrichers; or `just ingest-all`
+just query "your pitch here"         # full pipeline; or `just query-debug` to skip rerank+synth
 ```
 
 Ingest picks up curated + HN automatically. Add `--crunchbase-csv PATH` for a Crunchbase dump — the repo ships the 2015 `notpeter/crunchbase-data` mirror as a git submodule under `external/crunchbase-data/`. Run `git submodule update --init` once to fetch it, then `just crunchbase` to produce a closed-only slice (~6.2K rows at `data/crunchbase/companies-closed.csv`, tracked in this repo) and point `--crunchbase-csv` at it. `--enrich-wayback` chases 404s through the Wayback Machine (recommended alongside the Crunchbase slice — most 2015 dead-startup homepages are gone), and `--tavily-enrich` fills missing context from Tavily search. `--dry-run` counts without writing; `--force` bypasses the per-source skip key.

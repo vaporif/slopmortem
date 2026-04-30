@@ -385,6 +385,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
     section_head_new: str,
     llm_client: LLMClient | None,
     haiku_model_id: str,
+    max_tokens: int | None = None,
 ) -> tuple[str, str]:
     """Return ``(decision, rationale)`` where decision is 'same' or 'different'.
 
@@ -415,6 +416,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
         rendered,
         model=haiku_model_id,
         extra_body={"prompt_template_sha": tiebreaker_hash},
+        max_tokens=max_tokens,
     )
     decision, rationale = _parse_tiebreaker_response(result.text)
     now_iso = utcnow_iso()
@@ -504,6 +506,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     haiku_model_id: str = "anthropic/claude-haiku-4.5",
     tier3_band: tuple[float, float] = _DEFAULT_TIER3_BAND,
     force_similarity: float | None = None,
+    tiebreaker_max_tokens: int | None = None,
 ) -> ResolveResult:
     """Resolve *entry* to a canonical_id, returning a typed result.
 
@@ -597,6 +600,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         tier3_band=tier3_band,
         force_similarity=force_similarity,
         is_tier2=use_tier2,
+        tiebreaker_max_tokens=tiebreaker_max_tokens,
     )
 
     # ─── Step 4: resolver-flip precheck. ──────────────────────────────────────
@@ -650,6 +654,7 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
     tier3_band: tuple[float, float],
     force_similarity: float | None,
     is_tier2: bool,
+    tiebreaker_max_tokens: int | None = None,
 ) -> str:
     """Run tier-3 fuzzy matching against existing canonicals; return the (possibly merged) id.
 
@@ -692,6 +697,7 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
         section_head_new=section_head_new,
         llm_client=llm_client,
         haiku_model_id=haiku_model_id,
+        max_tokens=tiebreaker_max_tokens,
     )
     if decision == "same":
         return str(sibling)

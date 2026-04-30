@@ -15,6 +15,16 @@ model_summarize = "anthropic/claude-haiku-4.5"
 model_rerank = "anthropic/claude-sonnet-4.6"
 model_synthesize = "anthropic/claude-sonnet-4.6"
 
+# Per-stage output caps. Without these, OpenRouter holds upfront credit for
+# the model's full max-output ceiling (~64K on Claude), which can fail with
+# HTTP 402 on low-balance keys even though the actual reply is much smaller.
+max_tokens_facet = 2000
+max_tokens_summarize = 1500
+max_tokens_rerank = 4000
+max_tokens_synthesize = 16000
+max_tokens_slop_judge = 64
+max_tokens_tiebreaker = 256
+
 embedding_provider = "fastembed"
 embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 retry_max_attempts = 3

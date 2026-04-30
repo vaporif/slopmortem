@@ -108,6 +108,7 @@ class OpenRouterClient:
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
         """Run a chat completion, including the tool-call loop, cache re-warming, and retries."""
         messages = self._build_messages(system, prompt, cache=cache)
@@ -117,13 +118,21 @@ class OpenRouterClient:
         cache_write = 0
         cost = 0.0
 
+        # Build kwargs once; only include max_tokens when set so unset callers
+        # keep the SDK's "no cap" behavior and don't send max_tokens=None upstream.
+        base_kw: dict[str, Any] = {  # pyright: ignore[reportExplicitAny]
+            "model": model or self._default_model,
+            "response_format": response_format,
+            "extra_body": extra_body,
+        }
+        if max_tokens is not None:
+            base_kw["max_tokens"] = max_tokens
+
         for _turn in range(self._max_tool_turns):
             resp = await self._call_with_retry(
                 messages=messages,
                 tools=tools_payload,
-                model=model or self._default_model,
-                response_format=response_format,
-                extra_body=extra_body,
+                **base_kw,
             )
             usage = resp.usage
             if usage is not None:
@@ -141,9 +150,7 @@ class OpenRouterClient:
                     retry_resp = await self._call_with_retry(
                         messages=messages,
                         tools=tools_payload,
-                        model=model or self._default_model,
-                        response_format=response_format,
-                        extra_body=extra_body,
+                        **base_kw,
                     )
                     retry_usage = retry_resp.usage
                     if retry_usage is not None:

@@ -205,7 +205,12 @@ async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
         base_url=config.openrouter_base_url,
     )
     llm = OpenRouterClient(sdk=openrouter_sdk, budget=budget, model=config.model_summarize)
-    classifier = _build_slop_classifier(dry_run=False, llm=llm, model=config.model_summarize)
+    classifier = _build_slop_classifier(
+        dry_run=False,
+        llm=llm,
+        model=config.model_summarize,
+        max_tokens=config.max_tokens_slop_judge,
+    )
     report = await reclassify_quarantined(
         journal=journal,
         slop_classifier=classifier,
@@ -439,7 +444,12 @@ async def _debug_retrieve(
     config: Config,
 ) -> None:
     """Run facet_extract + retrieve and print the candidate list to stdout."""
-    facets = await extract_facets(ctx.description, llm, model=config.model_facet)
+    facets = await extract_facets(
+        ctx.description,
+        llm,
+        model=config.model_facet,
+        max_tokens=config.max_tokens_facet,
+    )
     cutoff = cutoff_iso(ctx.years_filter)
     candidates = await retrieve(
         description=ctx.description,
@@ -584,7 +594,9 @@ async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJourna
     return journal
 
 
-def _build_slop_classifier(*, dry_run: bool, llm: LLMClient, model: str) -> SlopClassifier:
+def _build_slop_classifier(
+    *, dry_run: bool, llm: LLMClient, model: str, max_tokens: int | None = None
+) -> SlopClassifier:
     """Construct the slop classifier.
 
     Dry-run uses :class:`FakeSlopClassifier` so the run requires no API key
@@ -598,7 +610,7 @@ def _build_slop_classifier(*, dry_run: bool, llm: LLMClient, model: str) -> Slop
         return FakeSlopClassifier()
     from slopmortem.ingest import HaikuSlopClassifier  # noqa: PLC0415
 
-    return HaikuSlopClassifier(llm=llm, model=model)
+    return HaikuSlopClassifier(llm=llm, model=model, max_tokens=max_tokens)
 
 
 async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
@@ -668,6 +680,7 @@ async def _build_ingest_deps(
         dry_run=dry_run,
         llm=llm,
         model=config.model_summarize,
+        max_tokens=config.max_tokens_slop_judge,
     )
     return llm, embedder, corpus, budget, journal, classifier
 

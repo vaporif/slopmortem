@@ -204,6 +204,7 @@ class _ByModelLLM:
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
         """Forward ``complete`` to the wrapper keyed by ``model``.
 
@@ -222,4 +223,5 @@ class _ByModelLLM:
             cache=cache,
             response_format=response_format,
             extra_body=extra_body,
+            max_tokens=max_tokens,
         )
