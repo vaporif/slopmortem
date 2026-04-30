@@ -92,6 +92,14 @@ _RELIABILITY_RANK: Final[dict[str, int]] = {
     "crunchbase": 3,
 }
 
+# Sources whose entries are pre-filtered to "confirmed dead company" upstream
+# of slopmortem itself: curated YAML is human-reviewed, crunchbase_csv is
+# filtered to status=closed. Running the LLM dead-company classifier on these
+# is wasted spend AND systematically misclassifies — Wayback'd Crunchbase
+# homepages are pre-death marketing copy, not death narratives. Skip slop for
+# them entirely; HN and any future open-corpus sources still go through it.
+_PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_csv"})
+
 
 # ─── Protocols ─────────────────────────────────────────────────────────────────
 
@@ -175,14 +183,24 @@ class FakeSlopClassifier:
 class HaikuSlopClassifier:
     """Slop classifier that asks Haiku to judge dead-company relevance.
 
+    Only runs on open-corpus sources (HN). Pre-vetted sources (curated YAML,
+    Crunchbase CSV) bypass slop in :func:`ingest` because their bodies are
+    either human-reviewed obituaries or Wayback'd live-era marketing pages —
+    neither benefits from a death-narrative LLM check.
+
     One LLM call per text. Returns 0.0 when Haiku says the text describes a
     specific dead company, else 1.0 (which exceeds ``slop_threshold=0.7``
     and quarantines the entry).
+
+    ``char_limit=6000`` is sized so the demise narrative — which can sit deep
+    in the body for older companies like Sun Microsystems or WeWork — falls
+    inside the window. ~$6 extra per full HN pass vs a tighter 1500-char cap,
+    and avoids false-negative quarantines on long obituaries.
     """
 
     llm: LLMClient
     model: str
-    char_limit: int = 1500
+    char_limit: int = 6000
 
     async def score(self, text: str) -> float:
         """Ask Haiku whether *text* describes a dead company; map to 0.0 or 1.0."""
@@ -777,11 +795,19 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             continue
 
         # Slop classify; quarantine routes do NOT reach LLM/embed/qdrant.
-        try:
-            slop_score = await slop_classifier.score(body)
-        except Exception as exc:  # noqa: BLE001 — defensive: never abort on classifier failure.
-            logger.warning("ingest: slop classifier failed: %s", exc)
+        # Pre-vetted sources skip the LLM judge: ``curated`` is human-reviewed
+        # YAML, and ``crunchbase_csv`` rows are pre-filtered to ``status=closed``
+        # — running the dead-company classifier on a Wayback'd live-era homepage
+        # would systematically mis-quarantine them since the body is marketing
+        # copy, not a death narrative.
+        if entry.source in _PRE_VETTED_SOURCES:
             slop_score = 0.0
+        else:
+            try:
+                slop_score = await slop_classifier.score(body)
+            except Exception as exc:  # noqa: BLE001 — defensive: never abort on classifier failure.
+                logger.warning("ingest: slop classifier failed: %s", exc)
+                slop_score = 0.0
 
         if slop_score > config.slop_threshold:
             if not dry_run:

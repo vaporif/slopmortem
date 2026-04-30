@@ -28,7 +28,6 @@ to the enrichers list.
 import functools
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
@@ -185,7 +184,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     # Read-only short-circuits are wired before the full LLM/embedder build so
     # they don't require ``OPENROUTER_API_KEY`` / ``OPENAI_API_KEY``.
     if list_review:
-        journal = _build_journal(post_mortems_root)
+        journal = await _build_journal(config, post_mortems_root)
         rows = await journal.list_pending_review()
         if not rows:
             typer.echo("(no pending_review rows)")
@@ -198,17 +197,13 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
 
     # Spec: §Quarantine and reclassify line 252.
     if reclassify:
-        journal = _build_journal(post_mortems_root)
+        journal = await _build_journal(config, post_mortems_root)
         # reclassify is a live operation that must hit the slop judge for real;
         # construct only the LLM (no embedder/qdrant) and route it into the
         # Haiku-backed classifier.
         budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
         openrouter_sdk = AsyncOpenAI(
-            api_key=(
-            config.openrouter_api_key.get_secret_value()
-            or os.environ.get("OPENROUTER_API_KEY")
-            or "missing-OPENROUTER_API_KEY"
-        ),
+            api_key=config.openrouter_api_key.get_secret_value(),
             base_url=config.openrouter_base_url,
         )
         llm = OpenRouterClient(sdk=openrouter_sdk, budget=budget, model=config.model_summarize)
@@ -226,7 +221,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
 
     # Spec: §Atomicity / six drift classes (a-f).
     if reconcile_flag:
-        journal = _build_journal(post_mortems_root)
+        journal = await _build_journal(config, post_mortems_root)
         corpus = _build_ingest_corpus(config, post_mortems_root)
         report = await reconcile(
             journal=journal,
@@ -239,7 +234,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
             typer.echo(f"  drift_class={r.drift_class}\t{r.path}\t{r.detail}")
         return
 
-    llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
+    llm, embedder, corpus, budget, journal, classifier = await _build_ingest_deps(
         config, post_mortems_root, dry_run=dry_run
     )
     # The ingest-side Corpus Protocol is wider than the query-side one used by
@@ -342,17 +337,14 @@ def _maybe_init_tracing(config: Config) -> None:
     is unset). If tracing is enabled in config but the project API key is
     missing, log to stderr and skip Laminar init. Tracing is best-effort.
     """
-    base_url = config.lmnr_base_url or os.environ.get("LMNR_BASE_URL") or None
-    allow_remote_raw = config.lmnr_allow_remote or os.environ.get("LMNR_ALLOW_REMOTE", "")
+    base_url = config.lmnr_base_url or None
     init_tracing(
         base_url=base_url,
-        allow_remote=bool(allow_remote_raw),
+        allow_remote=bool(config.lmnr_allow_remote),
     )
     if not config.enable_tracing:
         return
-    api_key = config.lmnr_project_api_key.get_secret_value() or os.environ.get(
-        "LMNR_PROJECT_API_KEY", ""
-    )
+    api_key = config.lmnr_project_api_key.get_secret_value()
     if not api_key:
         print(  # noqa: T201 — CLI surface; intentional stderr write
             "slopmortem: LMNR_PROJECT_API_KEY missing; tracing disabled",
@@ -377,9 +369,7 @@ def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
         )
     if provider == "openai":
         openai_sdk = AsyncOpenAI(
-            api_key=(
-                config.openai_api_key.get_secret_value() or os.environ["OPENAI_API_KEY"]
-            ),
+            api_key=config.openai_api_key.get_secret_value(),
         )
         return OpenAIEmbeddingClient(
             sdk=openai_sdk,
@@ -394,24 +384,18 @@ def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
 def _build_deps(
     config: Config,
 ) -> tuple[LLMClient, EmbeddingClient, Corpus, Budget]:
-    """Construct production LLM, embedder, corpus, and budget from *config* and env.
+    """Construct production LLM, embedder, corpus, and budget from *config*.
 
     Factored out as a helper so CLI smoke tests can monkeypatch a single symbol.
-    Reads ``OPENROUTER_API_KEY`` / ``OPENAI_API_KEY`` from env; the Qdrant
-    client honors ``QDRANT_HOST`` / ``QDRANT_PORT`` (falling back to
-    ``localhost:6333``) and ``POST_MORTEMS_ROOT`` (falling back to
-    ``./post_mortems``).
+    All credentials and connection settings come from :class:`Config`, which
+    pydantic-settings populates from env vars, ``.env``, and TOML.
     """
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
 
     budget = Budget(cap_usd=config.max_cost_usd_per_query)
 
     openrouter_sdk = AsyncOpenAI(
-        api_key=(
-            config.openrouter_api_key.get_secret_value()
-            or os.environ.get("OPENROUTER_API_KEY")
-            or "missing-OPENROUTER_API_KEY"
-        ),
+        api_key=config.openrouter_api_key.get_secret_value(),
         base_url=config.openrouter_base_url,
     )
     llm = OpenRouterClient(
@@ -422,13 +406,11 @@ def _build_deps(
 
     embedder = _make_embedder(config, budget)
 
-    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
-    qdrant_port = int(os.environ.get("QDRANT_PORT", "6333"))
-    qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
+    qdrant_client = AsyncQdrantClient(host=config.qdrant_host, port=config.qdrant_port)
     corpus = QdrantCorpus(
         client=qdrant_client,
-        collection=os.environ.get("QDRANT_COLLECTION", "slopmortem"),
-        post_mortems_root=Path(os.environ.get("POST_MORTEMS_ROOT", "./post_mortems")),
+        collection=config.qdrant_collection,
+        post_mortems_root=Path(config.post_mortems_root),
         facet_boost=config.facet_boost,
         rrf_k=config.rrf_k,
     )
@@ -436,14 +418,21 @@ def _build_deps(
     return llm, embedder, corpus, budget
 
 
-def _build_journal(post_mortems_root: Path) -> MergeJournal:
-    """Construct only the merge journal; no LLM/embedder/Qdrant env vars required."""
+async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJournal:
+    """Construct and schema-initialize the merge journal.
+
+    ``init()`` is idempotent (``CREATE TABLE IF NOT EXISTS``), so calling it
+    on every CLI invocation is cheap and ensures fresh dev databases work
+    without an explicit setup step.
+    """
     from slopmortem.corpus.merge import MergeJournal  # noqa: PLC0415
 
     journal_path = Path(
-        os.environ.get("MERGE_JOURNAL_PATH", str(post_mortems_root.parent / "journal.sqlite"))
+        config.merge_journal_path or str(post_mortems_root.parent / "journal.sqlite")
     )
-    return MergeJournal(journal_path)
+    journal = MergeJournal(journal_path)
+    await journal.init()
+    return journal
 
 
 def _build_slop_classifier(
@@ -469,15 +458,13 @@ def _build_slop_classifier(
 
 
 def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
-    """Construct only the Qdrant-backed ingest corpus; no LLM/embedder env vars required."""
+    """Construct only the Qdrant-backed ingest corpus; no LLM/embedder client required."""
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 — heavy dep, lazy import
 
-    qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
-    qdrant_port = int(os.environ.get("QDRANT_PORT", "6333"))
-    qdrant_client = AsyncQdrantClient(host=qdrant_host, port=qdrant_port)
+    qdrant_client = AsyncQdrantClient(host=config.qdrant_host, port=config.qdrant_port)
     corpus = QdrantCorpus(
         client=qdrant_client,
-        collection=os.environ.get("QDRANT_COLLECTION", "slopmortem"),
+        collection=config.qdrant_collection,
         post_mortems_root=post_mortems_root,
         facet_boost=config.facet_boost,
         rrf_k=config.rrf_k,
@@ -489,7 +476,7 @@ def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpu
     return cast("IngestCorpus", corpus)
 
 
-def _build_ingest_deps(
+async def _build_ingest_deps(
     config: Config,
     post_mortems_root: Path,
     *,
@@ -505,11 +492,7 @@ def _build_ingest_deps(
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
 
     openrouter_sdk = AsyncOpenAI(
-        api_key=(
-            config.openrouter_api_key.get_secret_value()
-            or os.environ.get("OPENROUTER_API_KEY")
-            or "missing-OPENROUTER_API_KEY"
-        ),
+        api_key=config.openrouter_api_key.get_secret_value(),
         base_url=config.openrouter_base_url,
     )
     llm = OpenRouterClient(
@@ -521,7 +504,7 @@ def _build_ingest_deps(
     embedder = _make_embedder(config, budget)
 
     corpus = _build_ingest_corpus(config, post_mortems_root)
-    journal = _build_journal(post_mortems_root)
+    journal = await _build_journal(config, post_mortems_root)
     classifier = _build_slop_classifier(
         dry_run=dry_run,
         llm=llm,

@@ -127,7 +127,7 @@ async def _record(
         # Wiring mirrors slopmortem.cli._build_ingest_deps.
         budget = Budget(cap_usd=max_cost_usd)
         openrouter_sdk = AsyncOpenAI(
-            api_key=os.environ["OPENROUTER_API_KEY"],
+            api_key=config.openrouter_api_key.get_secret_value(),
             base_url=config.openrouter_base_url,
         )
         llm = OpenRouterClient(
@@ -144,7 +144,7 @@ async def _record(
                 cache_dir=config.embed_cache_dir,
             )
         elif config.embedding_provider == "openai":
-            openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+            openai_sdk = AsyncOpenAI(api_key=config.openai_api_key.get_secret_value())
             embedder = OpenAIEmbeddingClient(
                 sdk=openai_sdk,
                 budget=budget,
@@ -229,16 +229,10 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=_DEFAULT_MAX_COST_USD,
     )
-    # Config has no qdrant fields; cli._build_ingest_corpus reads QDRANT_HOST /
-    # QDRANT_PORT from env, so we mirror that.
-    default_qdrant_url = (
-        f"http://{os.environ.get('QDRANT_HOST', 'localhost')}"
-        f":{os.environ.get('QDRANT_PORT', '6333')}"
-    )
     _ = parser.add_argument(
         "--qdrant-url",
         type=str,
-        default=default_qdrant_url,
+        default=None,
     )
     args = parser.parse_args(argv)
 
@@ -249,10 +243,13 @@ def main(argv: list[str] | None = None) -> None:
         )
         sys.exit(2)
 
+    config = load_config()
     inputs_path = cast("Path", args.inputs)
     out_path = cast("Path", args.out)
     max_cost_usd = cast("float", args.max_cost_usd)
-    qdrant_url = cast("str", args.qdrant_url)
+    qdrant_url = cast("str | None", args.qdrant_url) or (
+        f"http://{config.qdrant_host}:{config.qdrant_port}"
+    )
 
     asyncio.run(
         _record(
