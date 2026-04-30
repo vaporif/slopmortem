@@ -347,14 +347,26 @@ async def _gather_entries(
     sources: Sequence[Source],
     *,
     span_events: list[str],
+    limit: int | None = None,
 ) -> tuple[list[RawEntry], int]:
-    """Collect entries from every source. Per-source failures are logged + counted."""
+    """Collect entries from every source. Per-source failures are logged + counted.
+
+    When *limit* is set, gather stops as soon as ``len(out) >= limit`` —
+    sources beyond the cap aren't started, and an in-progress source
+    breaks out of its async iterator. This makes ``--limit`` a true
+    fast-path knob for smoke tests instead of just a post-gather slice.
+    """
     out: list[RawEntry] = []
     failures = 0
     for src in sources:
+        if limit is not None and len(out) >= limit:
+            break
         try:
             iterable = src.fetch()
-            out.extend([entry async for entry in iterable])
+            async for entry in iterable:
+                out.append(entry)
+                if limit is not None and len(out) >= limit:
+                    break
         except Exception as exc:  # noqa: BLE001 — spec line 606: never abort the run.
             logger.warning(
                 "ingest: source %r failed: %s",
@@ -739,10 +751,11 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         sparse_encoder = _encode_sparse
 
     # ─── Step 1: pull every entry; per-source errors counted, run continues. ───
-    entries, source_failures = await _gather_entries(sources, span_events=result.span_events)
+    # `limit` short-circuits gathering — sources past the cap aren't started.
+    entries, source_failures = await _gather_entries(
+        sources, span_events=result.span_events, limit=limit
+    )
     result.source_failures = source_failures
-    if limit is not None and limit >= 0:
-        entries = entries[:limit]
 
     # ─── Step 2: enrich + slop classify + length-floor. ───────────────────────
     keepers: list[tuple[RawEntry, str]] = []  # (entry, body) post-extract.
