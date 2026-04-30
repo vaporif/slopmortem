@@ -16,4 +16,4 @@ just query "We're building a US consumer crypto savings platform that pays high 
 - Trace: [Laminar](https://laminar.sh/shared/traces/01d4bd69-52e7-de50-544c-7f21af0a10df)
 - Top matches: Celsius Network, BlockFi, Voyager Digital, FTX, MF Global
 
-Full report: [`report.md`](report.md). Trace screenshot: [`laminar-trace.png`](laminar-trace.png).
+Full report: [`report.md`](report.md).
