@@ -2,7 +2,7 @@
 
 Pipeline (spec line 244): sanitize HTML -> trafilatura -> readability
 fallback -> length floor (<500 chars => empty). The sanitizer runs BEFORE
-trafilatura: trafilatura otherwise treats HTML comments, JSON-LD, hidden
+trafilatura. trafilatura otherwise treats HTML comments, JSON-LD, hidden
 nodes, and attribute text as visible, opening an indirect-injection surface.
 
 The stripped surfaces are pinned by the hostile-fixture test in
@@ -11,11 +11,13 @@ line 244: comments, ``<script>``/``<style>``/``<noscript>``, JSON-LD
 scripts, ``display:none``/``visibility:hidden``/``hidden`` nodes, and
 ``aria-label``/``alt``/``title`` attributes.
 """
+
+from __future__ import annotations
+
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportAny=false
 # lxml ships no type stubs, and pulling `lxml-stubs` into the dep list isn't
 # worth it for this module alone. Module-wide suppression is local to the
 # sanitizer; the hostile-fixture test pins the actual surfaces.
-
 import re
 from typing import Any, cast
 
@@ -92,7 +94,7 @@ def sanitize_html(html: str) -> str:
         return ""
     try:
         root = lxml.html.fromstring(html)
-    except lxml.etree.ParserError, ValueError:
+    except (lxml.etree.ParserError, ValueError):
         return ""
 
     _drop_comments(root)
@@ -113,11 +115,11 @@ def _readability_extract(html: str) -> str:
     try:
         doc = Document(html)
         summary_html = doc.summary(html_partial=True)
-    except Exception:  # noqa: BLE001 — readability raises a grab-bag of types from lxml
+    except Exception:  # noqa: BLE001 — readability raises various types from lxml
         return ""
     try:
         root = lxml.html.fromstring(summary_html)
-    except lxml.etree.ParserError, ValueError:
+    except (lxml.etree.ParserError, ValueError):
         return ""
     return cast("str", root.text_content()).strip()
 

@@ -1,14 +1,16 @@
 """Pydantic v2 models shared across the pipeline: facets, candidates, synthesis output."""
 
+from __future__ import annotations
+
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 # Closed-enum facet fields whose values MUST appear in ``taxonomy.yml``.
 # Free-form fields (sub_sector, product_type, price_point, founding_year,
@@ -36,6 +38,37 @@ def _load_taxonomy() -> dict[str, frozenset[str]]:
     return {field: frozenset(raw[field]) for field in _CLOSED_FACET_FIELDS}
 
 
+# Dynamic Literal types built from taxonomy.yml at module-load time. Pydantic v2
+# emits the values as ``"enum": [...]`` in the JSON schema, which Anthropic's
+# grammar-constrained sampler then enforces, eliminating hallucinations like
+# ``geography="japan"`` (Haiku used to invent country names instead of the
+# regional ``apac`` bucket) or ``customer_type="b2c"`` (instead of the
+# taxonomy's ``consumer``).
+_TAX = _load_taxonomy()
+_SECTOR_VALUES: tuple[str, ...] = tuple(sorted(_TAX["sector"]))
+_BUSINESS_MODEL_VALUES: tuple[str, ...] = tuple(sorted(_TAX["business_model"]))
+_CUSTOMER_TYPE_VALUES: tuple[str, ...] = tuple(sorted(_TAX["customer_type"]))
+_GEOGRAPHY_VALUES: tuple[str, ...] = tuple(sorted(_TAX["geography"]))
+_MONETIZATION_VALUES: tuple[str, ...] = tuple(sorted(_TAX["monetization"]))
+
+# Pydantic introspects the *runtime* Literal to emit JSON-schema ``enum``
+# constraints; basedpyright can't expand a tuple at type-check time, so we
+# fall back to ``str`` for static analysis. The runtime Literal still enforces
+# the closed set via Pydantic's validator.
+if TYPE_CHECKING:
+    SectorLit = str
+    BusinessModelLit = str
+    CustomerTypeLit = str
+    GeographyLit = str
+    MonetizationLit = str
+else:
+    SectorLit = Literal[*_SECTOR_VALUES]
+    BusinessModelLit = Literal[*_BUSINESS_MODEL_VALUES]
+    CustomerTypeLit = Literal[*_CUSTOMER_TYPE_VALUES]
+    GeographyLit = Literal[*_GEOGRAPHY_VALUES]
+    MonetizationLit = Literal[*_MONETIZATION_VALUES]
+
+
 class PerspectiveScore(BaseModel):
     """One similarity-perspective score (0-10) with the LLM's rationale."""
 
@@ -53,43 +86,25 @@ class SimilarityScores(BaseModel):
 
 
 class Facets(BaseModel):
-    """Facets extracted from an input pitch. The closed-key half pins the taxonomy schema."""
+    """Facets extracted from an input pitch. The closed-key half pins the taxonomy schema.
 
-    sector: str
-    business_model: str
-    customer_type: str
-    geography: str
-    monetization: str
+    Closed enums are typed as ``Literal[*taxonomy_values]`` so Pydantic emits a
+    JSON-schema ``enum`` constraint, which Anthropic's grammar-constrained
+    sampler then enforces. The post-hoc validator that previously coerced
+    out-of-taxonomy values to ``"other"`` is gone; values that aren't in the
+    enum can no longer reach this class because the LLM can't generate them.
+    """
+
+    sector: SectorLit
+    business_model: BusinessModelLit
+    customer_type: CustomerTypeLit
+    geography: GeographyLit
+    monetization: MonetizationLit
     sub_sector: str | None = None
     product_type: str | None = None
     price_point: str | None = None
     founding_year: int | None = None
     failure_year: int | None = None
-
-    @model_validator(mode="after")
-    def _enforce_closed_taxonomy(self) -> Facets:
-        """Reject closed-enum values not present in ``taxonomy.yml``.
-
-        Defense-in-depth against an LLM that ignores the strict-mode JSON
-        schema and invents enum values. ``"other"`` lives in every closed
-        enum so the model never has to lie. Free-form fields are not
-        checked here.
-        """
-        taxonomy = _load_taxonomy()
-        # All five closed-enum fields are typed `str` on the model itself, so
-        # the dict lookup is safe and stays narrow.
-        values: dict[str, str] = {
-            "sector": self.sector,
-            "business_model": self.business_model,
-            "customer_type": self.customer_type,
-            "geography": self.geography,
-            "monetization": self.monetization,
-        }
-        for field_name, value in values.items():
-            if value not in taxonomy[field_name]:
-                msg = f"{field_name}={value!r} not in taxonomy.{field_name}"
-                raise ValueError(msg)
-        return self
 
 
 class Synthesis(BaseModel):

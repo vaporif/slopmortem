@@ -10,6 +10,8 @@ happens here, so the throttle and robots checks don't apply. Mapping:
 * ``markdown_text = short_description`` (may be empty)
 """
 
+from __future__ import annotations
+
 import csv
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
 
-# Common column names across Crunchbase export variants.
+# Crunchbase export variants use different column names for the same field.
 _ID_COLS = ("uuid", "id", "permalink", "cb_url")
 _NAME_COLS = ("name", "company_name", "organization_name")
 _URL_COLS = ("homepage_url", "homepage", "url", "website")

@@ -1,9 +1,11 @@
 """Schema validation for the v0 curated YAML scaffold.
 
 Pins the row schema (per plan §1903-1914 and spec lines 1029-1031) and asserts
-that every sector value lives in `slopmortem/corpus/taxonomy.yml`. Real URLs
-and real `content_sha256_at_review` are populated by Task 4b.
+that every sector value lives in ``slopmortem/corpus/taxonomy.yml``. Real URLs
+and real ``content_sha256_at_review`` are populated by Task 4b.
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 

@@ -9,6 +9,8 @@ boundary. Explicit `Any` in annotations is still gated per-site via
 `reportExplicitAny` ignores.
 """
 
+from __future__ import annotations
+
 import json
 import random
 from typing import TYPE_CHECKING, Any
@@ -76,7 +78,7 @@ async def gather_with_limit[T](
 class OpenRouterClient:
     """OpenAI-compatible SDK wrapper for OpenRouter; runs the retry and tool-call loops."""
 
-    def __init__(  # noqa: PLR0913 — knobs are public API; users construct this directly.
+    def __init__(  # noqa: PLR0913 - knobs are public API; users construct this directly.
         self,
         *,
         sdk: object,
@@ -96,7 +98,7 @@ class OpenRouterClient:
         self._initial_backoff = initial_backoff
         self._sleep: Callable[[float], Awaitable[None]] = sleep or anyio.sleep
 
-    async def complete(  # noqa: C901, PLR0913 — public surface mirrors OpenAI chat.create kwargs.
+    async def complete(  # noqa: C901, PLR0913 - mirrors OpenAI chat.create kwargs.
         self,
         prompt: str,
         *,
@@ -106,8 +108,9 @@ class OpenRouterClient:
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
-        """Run a chat completion, including the tool-call loop, cache re-warming, and retries."""
+        """Run a chat completion, including the tool-call loop and transient-error retries."""
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
         registered = {t.name: t for t in (tools or [])}
@@ -115,86 +118,85 @@ class OpenRouterClient:
         cache_write = 0
         cost = 0.0
 
-        for _turn in range(self._max_tool_turns):
-            resp = await self._call_with_retry(
-                messages=messages,
-                tools=tools_payload,
-                model=model or self._default_model,
-                response_format=response_format,
-                extra_body=extra_body,
-            )
-            usage = resp.usage
-            if usage is not None:
-                ptd = getattr(usage, "prompt_tokens_details", None)
-                cache_read += getattr(ptd, "cached_tokens", 0) or 0 if ptd else 0
-                cache_write += getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
-                cost += getattr(usage, "cost", 0.0) or 0.0
-            choice = resp.choices[0]
-            fr = choice.finish_reason
+        # Build kwargs once; only include max_tokens when set so unset callers
+        # keep the SDK's "no cap" behavior and don't send max_tokens=None upstream.
+        base_kw: dict[str, Any] = {  # pyright: ignore[reportExplicitAny]
+            "model": model or self._default_model,
+            "response_format": response_format,
+            "extra_body": extra_body,
+        }
+        if max_tokens is not None:
+            base_kw["max_tokens"] = max_tokens
 
-            if fr == "stop":
-                if cache and cache_write == 0:
-                    # Cache should have warmed but didn't. Try one re-warm; if it
-                    # still comes back empty, log CACHE_WARM_FAILED and move on.
-                    retry_resp = await self._call_with_retry(
-                        messages=messages,
-                        tools=tools_payload,
-                        model=model or self._default_model,
-                        response_format=response_format,
-                        extra_body=extra_body,
-                    )
-                    retry_usage = retry_resp.usage
-                    if retry_usage is not None:
-                        ptd = getattr(retry_usage, "prompt_tokens_details", None)
-                        cache_read += getattr(ptd, "cached_tokens", 0) or 0 if ptd else 0
-                        cache_write += getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
-                        cost += getattr(retry_usage, "cost", 0.0) or 0.0
-                    retry_choice = retry_resp.choices[0]
-                    if retry_choice.finish_reason == "stop":
-                        choice = retry_choice
-                    if cache_write == 0:
-                        self._emit(SpanEvent.CACHE_WARM_FAILED)
-                return CompletionResult(
-                    text=choice.message.content or "",
-                    stop_reason="stop",
-                    cache_read_tokens=cache_read,
-                    cache_creation_tokens=cache_write,
-                    cost_usd=cost,
+        try:
+            for _turn in range(self._max_tool_turns):
+                resp = await self._call_with_retry(
+                    messages=messages,
+                    tools=tools_payload,
+                    **base_kw,
                 )
+                usage = resp.usage
+                if usage is not None:
+                    ptd = getattr(usage, "prompt_tokens_details", None)
+                    cache_read += getattr(ptd, "cached_tokens", 0) or 0 if ptd else 0
+                    cache_write += getattr(ptd, "cache_write_tokens", 0) or 0 if ptd else 0
+                    cost += getattr(usage, "cost", 0.0) or 0.0
+                choice = resp.choices[0]
+                fr = choice.finish_reason
 
-            if fr == "tool_calls":
-                self._assert_tool_allowlist(choice.message.tool_calls, registered)
-                messages.append(_assistant_with_tools(choice.message))
-                for tc in choice.message.tool_calls:
-                    name = _tc_name(tc)
-                    args_raw = _tc_arguments(tc)
-                    args = json.loads(args_raw)
-                    spec = registered[name]
-                    spec.args_model.model_validate(args)
-                    result = await spec.fn(**args)
-                    wrapped = (
-                        f'<untrusted_document source="{name}">\n{result}\n</untrusted_document>'
+                if fr == "stop":
+                    if cache and cache_write == 0:
+                        self._emit(SpanEvent.CACHE_WARM_FAILED)
+                    return CompletionResult(
+                        text=choice.message.content or "",
+                        stop_reason="stop",
+                        cache_read_tokens=cache_read,
+                        cache_creation_tokens=cache_write,
+                        cost_usd=cost,
                     )
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": _tc_id(tc),
-                            "content": wrapped,
-                        }
-                    )
-                continue
 
-            if fr in ("length", "content_filter"):
-                msg = f"hard stop: {fr}"
-                raise RuntimeError(msg)
+                if fr == "tool_calls":
+                    self._assert_tool_allowlist(choice.message.tool_calls, registered)
+                    messages.append(_assistant_with_tools(choice.message))
+                    for tc in choice.message.tool_calls:
+                        name = _tc_name(tc)
+                        args_raw = _tc_arguments(tc)
+                        args = json.loads(args_raw)
+                        spec = registered[name]
+                        spec.args_model.model_validate(args)
+                        result = await spec.fn(**args)
+                        wrapped = (
+                            f'<untrusted_document source="{name}">\n{result}\n</untrusted_document>'
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": _tc_id(tc),
+                                "content": wrapped,
+                            }
+                        )
+                    continue
 
-            if fr == "error":
-                # _call_with_retry should have consumed the stream and raised
-                # MidStreamError before this branch ever runs. Defensive only.
-                raise MidStreamError(getattr(choice, "error", {"code": "unknown"}))
+                if fr in ("length", "content_filter"):
+                    msg = f"hard stop: {fr}"
+                    raise RuntimeError(msg)
 
-        msg = "tool-loop bound exceeded"
-        raise RuntimeError(msg)
+                if fr == "error":
+                    # _call_with_retry should have consumed the stream and raised
+                    # MidStreamError before this branch runs. Defensive only.
+                    raise MidStreamError(getattr(choice, "error", {"code": "unknown"}))
+
+            msg = "tool-loop bound exceeded"
+            raise RuntimeError(msg)
+        finally:
+            if cost > 0.0:
+                # Settle without a prior reserve: OpenRouter cost is unknown
+                # until usage lands, and the budget cap is not enforced here
+                # the way it is for embeddings. ``settle`` with an unknown id
+                # is a no-op for the reservation map and just credits
+                # ``spent_usd`` so ``Report.pipeline_meta.cost_usd_total``
+                # reflects real spend.
+                await self._budget.settle("openrouter:complete", cost)
 
     @staticmethod
     def _is_transient(exc: BaseException) -> bool:
@@ -208,7 +210,7 @@ class OpenRouterClient:
         Treats a finish_reason='error' chunk with error.code='overloaded_error'
         as transient by raising MidStreamError, catching it here, and retrying.
         Auth (401/403), 402 (insufficient credits), 503 (no provider), and
-        non-overloaded mid-stream errors are fatal — re-raised immediately.
+        non-overloaded mid-stream errors are fatal: re-raised immediately.
         """
         sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
         for attempt in range(self._max_retries + 1):
@@ -220,7 +222,7 @@ class OpenRouterClient:
                 # carries the upstream error payload.
                 if resp.choices and resp.choices[0].finish_reason == "error":
                     err = getattr(resp.choices[0], "error", None) or {"code": "unknown"}
-                    raise MidStreamError(err)  # noqa: TRY301 — caught locally to drive retry loop
+                    raise MidStreamError(err)  # noqa: TRY301 - caught locally to drive retry loop
             except Exception as exc:
                 if not self._is_transient(exc) or attempt >= self._max_retries:
                     raise
@@ -228,12 +230,12 @@ class OpenRouterClient:
                 continue
             else:
                 return resp
-        msg = "retry loop exited without resolution"  # pragma: no cover — unreachable
+        msg = "retry loop exited without resolution"  # pragma: no cover - unreachable
         raise RuntimeError(msg)
 
     async def _backoff(self, attempt: int) -> None:
         delay = self._initial_backoff * (2**attempt)
-        delay += random.uniform(0, delay * 0.25)  # noqa: S311 — non-cryptographic jitter
+        delay += random.uniform(0, delay * 0.25)  # noqa: S311 - non-cryptographic jitter
         await self._sleep(delay)
 
     def _build_messages(
@@ -254,7 +256,7 @@ class OpenRouterClient:
     def _build_tools(self, tools: list[ToolSpec] | None) -> list[dict[str, Any]] | None:  # pyright: ignore[reportExplicitAny]
         if not tools:
             return None
-        from slopmortem.llm.tools import (  # noqa: PLC0415 — break import cycle
+        from slopmortem.llm.tools import (  # noqa: PLC0415 - break import cycle
             to_openai_input_schema,
         )
 
@@ -336,7 +338,7 @@ def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore
 def is_transient_http(exc: BaseException) -> bool:
     """Classify openai SDK exceptions as transient or fatal.
 
-    We duck-type the attributes so this works against the SDK's exception
+    Duck-types the attributes so this works against the SDK's exception
     hierarchy (RateLimitError, APIStatusError, APIConnectionError,
     APITimeoutError, ...) without importing internals.
     """

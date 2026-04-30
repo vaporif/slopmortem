@@ -5,6 +5,8 @@ production LLM modules don't pull in test infrastructure. Import direction
 is one-way: `evals -> llm`, never the reverse.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from slopmortem.evals.cassettes import (
@@ -60,6 +62,7 @@ class RecordingLLMClient:
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
         """Forward to ``self._inner.complete`` then persist a cassette on success."""
         if self._max_cost_usd is not None and self._spent_usd >= self._max_cost_usd:
@@ -75,6 +78,7 @@ class RecordingLLMClient:
             cache=cache,
             response_format=response_format,
             extra_body=extra_body,
+            max_tokens=max_tokens,
         )
         eff_model = model or self._model
         template_sha = ""
@@ -125,7 +129,7 @@ class RecordingEmbeddingClient:
     def model(self) -> str:
         """Forward the wrapped client's ``model`` attribute (not part of the Protocol)."""
         # The EmbeddingClient Protocol does not expose `.model`, but every concrete
-        # impl (OpenAI/Fake) does — accept the dynamic attribute access at the seam.
+        # impl (OpenAI/Fake) does. Accept the dynamic attribute access at the seam.
         inner_model: object = getattr(self._inner, "model", "")
         return str(inner_model) if inner_model else ""
 

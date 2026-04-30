@@ -1,4 +1,6 @@
-"""Tests for the reconcile repair pass — one minimal test per drift class (a)..(f)."""
+"""Tests for the reconcile repair pass: one minimal test per drift class (a)..(f)."""
+
+from __future__ import annotations
 
 import hashlib
 from typing import TYPE_CHECKING
@@ -169,7 +171,6 @@ async def test_repair_class_f_resolver_flipped_strips_prior(tmp_path: Path) -> N
     text_id = _text_id(prior)
     await write_canonical_atomic(base, text_id, "body", front_matter={"canonical_id": prior})
 
-    # Add the resolver_flipped row.
     await journal.upsert_resolver_flipped(canonical_id=prior, source="hn", source_id="9")
     corpus = _MutableCorpus(present={prior})
 

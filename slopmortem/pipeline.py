@@ -14,11 +14,14 @@ Failure model (spec §770-775):
   ``Report.candidates`` only carries successful Synthesis values.
 """
 
+from __future__ import annotations
+
 import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from lmnr import Laminar
+from lmnr import Laminar, observe
 
 from slopmortem.budget import BudgetExceededError
 from slopmortem.models import PipelineMeta, Report, Synthesis
@@ -26,10 +29,10 @@ from slopmortem.stages.facet_extract import extract_facets
 from slopmortem.stages.llm_rerank import llm_rerank
 from slopmortem.stages.retrieve import retrieve
 from slopmortem.stages.synthesize import synthesize_all
+from slopmortem.tracing import git_sha, mint_run_id
+from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from slopmortem.budget import Budget
     from slopmortem.config import Config
     from slopmortem.corpus.store import Corpus
@@ -42,7 +45,66 @@ if TYPE_CHECKING:
 _DAYS_PER_YEAR = 365
 
 
-def _cutoff_iso(years_filter: int | None) -> str | None:
+class QueryPhase(StrEnum):
+    """Closed set of phase keys used by :class:`QueryProgress`.
+
+    Mirrors :class:`slopmortem.ingest.IngestPhase`: a closed enum gives typo
+    safety (``"facetextract"`` fails at parse time) and exhaustiveness checks
+    in match statements and dict literals.
+    """
+
+    FACET_EXTRACT = "facet_extract"
+    RETRIEVE = "retrieve"
+    RERANK = "rerank"
+    SYNTHESIZE = "synthesize"
+
+
+@runtime_checkable
+class QueryProgress(Protocol):
+    """Phase-level progress hooks for ``slopmortem query``.
+
+    Methods are no-op-safe: :class:`NullQueryProgress` keeps the orchestrator
+    decoupled from any specific UI library, while the CLI wires a Rich-based
+    implementation. Mirrors :class:`slopmortem.ingest.IngestProgress` so a
+    future shared base is straightforward.
+    """
+
+    def start_phase(self, phase: QueryPhase, total: int) -> None:
+        """Announce *phase* with an expected ``total`` of advances."""
+
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
+        """Advance *phase*'s bar by ``n``."""
+
+    def end_phase(self, phase: QueryPhase) -> None:
+        """Mark *phase* complete."""
+
+    def log(self, message: str) -> None:
+        """Emit a one-off status line."""
+
+    def error(self, phase: QueryPhase, message: str) -> None:
+        """Record an error against *phase*."""
+
+
+class NullQueryProgress:
+    """No-op :class:`QueryProgress` used when no display surface is attached."""
+
+    def start_phase(self, phase: QueryPhase, total: int) -> None:
+        """No-op."""
+
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
+        """No-op."""
+
+    def end_phase(self, phase: QueryPhase) -> None:
+        """No-op."""
+
+    def log(self, message: str) -> None:
+        """No-op."""
+
+    def error(self, phase: QueryPhase, message: str) -> None:
+        """No-op."""
+
+
+def cutoff_iso(years_filter: int | None) -> str | None:
     """Convert a years-back recency filter into an ISO-8601 date string.
 
     Retrieve takes ISO-8601 dates (``YYYY-MM-DD``), not full timestamps. Floor
@@ -58,10 +120,11 @@ def _join_to_candidates(
 ) -> list[Candidate]:
     """Re-attach :class:`Candidate` payloads to the rerank-ordered ids.
 
-    The reranker returns :class:`ScoredCandidate` (id + perspective scores) but
-    synthesize needs the full :class:`Candidate` (with ``payload.body``). We
-    preserve the rerank order and silently drop any ranked id missing from the
-    retrieved set. Defensive only, since the reranker only sees retrieved ids.
+    The reranker returns :class:`ScoredCandidate` (id and perspective scores)
+    but synthesize needs the full :class:`Candidate` (with ``payload.body``).
+    We preserve the rerank order and silently drop any ranked id missing
+    from the retrieved set. Defensive only, since the reranker only sees
+    retrieved ids.
     """
     id_to_candidate = {c.canonical_id: c for c in retrieved}
     out: list[Candidate] = []
@@ -80,7 +143,11 @@ def _current_trace_id() -> str | None:
     return str(tid) if tid is not None else None
 
 
-async def run_query(  # noqa: PLR0913 — every dep is required wiring at the call site
+@observe(
+    name="query",
+    ignore_inputs=["llm", "embedding_client", "corpus", "budget", "progress"],
+)
+async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call site
     input_ctx: InputContext,
     *,
     llm: LLMClient,
@@ -88,7 +155,7 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
     corpus: Corpus,
     config: Config,
     budget: Budget,
-    progress: Callable[[str], None] | None = None,
+    progress: QueryProgress | None = None,
     sparse_encoder: SparseEncoder | None = None,
 ) -> Report:
     """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
@@ -104,8 +171,10 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
         budget: Shared per-run :class:`Budget` for cost bookkeeping. Stages
             book costs through their LLM/embedding clients; this function only
             reads ``spent_usd``/``remaining`` at the end.
-        progress: Optional ``str -> None`` callback for stage progress (CLI uses
-            it to write to stderr). Pipeline never writes to stderr itself.
+        progress: Optional :class:`QueryProgress` sink for phase-level updates.
+            CLI wires a Rich-backed impl; passing ``None`` (or omitting) is
+            equivalent to :class:`NullQueryProgress`. Pipeline never writes to
+            stderr itself.
         sparse_encoder: Optional override for the BM25 sparse encoder forwarded
             to ``retrieve``. ``None`` lazy-loads the production fastembed model
             on first call. The recording helper passes a wrapped encoder so it
@@ -122,27 +191,50 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
     successes: list[Synthesis] = []
     budget_exceeded = False
 
-    try:
-        if progress is not None:
-            progress("facet_extract")
-        facets = await extract_facets(input_ctx.description, llm, model=config.model_facet)
+    if Laminar.is_initialized():
+        Laminar.set_span_attributes(
+            {
+                "run.id": mint_run_id(),
+                "run.kind": "query",
+                "run.git_sha": git_sha() or "",
+                "config.taxonomy_version": config.taxonomy_version,
+                "config.K_retrieve": config.K_retrieve,
+                "config.N_synthesize": config.N_synthesize,
+                "config.strict_deaths": config.strict_deaths,
+                "config.model_facet": config.model_facet,
+                "config.model_rerank": config.model_rerank,
+                "config.model_synthesize": config.model_synthesize,
+            }
+        )
 
-        if progress is not None:
-            progress("retrieve")
-        cutoff_iso = _cutoff_iso(input_ctx.years_filter)
+    progress = progress if progress is not None else NullQueryProgress()
+    try:
+        progress.start_phase(QueryPhase.FACET_EXTRACT, total=1)
+        facets = await extract_facets(
+            input_ctx.description,
+            llm,
+            model=config.model_facet,
+            max_tokens=config.max_tokens_facet,
+        )
+        progress.advance_phase(QueryPhase.FACET_EXTRACT)
+        progress.end_phase(QueryPhase.FACET_EXTRACT)
+
+        progress.start_phase(QueryPhase.RETRIEVE, total=1)
+        cutoff = cutoff_iso(input_ctx.years_filter)
         retrieved = await retrieve(
             description=input_ctx.description,
             facets=facets,
             corpus=corpus,
             embedding_client=embedding_client,
-            cutoff_iso=cutoff_iso,
+            cutoff_iso=cutoff,
             strict_deaths=config.strict_deaths,
             k_retrieve=config.K_retrieve,
             sparse_encoder=sparse_encoder,
         )
+        progress.advance_phase(QueryPhase.RETRIEVE)
+        progress.end_phase(QueryPhase.RETRIEVE)
 
-        if progress is not None:
-            progress("rerank")
+        progress.start_phase(QueryPhase.RERANK, total=1)
         reranked = await llm_rerank(
             retrieved,
             input_ctx.description,
@@ -150,20 +242,35 @@ async def run_query(  # noqa: PLR0913 — every dep is required wiring at the ca
             llm,
             config,
             model=config.model_rerank,
+            max_tokens=config.max_tokens_rerank,
         )
+        progress.advance_phase(QueryPhase.RERANK)
+        progress.end_phase(QueryPhase.RERANK)
 
         top_n = _join_to_candidates(retrieved, reranked.ranked)[: config.N_synthesize]
 
-        if progress is not None:
-            progress(f"synthesize 0/{len(top_n)}")
+        progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
+
+        def _on_candidate_done(exc: BaseException | None) -> None:
+            if exc is not None:
+                progress.error(QueryPhase.SYNTHESIZE, f"{type(exc).__name__}: {exc}")
+            progress.advance_phase(QueryPhase.SYNTHESIZE)
+
         synth_results = await synthesize_all(
-            top_n, input_ctx, llm, config, model=config.model_synthesize
+            top_n,
+            input_ctx,
+            llm,
+            config,
+            model=config.model_synthesize,
+            max_tokens=config.max_tokens_synthesize,
+            on_candidate_done=_on_candidate_done,
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
-        if progress is not None:
-            progress(f"synthesize {len(successes)}/{len(top_n)}")
+        progress.end_phase(QueryPhase.SYNTHESIZE)
     except BudgetExceededError:
         budget_exceeded = True
+        if Laminar.is_initialized():
+            Laminar.event(name=str(SpanEvent.BUDGET_EXCEEDED))
 
     return Report(
         input=input_ctx,

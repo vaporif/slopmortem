@@ -1,5 +1,7 @@
 """--list-review reads the pending_review table and prints to stdout."""
 
+from __future__ import annotations
+
 import sqlite3
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
@@ -72,7 +74,7 @@ def test_cli_list_review_prints_queue(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
     fake_journal.list_pending_review = _afake
 
-    def _build(*_a: object, **_k: object) -> MagicMock:
+    async def _build(*_a: object, **_k: object) -> MagicMock:
         return fake_journal
 
     monkeypatch.setattr("slopmortem.cli._build_journal", _build)

@@ -1,5 +1,7 @@
 """Alias-graph atomicity tests: alias_blocked rows + edges land in one transaction."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
 import pytest
@@ -35,7 +37,6 @@ def make_entry(*, url: str, source_id: str, text: str = "body") -> RawEntry:
 
 async def test_alias_blocked_atomic_no_pending_residue(journal, embed_client):
     """Trigger alias case via alias_hint; verify journal lands once at alias_blocked."""
-    # Pre-existing canonical "acme.com".
     await journal.upsert_pending(canonical_id="acme.com", source="curated", source_id="0")
     await journal.mark_complete(
         canonical_id="acme.com",

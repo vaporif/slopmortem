@@ -4,6 +4,8 @@ Each assertion is a pure function over a :class:`Synthesis`; these tests build
 the smallest valid Synthesis values and assert on the boolean output.
 """
 
+from __future__ import annotations
+
 from datetime import date
 
 from slopmortem.evals.assertions import (
@@ -41,11 +43,6 @@ def _synth(
     )
 
 
-# ---------------------------------------------------------------------------
-# where_diverged_nonempty
-# ---------------------------------------------------------------------------
-
-
 def test_where_diverged_nonempty_empty_string_is_false() -> None:
     assert where_diverged_nonempty(_synth(where_diverged="")) is False
 
@@ -56,11 +53,6 @@ def test_where_diverged_nonempty_whitespace_only_is_false() -> None:
 
 def test_where_diverged_nonempty_real_text_is_true() -> None:
     assert where_diverged_nonempty(_synth(where_diverged="diverged here")) is True
-
-
-# ---------------------------------------------------------------------------
-# all_sources_in_allowed_domains
-# ---------------------------------------------------------------------------
 
 
 def test_all_sources_empty_is_vacuously_true() -> None:
@@ -95,11 +87,6 @@ def test_all_sources_unparseable_url_is_false() -> None:
     s = _synth(sources=["not a url at all"])
     allowed = {"news.ycombinator.com"}
     assert all_sources_in_allowed_domains(s, allowed) is False
-
-
-# ---------------------------------------------------------------------------
-# lifespan_months_positive
-# ---------------------------------------------------------------------------
 
 
 def test_lifespan_none_is_true() -> None:

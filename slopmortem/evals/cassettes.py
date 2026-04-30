@@ -11,6 +11,8 @@ additive). Pydantic models use `extra="ignore"` so unknown fields a future
 writer adds deserialize cleanly under older readers.
 """
 
+from __future__ import annotations
+
 import json
 import re
 from typing import TYPE_CHECKING, cast
@@ -88,7 +90,7 @@ _IGNORE = ConfigDict(extra="ignore", protected_namespaces=())
 
 
 class LlmCassette(BaseModel):
-    """LLM cassette — flat consumer-facing shape. Validated via Pydantic on load."""
+    """LLM cassette: flat consumer-facing shape. Validated via Pydantic on load."""
 
     model_config = _FROZEN_IGNORE
 
@@ -283,7 +285,7 @@ def _read_json_object(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         msg = f"cassette {path} top-level must be an object"
         raise CassetteFormatError(msg)
-    # JSON object keys are always strings by spec; cast keeps the static type honest.
+    # JSON object keys are always strings by spec. Cast keeps the static type honest.
     return cast("dict[str, object]", raw)
 
 

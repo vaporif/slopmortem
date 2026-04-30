@@ -1,5 +1,7 @@
 """``--reconcile`` dispatches to ``slopmortem.corpus.reconcile.reconcile`` and prints the report."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,11 +16,11 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _fake_journal(*_a: object, **_k: object) -> MagicMock:
+async def _fake_journal(*_a: object, **_k: object) -> MagicMock:
     return MagicMock()
 
 
-def _fake_corpus(*_a: object, **_k: object) -> MagicMock:
+async def _fake_corpus(*_a: object, **_k: object) -> MagicMock:
     return MagicMock()
 
 

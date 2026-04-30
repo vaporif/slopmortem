@@ -11,10 +11,12 @@ Regression semantics (also documented on the runner):
   not a regression.
 
 These functions are pure: no I/O, no async, no module-level state. The
-runner constructs the ``allowed_hosts`` set itself (because the read-side
+runner constructs the ``allowed_hosts`` set itself, because the read-side
 :class:`slopmortem.corpus.store.Corpus` Protocol does not expose the
-candidate ``payload.sources`` needed for a per-candidate domain check).
+candidate ``payload.sources`` needed for a per-candidate domain check.
 """
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse

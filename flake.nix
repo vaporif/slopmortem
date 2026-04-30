@@ -38,7 +38,7 @@
         config.allowUnfree = true;
       };
 
-      python = pkgs.python314;
+      python = pkgs.python313;
 
       workspace = uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ./.;};
 
@@ -46,32 +46,11 @@
         sourcePreference = "wheel";
       };
 
-      pyprojectOverrides = final: prev: {
-        # py-rust-stemmers (transitive via fastembed) ships sdist only — no
-        # cp314 wheel — so it's built from source with maturin + cargo here.
-        py-rust-stemmers = prev.py-rust-stemmers.overrideAttrs (old: {
-          nativeBuildInputs =
-            (old.nativeBuildInputs or [])
-            ++ [
-              pkgs.cargo
-              pkgs.rustc
-              pkgs.rustPlatform.cargoSetupHook
-            ]
-            ++ final.resolveBuildSystem {maturin = [];};
-          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-            inherit (old) src;
-            name = "py-rust-stemmers-${old.version}-cargo-deps";
-            hash = "sha256-ton9uOTuje2A2ATNp0uNfr/NuXDxtbOPpz0Nie9mACs=";
-          };
-        });
-      };
-
       pythonSet = (pkgs.callPackage pyproject-nix.build.packages {inherit python;})
         .overrideScope (
         pkgs.lib.composeManyExtensions [
           pyproject-build-systems.overlays.default
           overlay
-          pyprojectOverrides
         ]
       );
 
@@ -97,8 +76,16 @@
       devShells.default = pkgs.mkShell {
         name = "slopmortem";
 
+        # ``python`` (Nix's CPython) is intentionally *not* in this list.
+        # The dev workflow goes ``uv venv`` → ``uv sync`` → ``uv run`` and uv
+        # provisions its own standalone CPython under ~/.local/share/uv/python/.
+        # Reasoning: PyPI wheels (especially the native ones — ``tokenizers``,
+        # ``onnxruntime``) are built against PSF's standard CPython ABI and
+        # silently abort when loaded into Nix's CPython. The flake's
+        # ``packages.default`` (uv2nix mkVirtualEnv) still uses Nix Python and
+        # is fine for ``nix run .`` consumers, but the dev path swaps in uv's
+        # Python so PyPI wheels load cleanly.
         packages = with pkgs; [
-          python
           uv
           ruff
           basedpyright
@@ -123,8 +110,12 @@
         ];
 
         env = {
-          UV_PYTHON = "${python}/bin/python3.14";
-          UV_PYTHON_DOWNLOADS = "never";
+          # Let uv download + manage Python for the .venv so PyPI wheels
+          # (especially ``tokenizers``/``onnxruntime``) match the ABI they
+          # were built against. ``UV_PYTHON`` pins the version uv resolves to;
+          # uv pulls a python-build-standalone tarball if it's not cached.
+          UV_PYTHON = "3.13";
+          UV_PYTHON_DOWNLOADS = "automatic";
           UV_PROJECT_ENVIRONMENT = ".venv";
 
           HF_HOME = "./data/hf";
@@ -134,9 +125,11 @@
         shellHook = ''
           export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath runtimeLibs}:''${LD_LIBRARY_PATH:-}"
 
+          # ``uv venv`` (no --python pin) honors UV_PYTHON. uv downloads + caches
+          # its standalone CPython on first invocation; subsequent shells reuse it.
           if [ ! -d .venv ]; then
-            echo "→ creating .venv via uv"
-            uv venv --python "${python}/bin/python3.14"
+            echo "→ creating .venv via uv (uv-managed Python)"
+            uv venv
           fi
 
           if [ -f pyproject.toml ]; then

@@ -4,6 +4,8 @@ Spins a uniquely-named collection, populates it from a JSONL fixture, and
 drops it on exit.
 """
 
+from __future__ import annotations
+
 import contextlib
 import os
 import uuid
@@ -32,7 +34,7 @@ async def setup_ephemeral_qdrant(
     """Spin a uniquely-named collection, populate from JSONL, drop on exit.
 
     Collection name embeds ``pid + uuid4`` so a leak from ``kill -9`` is
-    identifiable and droppable manually. No startup sweep — see Risk 4 of
+    identifiable and droppable manually. No startup sweep. See Risk 4 of
     the spec for why a prefix-wide sweep is unsafe under pytest-xdist.
 
     Args:
@@ -41,7 +43,7 @@ async def setup_ephemeral_qdrant(
         qdrant_url: Base URL of a live Qdrant service.
         collection_prefix: Prefix for the ephemeral collection name.
         post_mortems_root: Optional on-disk root for the canonical markdown
-            tree. Defaults to ``/tmp/slopmortem_eval`` when ``None`` — that
+            tree. Defaults to ``/tmp/slopmortem_eval`` when ``None``. That
             directory is only consulted by ``QdrantCorpus.get_post_mortem``,
             which the recording path does not exercise.
         dim: Dense vector dimensionality. Defaults to 768

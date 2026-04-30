@@ -1,5 +1,7 @@
 """Tests for the ingest orchestrator: summary wiring, slop, throttle, fan-out, cache."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import typing
@@ -57,7 +59,7 @@ def _summary_text() -> str:
     )
 
 
-def _canned_for_run(  # noqa: PLR0913 — every knob is a meaningful test variable
+def _canned_for_run(  # noqa: PLR0913 - every knob is a meaningful test variable
     *,
     summary_text: str | None = None,
     facets_json: str | None = None,
@@ -98,7 +100,7 @@ def _canned_for_run(  # noqa: PLR0913 — every knob is a meaningful test variab
 
 @dataclass
 class _ListSource:
-    """[Source] in-memory list of pre-built RawEntry; bypasses HTTP."""
+    """In-memory list of pre-built RawEntry; bypasses HTTP."""
 
     entries: list[RawEntry]
     raise_on_index: int | None = None
@@ -251,7 +253,7 @@ async def test_ingest_bounded_fan_out_concurrency(tmp_path):
         sparse_encoder=_stub_sparse,
     )
     assert result.processed == n_entries
-    # cache-warm runs serially before the fan-out, so peak measures fan-out only.
+    # Cache-warm runs serially before the fan-out, so peak measures fan-out only.
     assert peak <= cfg.ingest_concurrency, f"peak={peak} exceeds limit={cfg.ingest_concurrency}"
 
 
@@ -263,7 +265,7 @@ async def test_ingest_cache_warm_records_creation_tokens(tmp_path, cfg):
     budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
     classifier = FakeSlopClassifier(default_score=0.0)
 
-    # cache-warm renders the summarize template, so the summarize canned entry
+    # Cache-warm renders the summarize template, so the summarize canned entry
     # needs cache_creation_tokens > 0 to satisfy the warm check. The same
     # canned entry gets reused for fan-out; this test only asserts warm
     # bookkeeping, so reuse is fine.
@@ -306,7 +308,7 @@ async def test_ingest_cache_warm_records_creation_tokens(tmp_path, cfg):
 
 
 async def test_ingest_cache_read_ratio_warning(tmp_path, cfg):
-    """Read-ratio < 0.80 across the first 5 fan-out responses → warning span event."""
+    """Read-ratio < 0.80 across the first 5 fan-out responses emits a warning span event."""
     journal = MergeJournal(tmp_path / "j.sqlite")
     await journal.init()
     corpus = InMemoryCorpus()
@@ -314,7 +316,7 @@ async def test_ingest_cache_read_ratio_warning(tmp_path, cfg):
     budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
     classifier = FakeSlopClassifier(default_score=0.0)
 
-    # Low cache-read ratio: read=10, creation=100 → 10/(10+100) ≈ 0.09 << 0.80.
+    # Low cache-read ratio: read=10, creation=100 means 10/(10+100) ~ 0.09, well under 0.80.
     canned = _canned_for_run(
         cache_creation_warm=2048,
         cache_read_fanout=10,
@@ -343,7 +345,7 @@ async def test_ingest_cache_read_ratio_warning(tmp_path, cfg):
 
 
 async def test_ingest_quarantines_slop(tmp_path, cfg):
-    """slop_score > slop_threshold → quarantine row + no qdrant point."""
+    """slop_score > slop_threshold yields a quarantine row and no qdrant point."""
     journal = MergeJournal(tmp_path / "j.sqlite")
     await journal.init()
     corpus = InMemoryCorpus()
@@ -352,7 +354,7 @@ async def test_ingest_quarantines_slop(tmp_path, cfg):
     classifier = FakeSlopClassifier(default_score=0.95)
     llm = FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU)
 
-    sources = [_ListSource(entries=[_entry()])]
+    sources = [_ListSource(entries=[_entry(source="hn")])]
     result = await ingest(
         sources=sources,
         enrichers=[],
@@ -371,7 +373,7 @@ async def test_ingest_quarantines_slop(tmp_path, cfg):
     assert len(corpus.points) == 0
     quarantined_rows = await journal.fetch_quarantined()
     assert len(quarantined_rows) == 1
-    # Quarantine markdown was written under post_mortems/quarantine/.
+    # Quarantine markdown is written under post_mortems/quarantine/.
     quarantine_dir = tmp_path / "post_mortems" / "quarantine"
     assert quarantine_dir.exists()
     assert any(p.suffix == ".md" for p in quarantine_dir.iterdir())

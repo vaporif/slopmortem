@@ -18,8 +18,10 @@ succeed.
 
 Quarantine rows live in their own table keyed on
 ``(content_sha256, source, source_id)``. They have no ``canonical_id`` or
-``merge_state`` column; quarantined docs do not live in the main journal.
+``merge_state`` column. Quarantined docs do not live in the main journal.
 """
+
+from __future__ import annotations
 
 import sqlite3
 from typing import TYPE_CHECKING, Any
@@ -122,8 +124,6 @@ class MergeJournal:
             for stmt in _SCHEMA:
                 conn.execute(stmt)
 
-    # ─── Terminal-state writers (atomic) ────────────────────────────────────
-
     async def upsert_pending(
         self,
         *,
@@ -154,7 +154,7 @@ class MergeJournal:
         source_id: str,
         alias_edge: AliasEdge,
     ) -> None:
-        """Atomically write a journal alias_blocked row and an alias graph edge.
+        """Write the alias_blocked journal row and alias graph edge atomically.
 
         Both inserts run inside one ``BEGIN; ... COMMIT;`` (spec line 538).
         """
@@ -242,8 +242,6 @@ class MergeJournal:
             else:
                 conn.execute("COMMIT")
 
-    # ─── Promotion path ─────────────────────────────────────────────────────
-
     async def mark_complete(  # noqa: PLR0913 — keyword-only journal write contract
         self,
         *,
@@ -286,8 +284,6 @@ class MergeJournal:
                 """,
                 (skip_key, merged_at, content_hash, canonical_id, source, source_id),
             )
-
-    # ─── Reads ──────────────────────────────────────────────────────────────
 
     async def fetch_pending(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
         """Return every row currently in ``merge_state='pending'`` as a dict."""
@@ -366,8 +362,6 @@ class MergeJournal:
             cur = conn.execute("SELECT * FROM merge_journal")
             return [_row_to_dict(r) for r in cur.fetchall()]
 
-    # ─── Quarantine: separate table, no canonical_id, no merge_state ──────
-
     async def write_quarantine(
         self,
         *,
@@ -442,13 +436,11 @@ class MergeJournal:
                 (content_sha256, source, source_id),
             )
 
-    # ─── Pending review queue (entity-resolution borderline pairs) ─────────
-
     async def list_pending_review(self) -> list[PendingReviewRow]:
         """Read all rows from the ``pending_review`` table (spec line 264).
 
-        Returns rows in INSERT order (no explicit ``ORDER BY`` — ``--list-review``
-        is exploratory; the caller can sort if it cares about ordering).
+        Returns rows in INSERT order (no explicit ``ORDER BY``); ``--list-review``
+        is exploratory and the caller can sort if it cares about ordering.
         """
         return await to_thread.run_sync(self._list_pending_review_sync)
 
@@ -467,7 +459,6 @@ class MergeJournal:
             ]
 
 
-# Used by ingest in later tasks. Exported here for symmetry with the other writers.
 def aliases_iterable(edges: Iterable[AliasEdge]) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
     """Render a list of :class:`AliasEdge` to plain dicts (for journaling, etc.)."""
     return [e.model_dump() for e in edges]

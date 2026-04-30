@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 
 import anyio
@@ -19,7 +21,7 @@ async def test_embed_empty_returns_empty_without_loading_model():
     assert r.vectors == []
     assert r.n_tokens == 0
     assert r.cost_usd == 0.0
-    # Model must not have been materialized.
+    # Model must not have been materialized for an empty input.
     assert c._te is None
 
 
@@ -35,7 +37,7 @@ async def test_per_call_model_override_rejected():
 
 
 async def test_concurrent_ensure_loaded_loads_model_only_once():
-    """Two parallel callers must share a single _load_sync invocation."""
+    """Two parallel callers share a single _load_sync invocation."""
     c = FastEmbedEmbeddingClient(model="nomic-ai/nomic-embed-text-v1.5", budget=Budget(0.0))
     call_count = 0
     sentinel = object()

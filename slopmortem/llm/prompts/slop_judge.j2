@@ -1,0 +1,23 @@
+You filter a corpus of startup/company death narratives.
+
+Decide whether the text below primarily describes a SPECIFIC company, startup, or business venture that has DIED — meaning it shut down, went bankrupt, was dissolved, or was acquired and absorbed/extinguished as an independent entity.
+
+Answer with `is_dead_company = true` for:
+- A Wikipedia article or biography of a company that has closed
+- A founder's farewell post or written post-mortem essay
+- A news report about a company shutting down, filing for bankruptcy, or winding down
+- An obituary-style write-up of a failed startup
+
+Answer with `is_dead_company = false` for:
+- Technical incident or outage post-mortems about live, still-operating companies
+- Layoff or restructuring news where the company continues to operate
+- Product reviews, opinion pieces, or "lessons learned" essays without a specific dead-company subject
+- Show HN / Ask HN posts launching new products
+- Acquisitions where the target continues to operate as a brand
+- Generic articles about startup failure patterns or industry trends
+- Cases where you cannot determine that a specific company has died
+
+TEXT (truncated):
+"""
+{{ text }}
+"""

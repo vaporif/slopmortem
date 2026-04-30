@@ -1,5 +1,7 @@
 """In-memory LLMClient stub for stage tests; canned responses keyed by fixture."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -50,6 +52,7 @@ class _Call:
     response_format: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
     extra_body: dict[str, Any] | None  # pyright: ignore[reportExplicitAny]
     prompt_hash: str | None = None
+    max_tokens: int | None = None
 
 
 @dataclass
@@ -58,7 +61,7 @@ class FakeLLMClient:
 
     Callers pass the template SHA via ``extra_body['prompt_template_sha']``;
     stage tests load it from ``slopmortem.llm.prompts.prompt_template_sha(name)``
-    so any drift in the prompt text forces the fixture key to drift along with it.
+    so any change in the prompt text changes the fixture key too.
     The ``prompt_hash`` slot is the first 16 hex chars of
     ``sha256(system + '\x1f' + prompt)`` (computed via
     :func:`slopmortem.llm.cassettes.llm_cassette_key`); tests may override it
@@ -69,7 +72,7 @@ class FakeLLMClient:
     default_model: str
     calls: list[_Call] = field(default_factory=list)
 
-    async def complete(  # noqa: PLR0913 — mirrors LLMClient.complete public signature
+    async def complete(  # noqa: PLR0913 - mirrors LLMClient.complete public signature
         self,
         prompt: str,
         *,
@@ -79,6 +82,7 @@ class FakeLLMClient:
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
         """Look up a canned response keyed by ``(prompt_template_sha, model, prompt_hash)``."""
         eff_model = model or self.default_model
@@ -92,7 +96,7 @@ class FakeLLMClient:
             )
             raise NoCannedResponseError(msg)
         # Compute prompt_hash from prompt+system; allow override via extra_body
-        # so tests that want to pin a specific hash can do so.
+        # so tests can pin a specific hash.
         prompt_hash: str
         if extra_body and "prompt_hash" in extra_body:
             prompt_hash = str(extra_body["prompt_hash"])  # pyright: ignore[reportAny]
@@ -114,6 +118,7 @@ class FakeLLMClient:
                 cache=cache,
                 response_format=response_format,
                 extra_body=extra_body,
+                max_tokens=max_tokens,
             )
         )
         key = (template_sha, eff_model, prompt_hash)

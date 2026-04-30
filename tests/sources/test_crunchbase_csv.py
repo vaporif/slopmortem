@@ -1,4 +1,6 @@
-"""Crunchbase CSV source — file-based ``RawEntry`` producer (no HTTP)."""
+"""Crunchbase CSV source: file-based ``RawEntry`` producer (no HTTP)."""
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 

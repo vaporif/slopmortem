@@ -2,14 +2,16 @@
 
 The corpus tool functions ``_get_post_mortem`` / ``_search_corpus`` delegate
 through the :class:`slopmortem.corpus.store.Corpus` protocol. These tests
-hit the delegation wiring with a lightweight in-memory fake corpus. Live
-Qdrant integration shape is covered separately by
+hit the delegation wiring with an in-memory fake corpus. Live Qdrant
+integration shape is covered separately by
 ``tests/stages/test_retrieve.py`` (gated on ``requires_qdrant``).
 
 A fake (vs. the live ``fixture_corpus`` from the retrieve tests) keeps
 Task 9 unit-testable without a Qdrant service. The contract under test is
-tool-function -> Corpus protocol delegation, not Qdrant behavior.
+tool-function to Corpus protocol delegation, not Qdrant behavior.
 """
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
@@ -22,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class _FakeCorpus:
-    """Minimal Corpus stand-in: Task 9 only reads ``get_post_mortem`` / ``search_corpus``.
+    """Minimal Corpus stand-in; Task 9 only reads ``get_post_mortem`` / ``search_corpus``.
 
     A no-op ``query`` exists to satisfy the structural :class:`Corpus`
     protocol for ``_set_corpus``'s signature.
@@ -82,7 +84,7 @@ def fixture_corpus():
     try:
         yield corpus
     finally:
-        # Reset module-level binding so other tests don't see our fake.
+        # Reset module-level binding so other tests don't see the fake.
         import slopmortem.corpus.tools_impl as ti  # noqa: PLC0415
 
         ti._corpus = None
@@ -115,7 +117,7 @@ async def test_tavily_calls_under_cap_pass_through(monkeypatch):
         return f"hit:{q}"
 
     monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_real)
-    # Re-fetch tools so the new patched fn is the inner of the bounded wrapper.
+    # Re-fetch tools so the patched fn is the inner of the bounded wrapper.
     tools = synthesis_tools(cfg)
     tavily = next(t for t in tools if t.name == "tavily_search")
 
@@ -144,12 +146,12 @@ async def test_third_tavily_call_returns_budget_message(monkeypatch):
     await tavily.fn(q="b", limit=5)
     out3 = await tavily.fn(q="c", limit=5)
     assert "budget exceeded" in out3
-    assert real_calls == ["a", "b"]  # third call did NOT reach the real fn
+    assert real_calls == ["a", "b"]  # third call did not reach the real fn
 
 
 @pytest.mark.asyncio
 async def test_tavily_search_and_extract_share_budget(monkeypatch):
-    """The cap covers tavily_search + tavily_extract combined, not each independently."""
+    """The cap covers tavily_search and tavily_extract combined, not each independently."""
     cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=2)
 
     async def fake_search(q: str, limit: int = 5) -> str:
@@ -166,13 +168,13 @@ async def test_tavily_search_and_extract_share_budget(monkeypatch):
 
     await search.fn(q="a", limit=1)
     await extract.fn(url="https://example.com/x")
-    out3 = await search.fn(q="b", limit=1)  # third call across the two tools
+    out3 = await search.fn(q="b", limit=1)  # third call across both tools
     assert "budget exceeded" in out3
 
 
 @pytest.mark.asyncio
 async def test_each_synthesis_gets_a_fresh_budget(monkeypatch):
-    """Two separate calls to synthesis_tools(config) -> two independent counters."""
+    """Two separate calls to synthesis_tools(config) yield two independent counters."""
     cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=1)
 
     async def fake_search(q: str, limit: int = 5) -> str:
@@ -180,7 +182,7 @@ async def test_each_synthesis_gets_a_fresh_budget(monkeypatch):
 
     monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_search)
 
-    # Synthesis #1: exhausts the budget after one call.
+    # Synthesis #1 exhausts the budget after one call.
     tools_a = synthesis_tools(cfg)
     search_a = next(t for t in tools_a if t.name == "tavily_search")
     out_a1 = await search_a.fn(q="a", limit=1)

@@ -10,9 +10,11 @@ Operator-only. Builds ``tests/fixtures/corpus_fixture.jsonl`` by:
 3. Scrolling the collection out via ``dump_collection_to_jsonl`` and atomically
    swapping a ``.recording`` temp file into place.
 
-Gated on ``RUN_LIVE=1`` — every run hits OpenRouter and the embedder, so the
+Gated on ``RUN_LIVE=1``. Every run hits OpenRouter and the embedder, so the
 gate exists to prevent accidental spend.
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -33,7 +35,7 @@ from slopmortem.config import load_config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
 from slopmortem.corpus.sources.curated import CuratedSource
-from slopmortem.ingest import BinocularsSlopClassifier, ingest
+from slopmortem.ingest import HaikuSlopClassifier, ingest
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
@@ -52,7 +54,7 @@ def _translate_seed_yaml(src: Path, dst: Path) -> None:
     The curated path doesn't read ``description``, so it's dropped.
 
     Args:
-        src: Seed-input YAML — list of rows, each a mapping with string
+        src: Seed-input YAML, a list of rows, each a mapping with string
             ``name`` and ``url``.
         dst: Destination path for the translated curated YAML.
 
@@ -127,7 +129,7 @@ async def _record(
         # Wiring mirrors slopmortem.cli._build_ingest_deps.
         budget = Budget(cap_usd=max_cost_usd)
         openrouter_sdk = AsyncOpenAI(
-            api_key=os.environ["OPENROUTER_API_KEY"],
+            api_key=config.openrouter_api_key.get_secret_value(),
             base_url=config.openrouter_base_url,
         )
         llm = OpenRouterClient(
@@ -144,7 +146,7 @@ async def _record(
                 cache_dir=config.embed_cache_dir,
             )
         elif config.embedding_provider == "openai":
-            openai_sdk = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+            openai_sdk = AsyncOpenAI(api_key=config.openai_api_key.get_secret_value())
             embedder = OpenAIEmbeddingClient(
                 sdk=openai_sdk,
                 budget=budget,
@@ -157,7 +159,7 @@ async def _record(
             )
             raise ValueError(msg)
 
-        classifier = BinocularsSlopClassifier()
+        classifier = HaikuSlopClassifier(llm=llm, model=config.model_summarize)
 
         if config.embed_model_id not in EMBED_DIMS:
             msg = f"unknown embed model {config.embed_model_id!r}; add to EMBED_DIMS"
@@ -165,7 +167,7 @@ async def _record(
         dim = EMBED_DIMS[config.embed_model_id]
 
         # ensure_collection lives inside the try so a partial-create still hits
-        # the cleanup path. The suppress below covers the never-created case.
+        # the cleanup path. The suppress block below covers the never-created case.
         try:
             await ensure_collection(qclient, collection_name, dim=dim)
             # QdrantCorpus implements upsert_chunk but not has_chunks /
@@ -229,16 +231,10 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=_DEFAULT_MAX_COST_USD,
     )
-    # Config has no qdrant fields; cli._build_ingest_corpus reads QDRANT_HOST /
-    # QDRANT_PORT from env, so we mirror that.
-    default_qdrant_url = (
-        f"http://{os.environ.get('QDRANT_HOST', 'localhost')}"
-        f":{os.environ.get('QDRANT_PORT', '6333')}"
-    )
     _ = parser.add_argument(
         "--qdrant-url",
         type=str,
-        default=default_qdrant_url,
+        default=None,
     )
     args = parser.parse_args(argv)
 
@@ -249,10 +245,13 @@ def main(argv: list[str] | None = None) -> None:
         )
         sys.exit(2)
 
+    config = load_config()
     inputs_path = cast("Path", args.inputs)
     out_path = cast("Path", args.out)
     max_cost_usd = cast("float", args.max_cost_usd)
-    qdrant_url = cast("str", args.qdrant_url)
+    qdrant_url = cast("str | None", args.qdrant_url) or (
+        f"http://{config.qdrant_host}:{config.qdrant_port}"
+    )
 
     asyncio.run(
         _record(

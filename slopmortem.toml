@@ -4,7 +4,7 @@ ingest_concurrency = 20
 facet_boost = 0.01
 rrf_k = 60
 slop_threshold = 0.7
-max_doc_tokens = 50000
+max_doc_tokens = 8000
 tier3_calibration_band = [0.65, 0.85]
 max_cost_usd_per_query = 2.00
 max_cost_usd_per_ingest = 15.00
@@ -15,6 +15,16 @@ model_summarize = "anthropic/claude-haiku-4.5"
 model_rerank = "anthropic/claude-sonnet-4.6"
 model_synthesize = "anthropic/claude-sonnet-4.6"
 
+# Per-stage output caps. Without these, OpenRouter holds upfront credit for
+# the model's full max-output ceiling (~64K on Claude), which can fail with
+# HTTP 402 on low-balance keys even though the actual reply is much smaller.
+max_tokens_facet = 2000
+max_tokens_summarize = 1500
+max_tokens_rerank = 4000
+max_tokens_synthesize = 16000
+max_tokens_slop_judge = 64
+max_tokens_tiebreaker = 256
+
 embedding_provider = "fastembed"
 embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 retry_max_attempts = 3
@@ -23,9 +33,6 @@ retry_initial_backoff = 1.0
 taxonomy_version = "v1"
 reliability_rank_version = "v1"
 
-enable_tavily_enrich = false
 enable_tavily_synthesis = false
-enable_wayback = false
-enable_crunchbase = false
 enable_tracing = false
 strict_deaths = false

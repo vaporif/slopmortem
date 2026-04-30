@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import tiktoken
 
 from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION, Chunk, chunk_markdown
@@ -27,15 +29,13 @@ def test_long_doc_splits_with_overlap():
     text = "\n\n".join(paragraphs)
     chunks = chunk_markdown(text, parent_canonical_id="a.com")
     assert len(chunks) >= 2
-    # Each chunk under or at 768 tokens.
     for c in chunks:
         assert c.token_count <= 768
         assert c.parent_canonical_id == "a.com"
-    # chunk_idx is monotonically increasing.
     assert [c.chunk_idx for c in chunks] == list(range(len(chunks)))
-    # Adjacent chunks overlap by ~128 tokens — last 128 tokens of chunk[0]
+    # Adjacent chunks overlap by ~128 tokens; the last 128 tokens of chunk[0]
     # should appear inside chunk[1].
-    overlap_tail = enc.decode(enc.encode(chunks[0].text)[-32:])  # sample
+    overlap_tail = enc.decode(enc.encode(chunks[0].text)[-32:])
     assert overlap_tail in chunks[1].text
 
 

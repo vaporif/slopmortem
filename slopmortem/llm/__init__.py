@@ -1,5 +1,7 @@
 """LLM and embedding clients, prompt rendering, and OpenRouter retry logic."""
 
+from __future__ import annotations
+
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient

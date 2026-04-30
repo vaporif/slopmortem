@@ -10,11 +10,13 @@ in-memory implementation of :class:`slopmortem.corpus.store.Corpus`; no
 Qdrant required.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -25,16 +27,12 @@ from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis
-from slopmortem.pipeline import _cutoff_iso, _join_to_candidates, run_query
+from slopmortem.pipeline import QueryPhase, _join_to_candidates, cutoff_iso, run_query
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from slopmortem.llm.client import CompletionResult
-
-# ---------------------------------------------------------------------------
-# Test fixtures
-# ---------------------------------------------------------------------------
 
 _FACET_MODEL = "test-facet"
 _RERANK_MODEL = "test-rerank"
@@ -146,9 +144,9 @@ def _build_canned(
     will produce: one facet_extract, one llm_rerank over the ``retrieved``
     set, and one synthesize per candidate in ``top_n``.
     """
-    # 1) facet_extract is rendered with `description=ctx.description`.
+    # facet_extract is rendered with `description=ctx.description`.
     facet_prompt = render_prompt("facet_extract", description=ctx.description)
-    # 2) llm_rerank is rendered over the retrieved candidates with the parsed
+    # llm_rerank is rendered over the retrieved candidates with the parsed
     # facets (post LLM JSON validation including the extra fields the prompt
     # response embeds). Reproduce by parsing the canned facet payload.
     parsed_facets = Facets.model_validate_json(_facet_extract_payload())
@@ -156,6 +154,7 @@ def _build_canned(
         "llm_rerank",
         pitch=ctx.description,
         facets=parsed_facets.model_dump(),
+        top_n=len(top_n),
         candidates=[
             {
                 "candidate_id": c.canonical_id,
@@ -173,7 +172,7 @@ def _build_canned(
             text=_rerank_payload([c.canonical_id for c in top_n]), cost_usd=0.005
         ),
     }
-    # 3) Synthesis runs once per top_n candidate; render each prompt and emit
+    # Synthesis runs once per top_n candidate; render each prompt and emit
     # one canned entry per (template, model, prompt_hash). The response's
     # ``candidate_id`` field stays "acme" but the stage's parser doesn't
     # enforce that it matches the request.
@@ -199,7 +198,7 @@ class _FakeCorpus:
     candidates: list[Candidate]
     queries: list[dict[str, object]] = field(default_factory=list)
 
-    async def query(  # noqa: PLR0913 — Protocol contract dictates the signature
+    async def query(  # noqa: PLR0913 - Protocol contract dictates the signature
         self,
         *,
         dense: list[float],
@@ -260,9 +259,31 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
     )
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+class _RecordingQueryProgress:
+    """Test stub for :class:`slopmortem.pipeline.QueryProgress`.
+
+    Records every phase event into ``self.events`` as ``("start", phase, total)``,
+    ``("advance", phase, n)``, ``("end", phase)``, ``("log", message)``, or
+    ``("error", phase, message)`` tuples.
+    """
+
+    def __init__(self) -> None:
+        self.events: list[tuple[object, ...]] = []
+
+    def start_phase(self, phase: QueryPhase, total: int) -> None:
+        self.events.append(("start", phase, total))
+
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
+        self.events.append(("advance", phase, n))
+
+    def end_phase(self, phase: QueryPhase) -> None:
+        self.events.append(("end", phase))
+
+    def log(self, message: str) -> None:
+        self.events.append(("log", message))
+
+    def error(self, phase: QueryPhase, message: str) -> None:
+        self.events.append(("error", phase, message))
 
 
 async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -280,10 +301,10 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    # Override retrieve's default sparse encoder; avoids loading fastembed.
+    # Override retrieve's default sparse encoder to avoid loading fastembed.
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
 
-    progress_events: list[str] = []
+    progress = _RecordingQueryProgress()
     report = await run_query(
         ctx,
         llm=fake_llm,
@@ -291,16 +312,16 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
         corpus=fake_corpus,
         config=cfg,
         budget=budget,
-        progress=progress_events.append,
+        progress=progress,
     )
 
-    # Report shape
+    # Report shape.
     assert report.input == ctx
     assert isinstance(report.candidates, list)
     assert 0 < len(report.candidates) <= cfg.N_synthesize
     assert all(isinstance(s, Synthesis) for s in report.candidates)
 
-    # Pipeline meta
+    # Pipeline meta.
     meta = report.pipeline_meta
     assert meta.K_retrieve == cfg.K_retrieve
     assert meta.N_synthesize == cfg.N_synthesize
@@ -316,11 +337,21 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     assert meta.models["rerank"] == _RERANK_MODEL
     assert meta.models["synthesize"] == _SYNTH_MODEL
 
-    # Progress callback was invoked at every stage
-    assert "facet_extract" in progress_events
-    assert "retrieve" in progress_events
-    assert "rerank" in progress_events
-    assert any(p.startswith("synthesize") for p in progress_events)
+    # Progress hooks were invoked at every stage.
+    phases_started = {evt[1] for evt in progress.events if evt[0] == "start"}
+    assert phases_started == {
+        QueryPhase.FACET_EXTRACT,
+        QueryPhase.RETRIEVE,
+        QueryPhase.RERANK,
+        QueryPhase.SYNTHESIZE,
+    }
+    # Synthesize must have advanced once per top_n candidate.
+    synth_advances = sum(
+        cast("int", evt[2])
+        for evt in progress.events
+        if evt[0] == "advance" and evt[1] == QueryPhase.SYNTHESIZE
+    )
+    assert synth_advances == cfg.N_synthesize  # under fake fixtures all candidates settle
 
     # Corpus.query was invoked with the right knobs.
     assert len(fake_corpus.queries) == 1
@@ -392,9 +423,9 @@ async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
 
-    # Force extract_facets to raise BudgetExceededError immediately. This
-    # exercises the except-branch in ``run_query`` without needing the
-    # embedding client to do real reservation accounting.
+    # Force extract_facets to raise BudgetExceededError immediately, so the
+    # except branch in ``run_query`` runs without needing the embedding
+    # client to do real reservation accounting.
     from slopmortem.budget import BudgetExceededError  # noqa: PLC0415
 
     async def _raise(*_a: object, **_kw: object) -> None:
@@ -433,7 +464,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
 
         inner: FakeLLMClient
 
-        async def complete(  # noqa: PLR0913 — mirrors LLMClient.complete signature
+        async def complete(  # noqa: PLR0913 - mirrors LLMClient.complete signature
             self,
             prompt: str,
             *,
@@ -443,6 +474,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
             cache: bool = False,
             response_format: dict[str, Any] | None = None,
             extra_body: dict[str, Any] | None = None,
+            max_tokens: int | None = None,
         ) -> CompletionResult:
             await asyncio.sleep(0.5)
             return await self.inner.complete(
@@ -453,6 +485,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
                 cache=cache,
                 response_format=response_format,
                 extra_body=extra_body,
+                max_tokens=max_tokens,
             )
 
     slow_llm = _SlowFakeLLMClient(inner=FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL))
@@ -478,17 +511,12 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
         await task
 
 
-# ---------------------------------------------------------------------------
-# Helpers under test
-# ---------------------------------------------------------------------------
+def testcutoff_iso_none_returns_none() -> None:
+    assert cutoff_iso(None) is None
 
 
-def test_cutoff_iso_none_returns_none() -> None:
-    assert _cutoff_iso(None) is None
-
-
-def test_cutoff_iso_returns_iso_date_string() -> None:
-    out = _cutoff_iso(years_filter=5)
+def testcutoff_iso_returns_iso_date_string() -> None:
+    out = cutoff_iso(years_filter=5)
     assert out is not None
     # Must be parseable as a date.
     date.fromisoformat(out)

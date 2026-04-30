@@ -1,5 +1,7 @@
 """LLM rerank stage: one strict-mode JSON call returning :class:`LlmRerankResult`."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from lmnr import Laminar, observe
@@ -31,6 +33,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
     config: Config,
     *,
     model: str | None = None,
+    max_tokens: int | None = None,
 ) -> LlmRerankResult:
     """Rerank ``candidates`` against ``pitch`` via one structured-output LLM call.
 
@@ -50,10 +53,12 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
         llm: Async :class:`LLMClient` impl. ``cache=True`` is set so the
             shared rubric block hits the prompt cache across calls within
             the 5-min TTL.
-        config: :class:`Config` — ``N_synthesize`` is the load-bearing knob
+        config: :class:`Config`. ``N_synthesize`` is the load-bearing knob
             for the post-parse length check.
         model: Optional override of the LLM client's default model. ``None``
             lets the client pick.
+        max_tokens: Optional cap on completion tokens. ``None`` keeps the
+            client's default (no cap sent upstream).
 
     Returns:
         Parsed :class:`LlmRerankResult` with ``ranked`` length equal to
@@ -73,6 +78,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
         "llm_rerank",
         pitch=pitch,
         facets=facets.model_dump(),
+        top_n=config.N_synthesize,
         candidates=[
             {
                 "candidate_id": c.canonical_id,
@@ -95,6 +101,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
             },
         },
         extra_body={"prompt_template_sha": prompt_template_sha("llm_rerank")},
+        max_tokens=max_tokens,
     )
     parsed = LlmRerankResult.model_validate_json(result.text)
     if len(parsed.ranked) != config.N_synthesize:

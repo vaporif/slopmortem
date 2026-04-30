@@ -1,5 +1,7 @@
 """Tests for RecordingLLMClient, RecordingEmbeddingClient, RecordingSparseEncoder."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 import pytest
@@ -27,7 +29,7 @@ class _FakeInnerLLM:
         self.calls: int = 0
         self.raise_on_call: int | None = None
 
-    async def complete(  # noqa: PLR0913 — mirrors LLMClient.complete signature
+    async def complete(  # noqa: PLR0913 - mirrors LLMClient.complete signature
         self,
         prompt,
         *,
@@ -37,6 +39,7 @@ class _FakeInnerLLM:
         cache=False,
         response_format=None,
         extra_body=None,
+        max_tokens=None,
     ):
         self.calls += 1
         if self.raise_on_call is not None and self.calls == self.raise_on_call:
@@ -100,7 +103,7 @@ async def test_recording_llm_cost_ceiling_aborts_before_inner(tmp_path: Path) ->
         _ = await rec.complete("c", model="m", extra_body={**extra, "prompt_hash": "2" * 16})
     assert exc_info.value.spent == pytest.approx(0.80)
     assert exc_info.value.limit == pytest.approx(0.80)
-    # Inner only called twice (third aborted pre-call); cassettes for a and b only.
+    # Inner only called twice; the third aborts pre-call, so cassettes exist for a and b only.
     assert inner.calls == 2
     assert len(list(tmp_path.glob("*.json"))) == 2
 
@@ -110,7 +113,7 @@ class _FakeInnerEmbed:
     dim = 1536
 
     async def embed(self, texts, *, model=None):
-        # Return a vector that's distinct per input.
+        # Return a vector distinct per input.
         return EmbeddingResult(
             vectors=[[float(i)] * 1536 for i, _ in enumerate(texts)],
             n_tokens=len(texts),
@@ -121,10 +124,10 @@ class _FakeInnerEmbed:
 async def test_recording_embed_splits_batch_into_per_text_cassettes(tmp_path: Path) -> None:
     inner = _FakeInnerEmbed()
     rec = RecordingEmbeddingClient(inner=inner, out_dir=tmp_path)
-    result = await rec.embed(["hello", "world", "hello"])  # repeated text → same cassette
+    result = await rec.embed(["hello", "world", "hello"])  # repeated text reuses cassette
     assert len(result.vectors) == 3
     files = sorted(tmp_path.glob("embed__*.json"))
-    # Two unique texts → two cassettes; "hello" overwrites itself idempotently.
+    # Two unique texts give two cassettes; "hello" overwrites itself idempotently.
     assert len(files) == 2
 
 

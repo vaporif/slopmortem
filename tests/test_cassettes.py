@@ -1,5 +1,7 @@
 """Tests for cassette key derivation, slugifier, loaders, error types."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 from typing import TYPE_CHECKING
@@ -64,10 +66,10 @@ def test_template_sha_stable_across_calls() -> None:
 
 
 def test_llm_cassette_key_separator_isolates_system_from_prompt() -> None:
-    # \x1f-separated; absent system → empty prefix.
+    # \x1f-separated; absent system means empty prefix.
     a = llm_cassette_key(prompt="ab", system=None, template_sha="t", model="m")
     b = llm_cassette_key(prompt="b", system="a", template_sha="t", model="m")
-    # If we had used naive concat, both would equal "ab"; the \x1f separator must distinguish them.
+    # Naive concat would make both equal "ab"; the \x1f separator distinguishes them.
     assert a[2] != b[2]
 
 
@@ -144,7 +146,7 @@ def test_sparse_embedding_round_trip(tmp_path: Path) -> None:
 
 
 def test_major_schema_mismatch_is_fatal(tmp_path: Path) -> None:
-    """Major bump means breaking change → reader must hard-fail (P12 policy)."""
+    """Major bump means breaking change, so the reader must hard-fail (P12 policy)."""
     bad = tmp_path / "facet_extract__m__0123456789abcdef.json"
     bad.write_text(
         json.dumps(
@@ -161,7 +163,7 @@ def test_major_schema_mismatch_is_fatal(tmp_path: Path) -> None:
 
 
 def test_unparseable_schema_version_is_fatal(tmp_path: Path) -> None:
-    """Non-string or non-dotted version → fail loud, never silently accept (P12)."""
+    """Non-string or non-dotted version must fail loud, never silently accept (P12)."""
     bad = tmp_path / "facet_extract__m__0123456789abcdef.json"
     bad.write_text(json.dumps({"schema_version": 99, "key": {}, "response": {}}))
     with pytest.raises(CassetteSchemaError):
@@ -242,7 +244,7 @@ async def test_fake_llm_client_keys_on_three_tuple() -> None:
 
 
 async def test_fake_llm_client_strict_no_wildcard_fallback() -> None:
-    # 2-tuple shape would have been the wildcard before; now strict 3-tuple required.
+    # 2-tuple was the old wildcard shape; strict 3-tuple is now required.
     canned = {("template_sha_a", "m", "0123456789abcdef"): FakeResponse(text="hit")}
     llm = FakeLLMClient(canned=canned, default_model="m")
     with pytest.raises(NoCannedResponseError) as exc_info:

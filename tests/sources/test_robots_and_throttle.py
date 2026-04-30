@@ -1,10 +1,12 @@
 """Per-host throttle and robots.txt enforcement tests.
 
-* Throttle: two consecutive calls to the same host are >=1s apart at the default
-  1 rps budget. Calls to different hosts are independent.
+* Throttle: two consecutive calls to the same host are >=1s apart at the
+  default 1 rps budget. Calls to different hosts are independent.
 * Robots: a ``User-agent: *\nDisallow: /private/`` rule on a host blocks
   ``/private/foo`` and permits ``/public/foo``.
 """
+
+from __future__ import annotations
 
 import time
 from typing import Any
@@ -34,7 +36,7 @@ class _FakeResp:
 
 
 async def test_per_host_throttle_caps_one_rps() -> None:
-    """Two consecutive throttle_for() to the same host are >=1s apart at 1 rps."""
+    """Two consecutive ``throttle_for()`` calls to the same host are >=1s apart at 1 rps."""
     url = "https://example.com/page"
     t0 = time.monotonic()
     await throttle_for(url, rps=DEFAULT_RPS)
@@ -66,7 +68,7 @@ async def test_robots_disallow_blocks_url(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 async def test_robots_unreachable_defaults_to_allow(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A 404 / network error on robots.txt should not block fetches."""
+    """A 404 or network error on robots.txt should not block fetches."""
     monkeypatch.setattr(
         _throttle,
         "safe_get",

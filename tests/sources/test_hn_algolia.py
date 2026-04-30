@@ -1,9 +1,11 @@
-"""HN Algolia source — URL prefix + RECORD-gated cassette round-trip.
+"""HN Algolia source: URL prefix and RECORD-gated cassette round-trip.
 
 The endpoint must be ``/api/v1/search_by_date`` (chronological, newest-first),
-not ``/search`` (relevance-ranked) — see spec line 242 and plan §1901. The
+not ``/search`` (relevance-ranked); see spec line 242 and plan §1901. The
 URL-prefix test guards against an accidental swap.
 """
+
+from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
@@ -25,7 +27,7 @@ def test_constructed_url_starts_with_search_by_date() -> None:
     src = HNAlgoliaSource(query="post-mortem")
     url = src.build_url(page=0)
     assert url.startswith("https://hn.algolia.com/api/v1/search_by_date?"), url
-    # extra defence: never the bare /search prefix
+    # never the bare /search prefix
     assert not url.startswith("https://hn.algolia.com/api/v1/search?"), url
 
 
@@ -53,7 +55,7 @@ class _FakeResp:
 
 @pytest.mark.asyncio
 async def test_paginates_until_nbpages_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A single page nbPages=1 yields exactly the hits and no further calls."""
+    """A single page (nbPages=1) yields exactly the hits and no further calls."""
     payload = {
         "nbPages": 1,
         "hits": [
@@ -121,11 +123,11 @@ async def test_paginates_multiple_pages(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.vcr
 async def test_hn_algolia_round_trip() -> None:
-    """RECORD-gated live API round-trip; mirrors test_openrouter_cassette pattern."""
+    """RECORD-gated live API round-trip; mirrors the ``test_openrouter_cassette`` pattern."""
     if not CASSETTE_FILE.exists() and not os.environ.get("RECORD"):
         pytest.skip(f"no cassette at {CASSETTE_FILE}; rerun with RECORD=1 to record")
     since = int(datetime(2024, 1, 1, tzinfo=UTC).timestamp())
     src = HNAlgoliaSource(query="post-mortem", since_epoch=since)
     entries = [e async for e in src.fetch()]
-    # cassette is small; assert structurally rather than count-precise
+    # cassette is small, assert structurally rather than count-precise
     assert all(e.source == "hn_algolia" for e in entries)

@@ -5,17 +5,17 @@ Usage:
         [--live] [--record] [--write-baseline]
 
 Modes:
-    DEFAULT (cassettes) — uses FakeLLMClient + FakeEmbeddingClient backed by
+    DEFAULT (cassettes): uses FakeLLMClient + FakeEmbeddingClient backed by
         committed cassettes under tests/fixtures/cassettes/evals/<row_id>/,
         plus an ephemeral Qdrant collection seeded from
         tests/fixtures/corpus_fixture.jsonl. No env vars beyond a running
         Qdrant. This is what `just eval` and CI run.
-    --live — wires real production deps via slopmortem.cli._build_deps.
+    --live: wires real production deps via slopmortem.cli._build_deps.
         Operator-invoked, out of CI scope. Costs real money.
-    --record — re-record cassettes against the live API. Calls
+    --record: re-record cassettes against the live API. Calls
         record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
-    --scope <row_id> — restrict record or replay to a single row.
-    --write-baseline — write the current run's results to --baseline (v2
+    --scope <row_id>: restrict record or replay to a single row.
+    --write-baseline: write the current run's results to --baseline (v2
         envelope, merging into any existing v2).
 
 Baseline JSON shape (normative)::
@@ -61,11 +61,13 @@ Live-mode limitation
 
 In ``--live`` mode, ``allowed_hosts`` for the ``all_sources_in_allowed_domains``
 assertion is reduced to the fixed allowlist
-(:data:`slopmortem.stages.synthesize._FIXED_HOST_ALLOWLIST`) only — the
+(:data:`slopmortem.stages.synthesize._FIXED_HOST_ALLOWLIST`) only. The
 public :class:`Corpus` Protocol does not expose payload sources, and we
 deliberately do not extend it. Deterministic mode tightens this by including
 each candidate's own payload sources via the private in-memory corpus.
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -108,10 +110,6 @@ if TYPE_CHECKING:
     from slopmortem.llm.client import CompletionResult
     from slopmortem.models import Report
 
-# ---------------------------------------------------------------------------
-# Constants — deterministic-mode fixtures (mirrors tests/test_pipeline_e2e.py)
-# ---------------------------------------------------------------------------
-
 _DETERMINISTIC_FACET_MODEL = "test-facet"
 _DETERMINISTIC_RERANK_MODEL = "test-rerank"
 _DETERMINISTIC_SYNTH_MODEL = "test-synth"
@@ -127,10 +125,8 @@ _ASSERTION_NAMES: tuple[str, ...] = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Deterministic-mode canned data (private duplication of tests/test_pipeline_e2e.py
-# helpers; kept private to runner.py to avoid a shared-fixture module).
-# ---------------------------------------------------------------------------
+# Deterministic-mode canned data: private duplication of tests/test_pipeline_e2e.py
+# helpers, kept private to runner.py to avoid a shared-fixture module.
 
 
 def _facets() -> Facets:
@@ -234,7 +230,7 @@ def _build_canned(
     the deterministic runner with cassette-backed replay. This function still
     keys on a placeholder ``prompt_hash`` so the type matches
     ``FakeLLMClient.canned`` (now 3-tuple) and the codebase compiles in
-    lock-step with Task 1; the live eval runner is exercised end-to-end
+    lock-step with Task 1. The live eval runner is exercised end-to-end
     through Task 6, not from this stub.
     """
     placeholder_hash = "0" * 16
@@ -264,8 +260,8 @@ class _EvalCorpus:
 
     Mirrors the ``_FakeCorpus`` from ``tests/test_pipeline_e2e.py``. Adds
     :meth:`lookup_payload` so the runner can extract per-candidate source
-    hosts for the ``all_sources_in_allowed_domains`` assertion (Corpus
-    Protocol intentionally does not expose payload-by-id).
+    hosts for the ``all_sources_in_allowed_domains`` assertion. The Corpus
+    Protocol intentionally does not expose payload-by-id.
     """
 
     candidates: list[Candidate]
@@ -317,7 +313,7 @@ class _EvalCorpus:
     def lookup_payload(self, canonical_id: str) -> CandidatePayload | None:
         """Return the persisted payload for *canonical_id*, or None if unknown.
 
-        Private to the runner: the public :class:`Corpus` Protocol intentionally
+        Private to the runner. The public :class:`Corpus` Protocol intentionally
         does not expose payloads. We use this only in deterministic mode to
         compute per-candidate ``allowed_hosts`` before calling
         :func:`all_sources_in_allowed_domains`.
@@ -345,11 +341,6 @@ def _build_deterministic_config() -> Config:
     )
 
 
-# ---------------------------------------------------------------------------
-# Dataset / row-id handling
-# ---------------------------------------------------------------------------
-
-
 def _load_dataset(path: Path) -> list[InputContext]:
     """Parse a JSONL dataset into :class:`InputContext` rows.
 
@@ -362,7 +353,7 @@ def _load_dataset(path: Path) -> list[InputContext]:
         line = raw.strip()
         if not line:
             continue
-        # ``json.loads`` returns ``Any``; narrow at the InputContext boundary.
+        # ``json.loads`` returns ``Any``. Narrow at the InputContext boundary.
         parsed: object = json.loads(line)  # pyright: ignore[reportAny]
         rows.append(InputContext.model_validate(parsed))
     return rows
@@ -398,11 +389,6 @@ def _verify_unique_row_ids(rows: list[InputContext]) -> list[str]:
     return ids
 
 
-# ---------------------------------------------------------------------------
-# Per-row scoring
-# ---------------------------------------------------------------------------
-
-
 def _allowed_hosts_for_candidate(
     candidate_id: str,
     eval_corpus: _EvalCorpus | None,
@@ -412,7 +398,7 @@ def _allowed_hosts_for_candidate(
     In deterministic mode (``eval_corpus is not None``), unions the
     fixed allowlist with the candidate's own payload sources. In
     ``--live`` mode (``eval_corpus is None``), reduces to the fixed
-    allowlist only — see module docstring's "Live-mode limitation".
+    allowlist only. See the module docstring's "Live-mode limitation".
     """
     hosts: set[str] = set(_FIXED_HOST_ALLOWLIST)
     if eval_corpus is None:
@@ -446,11 +432,6 @@ def _score_report(report: Report, *, eval_corpus: _EvalCorpus | None) -> dict[st
         "candidates_count": len(report.candidates),
         "assertions": assertions,
     }
-
-
-# ---------------------------------------------------------------------------
-# Pipeline driver
-# ---------------------------------------------------------------------------
 
 
 async def _run_deterministic(
@@ -490,7 +471,7 @@ async def _run_deterministic(
 async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, dict[str, object]]:
     """Run every row through real production deps. May spend real money."""
     # Lazy-imported so deterministic mode doesn't drag CLI deps in.
-    # Both names are private — sanctioned reuse: the runner mirrors the CLI
+    # Both names are private; sanctioned reuse: the runner mirrors the CLI
     # boot path exactly so live evals get the same prod wiring.
     from slopmortem.cli import (  # noqa: PLC0415
         _build_deps,  # pyright: ignore[reportPrivateUsage]
@@ -512,15 +493,10 @@ async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, d
             config=cfg,
             budget=budget,
         )
-        # In --live we have no payload-lookup; pass eval_corpus=None so
+        # In --live we have no payload-lookup. Pass eval_corpus=None so
         # allowed_hosts collapses to the fixed allowlist.
         results[rid] = _score_report(report, eval_corpus=None)
     return results
-
-
-# ---------------------------------------------------------------------------
-# Baseline diffing
-# ---------------------------------------------------------------------------
 
 
 def _diff_against_baseline(
@@ -540,7 +516,7 @@ def _diff_against_baseline(
     if not isinstance(raw_rows, dict):
         warnings.append("baseline.rows is not a dict; treating as empty")
         raw_rows = {}
-    # Narrow once; pyright infers ``dict[Unknown, Unknown]`` from the runtime
+    # Narrow once. Pyright infers ``dict[Unknown, Unknown]`` from the runtime
     # check, which is good enough for this scope.
     baseline_rows = cast("dict[str, dict[str, object]]", raw_rows)
 
@@ -578,8 +554,8 @@ def _diff_row(
     for cand_id, base_results in base_assertions.items():
         cur_results = cur_assertions.get(cand_id)
         if cur_results is None:
-            # Baseline had a candidate that the current run didn't synthesize —
-            # only a regression if the baseline asserted something true.
+            # Baseline had a candidate that the current run didn't synthesize.
+            # Only a regression if the baseline asserted something true.
             if any(bool(v) for v in base_results.values()):
                 out.append(f"row {row_id!r} candidate {cand_id!r}: missing from current run")
             continue
@@ -613,11 +589,6 @@ def _load_baseline(path: Path) -> dict[str, object]:
 def _serialize_results(results: dict[str, dict[str, object]]) -> dict[str, object]:
     """Wrap per-row results in the normative baseline-file envelope."""
     return {"version": _BASELINE_VERSION, "rows": results}
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 
 def _build_argparser() -> argparse.ArgumentParser:
@@ -739,7 +710,7 @@ def main(argv: list[str] | None = None) -> None:
     ns = parser.parse_args(argv)
     # ``argparse.Namespace`` attributes are ``Any`` by design (argparse
     # builds the namespace dynamically). We narrow each at the boundary
-    # with explicit casts; ``--store_true`` flags read out as ``bool``.
+    # with explicit casts. ``--store_true`` flags read out as ``bool``.
     dataset_path = cast("Path", ns.dataset)
     baseline_path = cast("Path", ns.baseline)
     live = cast("bool", ns.live)
@@ -768,7 +739,6 @@ def main(argv: list[str] | None = None) -> None:
 
     baseline = _load_baseline(baseline_path)
 
-    # Per-row pass/fail to stdout
     for row_id, row_results in results.items():
         assertions_obj = row_results.get("assertions", {})
         if not isinstance(assertions_obj, dict):

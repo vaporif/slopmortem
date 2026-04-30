@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import json
 
@@ -11,7 +13,7 @@ def _text_id(canonical_id: str) -> str:
 
 
 class FakeCorpus:
-    """Minimal corpus stand-in — only ``has_chunks`` is consulted by reconcile."""
+    """Minimal corpus stand-in: only ``has_chunks`` is consulted by reconcile."""
 
     def __init__(self, present_canonicals: set[str]) -> None:
         self._present = present_canonicals
@@ -100,7 +102,6 @@ async def test_reconcile_class_d_raw_no_journal(tmp_path):
     await journal.init()
     text_id = "0123456789abcdef"
     await write_raw_atomic(base, text_id, "hn", "body", front_matter={"canonical_id": "d.com"})
-    # No journal rows whatsoever.
     corpus = FakeCorpus(present_canonicals=set())
     report = await reconcile(journal, corpus, base)
     rows = [r for r in report.rows if r.drift_class == "d"]
@@ -133,7 +134,7 @@ async def test_reconcile_class_f_resolver_flipped(tmp_path):
 
 
 async def test_reconcile_report_serializable(tmp_path):
-    # The report rows should JSON-round-trip — useful for span events later.
+    # Report rows should JSON-round-trip; this is needed for span events later.
     base = tmp_path / "post_mortems"
     journal = MergeJournal(tmp_path / "j.sqlite")
     await journal.init()

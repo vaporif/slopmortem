@@ -11,6 +11,8 @@ wiring lands in Task 10 (per plan line 713); the module-level ``_emit_event``
 hook is a no-op stub until that orchestration ships.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -23,13 +25,15 @@ from slopmortem.models import Synthesis
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from slopmortem.config import Config
     from slopmortem.llm.client import LLMClient
     from slopmortem.models import Candidate, InputContext
 
 # Fixed host allowlist applied on top of the per-candidate
 # ``payload.sources`` hosts. ``web.archive.org`` is intentionally NOT
-# included — Wayback proxies arbitrary URLs and bypasses host-level
+# included: Wayback proxies arbitrary URLs and bypasses host-level
 # allowlist semantics; see spec §995-1006.
 _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 
@@ -51,13 +55,14 @@ def _emit_event(event: SpanEvent) -> None:
         Laminar.event(name=str(event))
 
 
-async def synthesize(
+async def synthesize(  # noqa: PLR0913 — every dependency is required at the call site
     candidate: Candidate,
     ctx: InputContext,
     llm: LLMClient,
     config: Config,
     *,
     model: str | None = None,
+    max_tokens: int | None = None,
 ) -> Synthesis:
     """Generate a single :class:`Synthesis` for *candidate* against the user pitch in *ctx*.
 
@@ -72,6 +77,8 @@ async def synthesize(
         config: :class:`Config`. Drives ``synthesis_tools`` (Tavily inclusion)
             and is reserved for future per-stage knobs.
         model: Optional model override; ``None`` lets the client pick.
+        max_tokens: Optional cap on completion tokens. ``None`` keeps the
+            client's default (no cap sent upstream).
 
     Returns:
         The parsed :class:`Synthesis`. ``sources`` is filtered against
@@ -109,6 +116,7 @@ async def synthesize(
             "provider": {"require_parameters": True},
             "prompt_template_sha": prompt_template_sha("synthesize"),
         },
+        max_tokens=max_tokens,
     )
     parsed = Synthesis.model_validate_json(result.text)
 
@@ -134,13 +142,15 @@ def _build_allowed_hosts(candidate_sources: list[str]) -> frozenset[str]:
     return frozenset(candidate_hosts | _FIXED_HOST_ALLOWLIST)
 
 
-async def synthesize_all(
+async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fan-out wrapper
     candidates: list[Candidate],
     ctx: InputContext,
     llm: LLMClient,
     config: Config,
     *,
     model: str | None = None,
+    max_tokens: int | None = None,
+    on_candidate_done: Callable[[BaseException | None], None] | None = None,
 ) -> list[Synthesis | BaseException]:
     """Cache-warm synthesize fan-out: one warm call, then :func:`gather_resilient`.
 
@@ -156,6 +166,12 @@ async def synthesize_all(
         llm: Async :class:`LLMClient`.
         config: :class:`Config`.
         model: Optional model override.
+        max_tokens: Optional cap on completion tokens, forwarded to each
+            :func:`synthesize` call.
+        on_candidate_done: Optional callback fired exactly once per candidate
+            when its ``synthesize`` call settles. Receives ``None`` on success
+            or the raised :class:`BaseException` on failure. Intended for
+            progress-bar wiring on the CLI; pipeline pure path passes ``None``.
 
     Returns:
         A list the same length as *candidates*, each entry either a
@@ -165,13 +181,17 @@ async def synthesize_all(
     if not candidates:
         return []
 
-    first: Synthesis | BaseException
-    try:
-        first = await synthesize(candidates[0], ctx, llm, config, model=model)
-    except Exception as exc:  # noqa: BLE001 — record the failure as a list entry, not a raise
-        first = exc
+    async def _run_one(candidate: Candidate) -> Synthesis | BaseException:
+        try:
+            result: Synthesis | BaseException = await synthesize(
+                candidate, ctx, llm, config, model=model, max_tokens=max_tokens
+            )
+        except Exception as exc:  # noqa: BLE001 — record failure as a list entry
+            result = exc
+        if on_candidate_done is not None:
+            on_candidate_done(result if isinstance(result, BaseException) else None)
+        return result
 
-    rest_results = await gather_resilient(
-        *(synthesize(c, ctx, llm, config, model=model) for c in candidates[1:]),
-    )
+    first = await _run_one(candidates[0])
+    rest_results = await gather_resilient(*(_run_one(c) for c in candidates[1:]))
     return [first, *rest_results]

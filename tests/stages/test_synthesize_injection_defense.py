@@ -1,4 +1,6 @@
-"""Injection-defense test for synthesize: emits PROMPT_INJECTION_ATTEMPTED + drops attacker URLs."""
+"""Injection-defense for synthesize: emits PROMPT_INJECTION_ATTEMPTED and drops attacker URLs."""
+
+from __future__ import annotations
 
 import json
 from datetime import date
@@ -23,7 +25,7 @@ def _load_injection_fixtures() -> list[tuple[str, str]]:
     """Read every ``.txt`` in the injection fixture dir at collection time.
 
     Returns ``(stem, body)`` pairs so parametrize ids stay readable and the
-    test body itself never touches the filesystem (avoids ``ASYNC240``).
+    test body never touches the filesystem (avoids ``ASYNC240``).
     """
     return [(p.stem, p.read_text()) for p in sorted(_FIXTURE_DIR.glob("*.txt"))]
 
@@ -63,7 +65,7 @@ def _injection_synthesis_payload() -> str:
     The prompt template tells the LLM to write the literal string
     ``prompt_injection_attempted`` into ``where_diverged`` when an
     injection is detected. Sources also contain an attacker host so we
-    can confirm the URL filter swallows it independently.
+    can confirm the URL filter drops it independently.
     """
     return json.dumps(
         {
@@ -92,7 +94,7 @@ def _injection_synthesis_payload() -> str:
 
 @pytest.fixture
 def captured_events(monkeypatch: pytest.MonkeyPatch) -> list[SpanEvent]:
-    """Replace the no-op ``_emit_event`` with a list-appending stub for the duration of a test."""
+    """Replace the no-op ``_emit_event`` with a list-appending stub for one test."""
     events: list[SpanEvent] = []
     monkeypatch.setattr(synth_module, "_emit_event", events.append)
     return events
@@ -133,5 +135,5 @@ async def test_synthesize_ignores_injected_instructions(
 
     # URL filter must drop attacker.com regardless of where it came from.
     assert "attacker.com" not in str(s.sources)
-    # Detection: span event was emitted for this turn.
+    # Span event was emitted for this turn.
     assert SpanEvent.PROMPT_INJECTION_ATTEMPTED in captured_events

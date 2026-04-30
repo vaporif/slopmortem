@@ -1,5 +1,7 @@
 """Deterministic in-memory EmbeddingClient stub keyed on sha256(text)."""
 
+from __future__ import annotations
+
 import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -67,7 +69,7 @@ class FakeEmbeddingClient:
                     raise NoCannedEmbeddingError(msg)
                 vectors.append(list(self._canned[key]))
             return EmbeddingResult(vectors=vectors, n_tokens=0, cost_usd=0.0)
-        # sha fallback (today's behavior)
+        # sha fallback
         dim = EMBED_DIMS[eff_model] if model is not None else self.dim
         vectors = [_sha_vector(t, dim) for t in texts]
         return EmbeddingResult(

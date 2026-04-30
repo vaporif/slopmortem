@@ -1,5 +1,7 @@
 """LLMClient Protocol: chat-completion shape shared by real, fake, and cassette backends."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -24,7 +26,7 @@ class LLMClient(Protocol):
     """Async chat-completion contract that real and fake LLM backends implement."""
 
     # ``Any`` here is intentional: tools/response_format/extra_body are SDK passthroughs.
-    async def complete(  # noqa: PLR0913 — mirrors OpenAI chat.create
+    async def complete(  # noqa: PLR0913 - mirrors OpenAI chat.create
         self,
         prompt: str,
         *,
@@ -34,6 +36,7 @@ class LLMClient(Protocol):
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
         """Run a completion; the implementation may handle tool calls and retries internally."""
         ...

@@ -7,6 +7,8 @@ the user's description (dense via :class:`EmbeddingClient`, sparse via
 ``embed_sparse.encode``) and forwards every other knob through unchanged.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from lmnr import Laminar, observe
@@ -21,7 +23,7 @@ if TYPE_CHECKING:
 type SparseEncoder = Callable[[str], dict[int, float]]
 
 
-# Note: lmnr-python at this version exposes ``ignore_output`` (singular bool) — the
+# Note: lmnr-python at this version exposes ``ignore_output`` (singular bool); the
 # plan referenced ``ignore_outputs`` which does not exist. ``ignore_output=True``
 # drops the auto-captured ``Candidate`` output and we re-attach a redacted
 # ``(canonical_id, score, name, facets, slop_score)`` projection via
@@ -45,7 +47,7 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
     """Embed *description* and run hybrid retrieve against *corpus*.
 
     Args:
-        description: User's pitch text — both the dense and sparse query
+        description: User's pitch text. Both the dense and sparse query
             inputs come from this verbatim. No HyDE expansion (see spec
             line 213; rerank slack absorbs the modality gap).
         facets: Soft-boost facets from the facet-extract stage; ``"other"``

@@ -1,5 +1,7 @@
 """TavilyEnricher recovers article bodies via Tavily's /extract API."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -49,7 +51,7 @@ async def test_skips_when_url_missing(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_populates_raw_html_and_markdown_on_success(monkeypatch):
-    """On a 200 with a results[0].raw_content, both raw_html and markdown_text fill."""
+    """On a 200 with ``results[0].raw_content``, both ``raw_html`` and ``markdown_text`` fill."""
     # Body needs to clear ``extract.LENGTH_FLOOR`` (500 chars) for trafilatura
     # to return a non-empty extraction.
     body_paragraph = (
@@ -102,7 +104,7 @@ async def test_returns_entry_unchanged_on_http_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_returns_entry_unchanged_when_api_key_missing(monkeypatch):
-    """No TAVILY_API_KEY -> enricher logs and returns the entry unchanged (does not raise)."""
+    """Missing ``TAVILY_API_KEY``: enricher logs and returns the entry unchanged (no raise)."""
     mock_post = AsyncMock()
     monkeypatch.setattr("slopmortem.corpus.sources.tavily.safe_post", mock_post)
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)

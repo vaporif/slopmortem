@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from slopmortem.models import (
     Candidate,
     CandidatePayload,
@@ -33,7 +35,7 @@ def test_facets_field_names_singular_match_taxonomy():
     )
     fields = set(Facets.model_fields.keys())
     assert {"sector", "business_model", "customer_type", "geography", "monetization"} <= fields
-    # NOT plural — guards against silent FormulaQuery boost mismatch
+    # NOT plural; guards against silent FormulaQuery boost mismatch.
     assert "sectors" not in fields
     assert "business_models" not in fields
 
@@ -84,7 +86,7 @@ def test_scored_candidate_minimal_shape():
         ),
         rationale="one liner",
     )
-    # No embedded Candidate — drift guard
+    # No embedded Candidate; drift guard.
     assert "candidate" not in ScoredCandidate.model_fields
 
 
@@ -95,5 +97,5 @@ def test_merge_state_enum_values():
         "alias_blocked",
         "resolver_flipped",
     }
-    # NOT "quarantined" — quarantined docs live in quarantine_journal (Blocker B4)
+    # NOT "quarantined"; quarantined docs live in quarantine_journal (Blocker B4).
     assert not hasattr(MergeState, "QUARANTINED")

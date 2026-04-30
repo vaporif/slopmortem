@@ -26,6 +26,8 @@ Why not the official ``algoliasearch`` Python client?
   client's connection pooling and retry logic make cassettes brittle.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -135,6 +137,7 @@ class HNAlgoliaSource:
                 logger.warning("hn_algolia: unexpected hits type for %s", url)
                 return
             hits_list = cast("list[object]", hits_field)
+            logger.info("hn_algolia: page %d, %d hits", page, len(hits_list))
             for hit in hits_list:
                 if not isinstance(hit, dict):
                     continue

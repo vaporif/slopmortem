@@ -8,6 +8,7 @@
       "geography": "us",
       "monetization": "subscription_recurring"
     },
+    "top_n": 2,
     "candidates": [
       {
         "candidate_id": "scribetech.com",

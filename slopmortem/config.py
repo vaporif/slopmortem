@@ -1,5 +1,7 @@
 """Config loader: TOML, env, and secrets, validated on load."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import override
 
@@ -13,7 +15,7 @@ from pydantic_settings import (
 
 
 class Config(BaseSettings):
-    """All knobs slopmortem reads at startup — TOML overrides env, env overrides defaults."""
+    """All knobs slopmortem reads at startup. TOML overrides env, env overrides defaults."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -27,7 +29,7 @@ class Config(BaseSettings):
     facet_boost: float = 0.01
     rrf_k: int = 60
     slop_threshold: float = 0.7
-    max_doc_tokens: int = 50000
+    max_doc_tokens: int = 8000
     tier3_calibration_band: tuple[float, float] = (0.65, 0.85)
     max_cost_usd_per_query: float = 2.00
     max_cost_usd_per_ingest: float = 15.00
@@ -38,6 +40,17 @@ class Config(BaseSettings):
     model_rerank: str = "anthropic/claude-sonnet-4.6"
     model_synthesize: str = "anthropic/claude-sonnet-4.6"
 
+    # Per-stage output caps. OpenRouter requires holding upfront credit for the
+    # model's max output, so leaving these unset reserves the full 64K Anthropic
+    # ceiling and surfaces as HTTP 402 on low-balance keys. Values are sized to
+    # each stage's actual output shape with slack.
+    max_tokens_facet: int = 2000
+    max_tokens_summarize: int = 1500
+    max_tokens_rerank: int = 4000
+    max_tokens_synthesize: int = 16000
+    max_tokens_slop_judge: int = 64
+    max_tokens_tiebreaker: int = 256
+
     embedding_provider: str = "fastembed"
     embed_model_id: str = "nomic-ai/nomic-embed-text-v1.5"
     embed_cache_dir: Path | None = None
@@ -47,10 +60,7 @@ class Config(BaseSettings):
     taxonomy_version: str = "v1"
     reliability_rank_version: str = "v1"
 
-    enable_tavily_enrich: bool = False
     enable_tavily_synthesis: bool = False
-    enable_wayback: bool = False
-    enable_crunchbase: bool = False
     enable_tracing: bool = False
     strict_deaths: bool = False
 
@@ -60,6 +70,22 @@ class Config(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     tavily_api_key: SecretStr = SecretStr("")
     laminar_api_key: SecretStr = SecretStr("")
+
+    # Infrastructure knobs populated from env (``LMNR_*``, ``QDRANT_*``,
+    # ``POST_MORTEMS_ROOT``, ``MERGE_JOURNAL_PATH``). Declared here so the
+    # CLI can read them off ``Config`` instead of ``os.environ`` and so
+    # ``extra="forbid"`` doesn't reject ``.env`` entries for them.
+    lmnr_project_api_key: SecretStr = SecretStr("")
+    lmnr_base_url: str = ""
+    lmnr_allow_remote: str = ""
+    qdrant_host: str = "localhost"
+    # Non-standard 16333 so the project's docker-compose Qdrant doesn't collide
+    # with a pre-existing 6333 instance on the dev box. The container internally
+    # still serves 6333; only the host-side publish port is bumped.
+    qdrant_port: int = 16333
+    qdrant_collection: str = "slopmortem"
+    post_mortems_root: str = "./post_mortems"
+    merge_journal_path: str = ""
 
     @model_validator(mode="after")
     def _check_k_ge_n(self) -> Config:

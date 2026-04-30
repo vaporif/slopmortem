@@ -1,4 +1,6 @@
-"""Corpus test fixtures — Qdrant probe, async client. Reuses repo-root vcr_config."""
+"""Corpus test fixtures: Qdrant probe, async client. Reuses repo-root vcr_config."""
+
+from __future__ import annotations
 
 import socket
 from typing import TYPE_CHECKING

@@ -1,4 +1,6 @@
-"""CLI tests for ``slopmortem ingest``: wiring assembled, orchestrator dispatched."""
+"""CLI tests for ``slopmortem ingest``, covering wiring assembly and orchestrator dispatch."""
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
@@ -13,8 +15,12 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
-    """Return six MagicMock placeholders matching ``_build_ingest_deps``'s tuple shape."""
+async def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
+    """Return six MagicMock placeholders matching ``_build_ingest_deps``'s tuple shape.
+
+    Async because ``_build_ingest_deps`` is async; it awaits the journal's
+    ``init()`` to create the sqlite schema.
+    """
     return (
         MagicMock(name="llm"),
         MagicMock(name="embed"),
@@ -28,10 +34,10 @@ def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
 def test_ingest_dry_run_dispatches_to_orchestrator(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """--dry-run path: real wiring assembled, ingest() called with dry_run=True."""
+    """--dry-run path: wiring is assembled and ingest() is called with dry_run=True."""
     fake_ingest = AsyncMock(return_value=MagicMock(dry_run=True, processed=0))
     monkeypatch.setattr("slopmortem.cli.ingest", fake_ingest)
-    # Block real Qdrant / OpenRouter / OpenAI / sqlite construction:
+    # Block real Qdrant / OpenRouter / OpenAI / sqlite construction.
     monkeypatch.setattr("slopmortem.cli._build_ingest_deps", _fake_deps)
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", "--dry-run", "--post-mortems-root", str(tmp_path)])

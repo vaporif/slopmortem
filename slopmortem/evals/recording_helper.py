@@ -5,6 +5,8 @@ atomic dir swap, and forces Tavily off. Test authors call this when they
 want a per-test cassette set without re-implementing the plumbing.
 """
 
+from __future__ import annotations
+
 import os
 import shutil
 import time
@@ -202,12 +204,13 @@ class _ByModelLLM:
         cache: bool = False,
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
+        max_tokens: int | None = None,
     ) -> CompletionResult:
         """Forward ``complete`` to the wrapper keyed by ``model``.
 
         Raises:
-            KeyError: When ``model`` is ``None`` or not in the dispatch table —
-                callers must always pass an explicit model.
+            KeyError: When ``model`` is ``None`` or not in the dispatch table.
+                Callers must always pass an explicit model.
         """
         if model is None or model not in self._by_model:
             msg = f"no recording wrapper for model={model!r}"
@@ -220,4 +223,5 @@ class _ByModelLLM:
             cache=cache,
             response_format=response_format,
             extra_body=extra_body,
+            max_tokens=max_tokens,
         )

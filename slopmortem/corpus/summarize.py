@@ -3,9 +3,11 @@
 Runs at ingest time, between :mod:`facet_extract` and :mod:`embed_dense`.
 The 400-token cap is a contract on the LLM's output, enforced by the
 ``Stay under 120 words`` directive in
-``slopmortem/llm/prompts/summarize.j2``, and checked by the rerank stage
+``slopmortem/llm/prompts/summarize.j2``, and checked by the rerank stage,
 which budgets ``K * summary`` tokens for its input window.
 """
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
@@ -21,6 +23,7 @@ async def summarize_for_rerank(
     *,
     model: str | None = None,
     source_id: str = "",
+    max_tokens: int | None = None,
 ) -> str:
     """Produce a one-paragraph summary used as ``payload.summary`` by ``llm_rerank``.
 
@@ -31,6 +34,8 @@ async def summarize_for_rerank(
         source_id: Source attribution embedded in the prompt's
             ``<untrusted_document>`` tag. Defaults to empty since the
             summary text isn't keyed on it.
+        max_tokens: Optional cap on completion tokens. ``None`` keeps the
+            client's default (no cap sent upstream).
 
     Returns:
         The stripped LLM output. The <=400-token cap is a prompt-level
@@ -42,5 +47,6 @@ async def summarize_for_rerank(
         model=model,
         cache=True,
         extra_body={"prompt_template_sha": prompt_template_sha("summarize")},
+        max_tokens=max_tokens,
     )
     return result.text.strip()

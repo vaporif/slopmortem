@@ -7,6 +7,8 @@ available, fetch it and stash the response in ``raw_html`` + ``markdown_text``.
 A no-op when ``raw_html`` is already populated.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote_plus
@@ -106,12 +108,20 @@ class WaybackEnricher:
                 "dict[str, Any]",  # pyright: ignore[reportExplicitAny]
                 resp.json(),
             )
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             return None
         return payload
 
     async def enrich(self, entry: RawEntry) -> RawEntry:
         """Populate ``raw_html``/``markdown_text`` from Wayback when the live URL is dead.
+
+        Skipped when *any* body content is already present, either ``raw_html``
+        (curated path) or ``markdown_text`` (HN path, where the source supplied
+        title + story_text directly). Without the markdown_text guard, a
+        successful Wayback recovery would *overwrite* HN's own body with whatever
+        the linked URL's snapshot happened to be, a quality regression on top of
+        the latency cost (archive.org is ~5x slower for deep-linked HN URLs than
+        for the root-domain Crunchbase URLs Wayback was actually designed for).
 
         Args:
             entry: A ``RawEntry`` produced by an upstream :class:`Source`.
@@ -122,14 +132,23 @@ class WaybackEnricher:
         """
         if entry.raw_html is not None and entry.raw_html.strip():
             return entry
+        if entry.markdown_text is not None and entry.markdown_text.strip():
+            return entry
         if not entry.url:
             return entry
         payload = await self._fetch_json(_availability_url(entry.url))
         snapshot_url = _pick_snapshot_url(payload)
         if not snapshot_url:
+            logger.info("wayback: no snapshot for %s", entry.url)
             return entry
         html = await self._fetch(snapshot_url)
         if not html:
             return entry
         markdown_text = extract_clean(html) or None
+        logger.info(
+            "wayback: recovered %s (%d bytes html, %d chars text)",
+            entry.url,
+            len(html),
+            len(markdown_text or ""),
+        )
         return entry.model_copy(update={"raw_html": html, "markdown_text": markdown_text})

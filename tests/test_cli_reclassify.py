@@ -1,5 +1,7 @@
 """--reclassify dispatches to slopmortem.corpus.reclassify.reclassify_quarantined."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,7 +16,7 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _fake_journal(*_a: object, **_k: object) -> MagicMock:
+async def _fake_journal(*_a: object, **_k: object) -> MagicMock:
     return MagicMock()
 
 

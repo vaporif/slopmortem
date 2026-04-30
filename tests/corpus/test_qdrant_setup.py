@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 from qdrant_client.models import Modifier
 

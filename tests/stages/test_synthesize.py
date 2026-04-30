@@ -1,4 +1,6 @@
-"""Tests for the ``synthesize`` stage: structured-output round trip + cache-warm pattern."""
+"""Tests for the ``synthesize`` stage: structured-output round trip and cache-warm pattern."""
+
+from __future__ import annotations
 
 import json
 from datetime import date
@@ -136,8 +138,8 @@ async def test_synthesize_all_warms_cache_before_gather() -> None:
     """First call asserted as cache-warm; remaining run via asyncio.gather."""
     cands = [_candidate(canonical_id=f"cand-{i}") for i in range(3)]
     payload = _synthesis_payload(candidate_id="cand-0")
-    # One canned entry per rendered (template_sha, model, prompt_hash); the
-    # 3-tuple lookup is strict so each candidate's prompt needs its own key.
+    # One canned entry per rendered (template_sha, model, prompt_hash). The
+    # 3-tuple lookup is strict, so each candidate's prompt needs its own key.
     fake_llm = FakeLLMClient(
         canned=_synthesize_canned(cands, _ctx(), text=payload, cache_creation_tokens=10),
         default_model=_DEFAULT_MODEL,
@@ -148,5 +150,4 @@ async def test_synthesize_all_warms_cache_before_gather() -> None:
     assert len(results) == len(cands)
     # First call must have observed cache-creation tokens (warm path).
     assert fake_llm.calls[0].cache is True
-    # No exceptions in the canned-response happy path.
     assert all(not isinstance(r, Exception) for r in results)

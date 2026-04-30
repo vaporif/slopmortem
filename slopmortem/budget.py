@@ -1,5 +1,7 @@
 """Per-pipeline USD budget. Concurrent-safe reserve/settle bookkeeping."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from uuid import uuid4
 
@@ -12,7 +14,7 @@ class BudgetExceededError(Exception):
 
 @dataclass
 class Budget:
-    """A coroutine-safe USD cap shared across every LLM and embedding call in a pipeline."""
+    """Coroutine-safe USD cap shared across every LLM and embedding call in a pipeline."""
 
     cap_usd: float
     spent_usd: float = 0.0

@@ -1,5 +1,7 @@
 """reclassify_quarantined: re-score quarantined docs; route survivors to raw/."""
 
+from __future__ import annotations
+
 import sqlite3
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock

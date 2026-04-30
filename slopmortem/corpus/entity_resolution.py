@@ -1,5 +1,5 @@
 # pyright: reportAny=false
-"""Entity resolution: tier-1 / tier-2 / tier-3 canonical_id derivation.
+"""Entity resolution: tier-1, tier-2, tier-3 canonical_id derivation.
 
 ``resolve_entity`` returns a :class:`ResolveResult` with the chosen
 canonical_id, the action (``create`` / ``merge`` / ``resolver_flipped`` /
@@ -32,6 +32,8 @@ that shares the merge journal's ``db_path``. The cache key is
 lex-sorted so ``(A, B)`` and ``(B, A)`` collapse to one row.
 """
 
+from __future__ import annotations
+
 import json
 import math
 import re
@@ -56,8 +58,6 @@ if TYPE_CHECKING:
     from slopmortem.llm.embedding_client import EmbeddingClient
     from slopmortem.models import AliasEdge, RawEntry
 
-
-# ─── Module-level constants ────────────────────────────────────────────────────
 
 _PLATFORM_DOMAINS_YAML = Path(__file__).resolve().parent / "sources" / "platform_domains.yml"
 _CORPORATE_HIERARCHY_YAML = (
@@ -95,9 +95,6 @@ _DEFAULT_TIER3_BAND: tuple[float, float] = (0.65, 0.85)
 _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
 
 
-# ─── Public dataclass returned by the resolver ─────────────────────────────────
-
-
 @dataclass(frozen=True, slots=True)
 class ResolveResult:
     """Outcome of a resolve_entity call.
@@ -118,9 +115,6 @@ class ResolveResult:
     action: Literal["create", "merge", "resolver_flipped", "alias_blocked"]
     prior_canonical_id: str | None = None
     span_events: list[str] = field(default_factory=list)
-
-
-# ─── YAML loaders (cached at import time) ──────────────────────────────────────
 
 
 def _load_platform_domains() -> frozenset[str]:
@@ -157,9 +151,6 @@ def _load_corporate_hierarchy_overrides() -> dict[str, list[str]]:
 
 _PLATFORM_DOMAINS: frozenset[str] = _load_platform_domains()
 _HIERARCHY_OVERRIDES: dict[str, list[str]] = _load_corporate_hierarchy_overrides()
-
-
-# ─── Pure helpers ──────────────────────────────────────────────────────────────
 
 
 def _registrable_domain(url: str) -> str:
@@ -208,9 +199,6 @@ def _pair_key(canonical_a: str, canonical_b: str) -> str:
     """Tier-3 cache key: lex-sorted pair joined by a U+0001 SOH separator."""
     lo, hi = sorted((canonical_a, canonical_b))
     return f"{lo}{hi}"
-
-
-# ─── Module-private SQLite helpers (founding-year cache + tier-3 decisions) ────
 
 
 _TIER3_DECISIONS_SCHEMA = """
@@ -361,9 +349,6 @@ def _write_pending_review_sync(  # noqa: PLR0913 — keyword-only review write
         )
 
 
-# ─── Resolver internals ────────────────────────────────────────────────────────
-
-
 def _candidate_tier1_id(url: str) -> tuple[str, bool]:
     """Return ``(registrable_domain, is_platform)``."""
     domain = _registrable_domain(url)
@@ -383,6 +368,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
     section_head_new: str,
     llm_client: LLMClient | None,
     haiku_model_id: str,
+    max_tokens: int | None = None,
 ) -> tuple[str, str]:
     """Return ``(decision, rationale)`` where decision is 'same' or 'different'.
 
@@ -393,7 +379,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
     if similarity <= band[0]:
         return "different", "auto: similarity below lower band"
     if llm_client is None:
-        # In-band but no LLM available → conservative: do NOT collapse.
+        # In-band but no LLM available: conservative, do NOT collapse.
         return "different", "no llm: defaulting to different inside calibration band"
     pk = _pair_key(canonical_existing, canonical_new)
     tiebreaker_hash = prompt_template_sha(_TIEBREAKER_PROMPT_NAME)
@@ -413,6 +399,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
         rendered,
         model=haiku_model_id,
         extra_body={"prompt_template_sha": tiebreaker_hash},
+        max_tokens=max_tokens,
     )
     decision, rationale = _parse_tiebreaker_response(result.text)
     now_iso = utcnow_iso()
@@ -486,9 +473,6 @@ async def _is_parent_subsidiary_suspect(journal: MergeJournal, domain: str, new_
     return new_suffix is not None
 
 
-# ─── Public API ────────────────────────────────────────────────────────────────
-
-
 async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     entry: RawEntry,
     *,
@@ -502,6 +486,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     haiku_model_id: str = "anthropic/claude-haiku-4.5",
     tier3_band: tuple[float, float] = _DEFAULT_TIER3_BAND,
     force_similarity: float | None = None,
+    tiebreaker_max_tokens: int | None = None,
 ) -> ResolveResult:
     """Resolve *entry* to a canonical_id, returning a typed result.
 
@@ -525,6 +510,8 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             mirror spec line 264.
         force_similarity: Test-only. Skips the embedding cosine and uses
             this value directly.
+        tiebreaker_max_tokens: Optional cap on completion tokens for the
+            tier-3 Haiku tiebreaker. ``None`` keeps the client's default.
 
     Returns:
         :class:`ResolveResult` with the chosen canonical_id and action.
@@ -542,7 +529,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
 
     span_events: list[str] = []
 
-    # ─── Step 1: alias precheck (atomic terminal write, runs first). ────
     if alias_hint is not None:
         await journal.upsert_alias_blocked(
             canonical_id=alias_hint.canonical_id,
@@ -557,7 +543,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             span_events=span_events,
         )
 
-    # ─── Step 2: choose tier-1 vs tier-2 candidate. ────────────────────────────
     domain, is_platform = _candidate_tier1_id(entry.url or "")
     candidate_id = domain
     use_tier2 = is_platform or not domain
@@ -580,8 +565,8 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     if use_tier2:
         candidate_id = _tier2_canonical(name, sector)
 
-    # ─── Step 3: tier-3 fuzzy matching (only when on a tier-2 id and an
-    # existing tier-2 sibling is journal-resident under the same sector). ─────
+    # Tier-3 fuzzy matching only fires when on a tier-2 id and an existing
+    # tier-2 sibling is journal-resident under the same sector.
     candidate_id = await _maybe_tier3_collapse(
         db_path=db_path,
         journal=journal,
@@ -595,9 +580,9 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         tier3_band=tier3_band,
         force_similarity=force_similarity,
         is_tier2=use_tier2,
+        tiebreaker_max_tokens=tiebreaker_max_tokens,
     )
 
-    # ─── Step 4: resolver-flip precheck. ──────────────────────────────────────
     prior = await journal.lookup_canonical_for_source(entry.source, entry.source_id)
     if prior is not None and prior != candidate_id:
         await journal.upsert_resolver_flipped(
@@ -613,7 +598,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             span_events=span_events,
         )
 
-    # ─── Step 5: write founding_year cache (if provided), classify create/merge. ─
     if founding_year is not None and _looks_tier1(candidate_id):
         # content_sha256 keyed cache: the spec asks for content_sha256 as
         # the second key component, but we don't have the merged content
@@ -648,6 +632,7 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
     tier3_band: tuple[float, float],
     force_similarity: float | None,
     is_tier2: bool,
+    tiebreaker_max_tokens: int | None = None,
 ) -> str:
     """Run tier-3 fuzzy matching against existing canonicals; return the (possibly merged) id.
 
@@ -690,6 +675,7 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
         section_head_new=section_head_new,
         llm_client=llm_client,
         haiku_model_id=haiku_model_id,
+        max_tokens=tiebreaker_max_tokens,
     )
     if decision == "same":
         return str(sibling)

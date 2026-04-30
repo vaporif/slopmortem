@@ -12,6 +12,8 @@ don't care which source adapter calls them. Curated, HN, and Wayback all share
 the same instance. Crunchbase CSV reads the filesystem and skips both.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Final
 from urllib.parse import urlparse
@@ -34,7 +36,6 @@ __all__ = [
     "throttle_for",
 ]
 
-# Process-wide last-call timestamps and robots.txt cache.
 _last_call: dict[str, float] = {}
 _robots_cache: dict[str, RobotFileParser | None] = {}
 _robots_lock = anyio.Lock()
@@ -81,7 +82,7 @@ async def _load_robots(host: str, scheme: str) -> RobotFileParser | None:
     robots_url = f"{scheme}://{host}/robots.txt"
     try:
         resp = await safe_get(robots_url)
-    except SSRFBlockedError, httpx.HTTPError:
+    except (SSRFBlockedError, httpx.HTTPError):
         # No robots fetched. Default to "allowed" by returning None.
         return None
     if resp.status_code >= HTTP_BAD_REQUEST:

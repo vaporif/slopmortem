@@ -9,6 +9,8 @@ The on-disk cassette format and the loaders/writers live in
 cycles.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 from typing import TYPE_CHECKING
@@ -30,7 +32,7 @@ def template_sha(
 
     Returns a full hex digest (no truncation). Editing the template, the tool
     list, or the Pydantic response schema invalidates every cassette under
-    that template — exactly the cache-invalidation behaviour we want.
+    that template, which is the cache-invalidation we want.
     """
     parts = [
         template_text,
