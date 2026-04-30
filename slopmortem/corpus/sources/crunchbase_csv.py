@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
 
-# Common column names across Crunchbase export variants.
+# Crunchbase export variants use different column names for the same field.
 _ID_COLS = ("uuid", "id", "permalink", "cb_url")
 _NAME_COLS = ("name", "company_name", "organization_name")
 _URL_COLS = ("homepage_url", "homepage", "url", "website")

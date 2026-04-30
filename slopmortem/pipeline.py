@@ -50,7 +50,7 @@ class QueryPhase(StrEnum):
 
     Mirrors :class:`slopmortem.ingest.IngestPhase`: a closed enum gives typo
     safety (``"facetextract"`` fails at parse time) and exhaustiveness checks
-    in match statements / dict literals.
+    in match statements and dict literals.
     """
 
     FACET_EXTRACT = "facet_extract"
@@ -68,6 +68,7 @@ class QueryProgress(Protocol):
     implementation. Mirrors :class:`slopmortem.ingest.IngestProgress` so a
     future shared base is straightforward.
     """
+
 
     def start_phase(self, phase: QueryPhase, total: int) -> None:
         """Announce *phase* with an expected ``total`` of advances."""
@@ -120,10 +121,11 @@ def _join_to_candidates(
 ) -> list[Candidate]:
     """Re-attach :class:`Candidate` payloads to the rerank-ordered ids.
 
-    The reranker returns :class:`ScoredCandidate` (id + perspective scores) but
-    synthesize needs the full :class:`Candidate` (with ``payload.body``). We
-    preserve the rerank order and silently drop any ranked id missing from the
-    retrieved set. Defensive only, since the reranker only sees retrieved ids.
+    The reranker returns :class:`ScoredCandidate` (id and perspective scores)
+    but synthesize needs the full :class:`Candidate` (with ``payload.body``).
+    We preserve the rerank order and silently drop any ranked id missing
+    from the retrieved set. Defensive only, since the reranker only sees
+    retrieved ids.
     """
     id_to_candidate = {c.canonical_id: c for c in retrieved}
     out: list[Candidate] = []

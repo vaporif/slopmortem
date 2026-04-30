@@ -1,4 +1,4 @@
-"""Injection-defense test for synthesize: emits PROMPT_INJECTION_ATTEMPTED + drops attacker URLs."""
+"""Injection-defense test for synthesize: emits PROMPT_INJECTION_ATTEMPTED and drops attacker URLs."""
 
 from __future__ import annotations
 

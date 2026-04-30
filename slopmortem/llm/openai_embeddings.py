@@ -53,7 +53,7 @@ def _input_rate_per_million(model: str) -> float:
 class OpenAIEmbeddingClient:
     """OpenAI-compatible SDK wrapper that embeds text under a shared cost Budget."""
 
-    def __init__(  # noqa: PLR0913 — knobs are public API; users construct this directly.
+    def __init__(  # noqa: PLR0913 - knobs are public API; users construct this directly.
         self,
         *,
         sdk: object,
@@ -112,10 +112,10 @@ class OpenAIEmbeddingClient:
                     raise
                 await self._backoff(attempt)
                 continue
-        msg = "retry loop exited without resolution"  # pragma: no cover — unreachable
+        msg = "retry loop exited without resolution"  # pragma: no cover - unreachable
         raise RuntimeError(msg)
 
     async def _backoff(self, attempt: int) -> None:
         delay = self._initial_backoff * (2**attempt)
-        delay += random.uniform(0, delay * 0.25)  # noqa: S311 — non-cryptographic jitter
+        delay += random.uniform(0, delay * 0.25)  # noqa: S311 - non-cryptographic jitter
         await self._sleep(delay)

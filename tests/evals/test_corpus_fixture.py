@@ -1,4 +1,4 @@
-"""Round-trip tests for corpus_fixture dump/restore + SHA stability."""
+"""Round-trip tests for corpus_fixture dump/restore and SHA stability."""
 
 from __future__ import annotations
 

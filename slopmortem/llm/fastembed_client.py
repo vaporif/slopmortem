@@ -64,7 +64,7 @@ class FastEmbedEmbeddingClient:
             return self._te
 
     def _load_sync(self) -> TextEmbedding:
-        from fastembed import TextEmbedding  # noqa: PLC0415 — heavy import, defer
+        from fastembed import TextEmbedding  # noqa: PLC0415 - heavy import, defer
 
         cache_dir = str(self._cache_dir) if self._cache_dir is not None else None
         try:
@@ -114,6 +114,6 @@ class FastEmbedEmbeddingClient:
             norm = float(np.linalg.norm(arr))
             if norm > 0.0:
                 arr = arr / norm
-            vectors.append(arr.tolist())  # pyright: ignore[reportAny] — numpy ndarray.tolist() typed as Any
+            vectors.append(arr.tolist())  # pyright: ignore[reportAny] - numpy ndarray.tolist() typed as Any
         n_tokens = int(te.token_count(texts))
         return vectors, n_tokens

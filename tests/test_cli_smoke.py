@@ -72,7 +72,7 @@ def _fixture_report(*, name: str = "Foo") -> Report:
 
 def _build_fake_deps(_config: Config) -> tuple[object, object, object, Budget]:
     """Stand-in for :func:`slopmortem.cli._build_deps`; returns inert objects."""
-    # Bare ``object()`` instances are fine here — the smoke test patches
+    # Bare ``object()`` instances are fine here. The smoke test patches
     # ``run_query``, so these are never called.
     return object(), object(), object(), Budget(cap_usd=0.0)
 
@@ -92,7 +92,7 @@ def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name)
 
-    # Swap dep-construction so we don't need real OPENROUTER_API_KEY etc.
+    # Swap dep-construction so the test doesn't need real OPENROUTER_API_KEY etc.
     monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
     monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)

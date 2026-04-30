@@ -72,7 +72,7 @@ class FakeLLMClient:
     default_model: str
     calls: list[_Call] = field(default_factory=list)
 
-    async def complete(  # noqa: PLR0913 — mirrors LLMClient.complete public signature
+    async def complete(  # noqa: PLR0913 - mirrors LLMClient.complete public signature
         self,
         prompt: str,
         *,

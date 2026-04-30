@@ -17,7 +17,7 @@ _PRICES_PATH = Path(__file__).resolve().parents[2] / "slopmortem" / "llm" / "pri
 
 
 def _stub_embed_response(*, dim: int, n: int = 1, total_tokens: int = 10):
-    """Mirror openai SDK shape: resp.data[i].embedding, resp.usage.total_tokens."""
+    """Mirror the openai SDK shape: resp.data[i].embedding, resp.usage.total_tokens."""
     return SimpleNamespace(
         data=[SimpleNamespace(embedding=[0.0] * dim) for _ in range(n)],
         usage=SimpleNamespace(total_tokens=total_tokens),
@@ -174,7 +174,7 @@ async def test_openai_embed_empty_input_returns_empty_without_calling_sdk(fake_s
 
 
 def test_config_defaults_to_fastembed_with_nomic(tmp_path, monkeypatch):
-    # Run with no slopmortem.toml or env present so we read pure code defaults.
+    # No slopmortem.toml and no env, so we read pure code defaults.
     monkeypatch.chdir(tmp_path)
     cfg = Config()
     assert cfg.embedding_provider == "fastembed"

@@ -1,4 +1,4 @@
-"""Tests for record_cassettes_for_inputs(): atomic swap, tmp cleanup, Tavily forced off."""
+"""Tests for record_cassettes_for_inputs: atomic swap, tmp cleanup, Tavily forced off."""
 
 from __future__ import annotations
 
@@ -19,10 +19,10 @@ def test_sweep_removes_only_stale_recording_dirs(tmp_path: Path) -> None:
     fresh.mkdir()
     stale = tmp_path / "scope.99.def.recording"
     stale.mkdir()
-    # Touch back 25h.
+    # Backdate by 25h so the sweeper sees it as stale.
     old_mtime = fresh.stat().st_mtime - 25 * 3600
     os.utime(stale, (old_mtime, old_mtime))
-    # Sibling that's not a tmp dir; never touched.
+    # Sibling that isn't a tmp dir; the sweeper must leave it alone.
     keep = tmp_path / "scope"
     keep.mkdir()
 

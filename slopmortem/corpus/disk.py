@@ -45,7 +45,6 @@ def _write_sync(path: Path, contents: str) -> None:
             tmp.unlink()
 
 
-
 async def write_canonical_atomic(
     base: Path,
     text_id: str,

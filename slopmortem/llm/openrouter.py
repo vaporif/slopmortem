@@ -110,7 +110,7 @@ class OpenRouterClient:
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
     ) -> CompletionResult:
-            """Run a chat completion, including the tool-call loop, cache re-warming, and retries."""
+        """Run a chat completion, including the tool-call loop, cache re-warming, and retries."""
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
         registered = {t.name: t for t in (tools or [])}

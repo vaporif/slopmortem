@@ -1,4 +1,4 @@
-"""Pure markdown renderer for :class:`Report`. No I/O. Strictly text-in, text-out.
+"""Pure markdown renderer for :class:`Report`. No I/O. Text-in, text-out.
 
 Defense-in-depth output filter: clickable autolinks (``[txt](url)`` and
 reference-style ``[txt][ref]``) and image markdown (``![alt](url)``) are
@@ -37,10 +37,9 @@ _IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 def _strip_markdown_links(text: str) -> str:
     """Strip inline links, reference-style links, and image markdown from *text*.
 
-    Replacement order matters: images use ``![alt](url)`` which would also
+    Replacement order matters: images use ``![alt](url)``, which would also
     match the inline-link pattern after the leading ``!`` if we ran the
-    inline rule first. Strip images first, then inline links, then ref
-    links.
+    inline rule first. Strip images first, then inline links, then ref links.
     """
     text = _IMAGE.sub(r"\1", text)
     text = _INLINE_LINK.sub(r"\1", text)
@@ -139,8 +138,8 @@ def render(report: Report) -> str:
     Returns:
         Markdown text suitable for stdout. Inline markdown links,
         reference-style links, and image markdown are stripped from every
-        prose field. Sources are emitted as plain URLs (one per line) so
-        no clickable autolink reaches a markdown viewer.
+        prose field. Sources are emitted as plain URLs (one per line) so no
+        clickable autolink reaches a markdown viewer.
     """
     sections: list[str] = [
         f"# Premortem report for {report.input.name}",

@@ -3,7 +3,7 @@
 Sections sort by ``(reliability_rank, source_id)`` and join with a stable
 separator plus a markdown heading naming the source. Re-running ingest in
 any order yields byte-identical output, which feeds a stable content_hash
-that short-circuits re-extraction and re-embedding downstream.
+that skips re-extraction and re-embedding downstream.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ class Section:
 def combined_text(sections: list[Section]) -> str:
     """Return the deterministic merged text for *sections*.
 
-    Sort ascending by ``(reliability_rank, source_id)``: most-reliable
+    Sort ascending by ``(reliability_rank, source_id)``, most-reliable
     source first, ties broken lexicographically. Each rendered section is
     preceded by ``## <source>:<source_id>`` so provenance shows up in the
     merged document.

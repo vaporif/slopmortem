@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 # Fixed host allowlist applied on top of the per-candidate
 # ``payload.sources`` hosts. ``web.archive.org`` is intentionally NOT
-# included — Wayback proxies arbitrary URLs and bypasses host-level
+# included: Wayback proxies arbitrary URLs and bypasses host-level
 # allowlist semantics; see spec §995-1006.
 _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 

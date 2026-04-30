@@ -93,7 +93,7 @@ def test_slugify_model_replaces_slash_colon_at() -> None:
     assert _slugify_model("Qdrant/bm25") == "Qdrant_bm25"
     assert _slugify_model("nomic-ai/nomic-embed-text-v1.5") == "nomic-ai_nomic-embed-text-v1.5"
     # Idempotent on already-safe input.
-    assert _slugify_model("plain-name_v1.5") == "plain-name_v1.5"  # noqa: comment retained intentionally
+    assert _slugify_model("plain-name_v1.5") == "plain-name_v1.5"
 
 
 def test_llm_cassette_round_trip(tmp_path: Path) -> None:
@@ -146,7 +146,7 @@ def test_sparse_embedding_round_trip(tmp_path: Path) -> None:
 
 
 def test_major_schema_mismatch_is_fatal(tmp_path: Path) -> None:
-    """Major bump means breaking change → reader must hard-fail (P12 policy)."""
+    """Major bump means breaking change, so the reader must hard-fail (P12 policy)."""
     bad = tmp_path / "facet_extract__m__0123456789abcdef.json"
     bad.write_text(
         json.dumps(
@@ -163,7 +163,7 @@ def test_major_schema_mismatch_is_fatal(tmp_path: Path) -> None:
 
 
 def test_unparseable_schema_version_is_fatal(tmp_path: Path) -> None:
-    """Non-string or non-dotted version → fail loud, never silently accept (P12)."""
+    """Non-string or non-dotted version must fail loud, never silently accept (P12)."""
     bad = tmp_path / "facet_extract__m__0123456789abcdef.json"
     bad.write_text(json.dumps({"schema_version": 99, "key": {}, "response": {}}))
     with pytest.raises(CassetteSchemaError):
@@ -244,7 +244,7 @@ async def test_fake_llm_client_keys_on_three_tuple() -> None:
 
 
 async def test_fake_llm_client_strict_no_wildcard_fallback() -> None:
-    # 2-tuple shape would have been the wildcard before; now strict 3-tuple required.
+    # 2-tuple was the old wildcard shape; strict 3-tuple is now required.
     canned = {("template_sha_a", "m", "0123456789abcdef"): FakeResponse(text="hit")}
     llm = FakeLLMClient(canned=canned, default_model="m")
     with pytest.raises(NoCannedResponseError) as exc_info:

@@ -61,7 +61,7 @@ Live-mode limitation
 
 In ``--live`` mode, ``allowed_hosts`` for the ``all_sources_in_allowed_domains``
 assertion is reduced to the fixed allowlist
-(:data:`slopmortem.stages.synthesize._FIXED_HOST_ALLOWLIST`) only — the
+(:data:`slopmortem.stages.synthesize._FIXED_HOST_ALLOWLIST`) only. The
 public :class:`Corpus` Protocol does not expose payload sources, and we
 deliberately do not extend it. Deterministic mode tightens this by including
 each candidate's own payload sources via the private in-memory corpus.
@@ -110,10 +110,6 @@ if TYPE_CHECKING:
     from slopmortem.llm.client import CompletionResult
     from slopmortem.models import Report
 
-# ---------------------------------------------------------------------------
-# Constants — deterministic-mode fixtures (mirrors tests/test_pipeline_e2e.py)
-# ---------------------------------------------------------------------------
-
 _DETERMINISTIC_FACET_MODEL = "test-facet"
 _DETERMINISTIC_RERANK_MODEL = "test-rerank"
 _DETERMINISTIC_SYNTH_MODEL = "test-synth"
@@ -129,10 +125,8 @@ _ASSERTION_NAMES: tuple[str, ...] = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Deterministic-mode canned data (private duplication of tests/test_pipeline_e2e.py
-# helpers; kept private to runner.py to avoid a shared-fixture module).
-# ---------------------------------------------------------------------------
+# Deterministic-mode canned data: private duplication of tests/test_pipeline_e2e.py
+# helpers, kept private to runner.py to avoid a shared-fixture module.
 
 
 def _facets() -> Facets:
@@ -236,7 +230,7 @@ def _build_canned(
     the deterministic runner with cassette-backed replay. This function still
     keys on a placeholder ``prompt_hash`` so the type matches
     ``FakeLLMClient.canned`` (now 3-tuple) and the codebase compiles in
-    lock-step with Task 1; the live eval runner is exercised end-to-end
+    lock-step with Task 1. The live eval runner is exercised end-to-end
     through Task 6, not from this stub.
     """
     placeholder_hash = "0" * 16
@@ -266,8 +260,8 @@ class _EvalCorpus:
 
     Mirrors the ``_FakeCorpus`` from ``tests/test_pipeline_e2e.py``. Adds
     :meth:`lookup_payload` so the runner can extract per-candidate source
-    hosts for the ``all_sources_in_allowed_domains`` assertion (Corpus
-    Protocol intentionally does not expose payload-by-id).
+    hosts for the ``all_sources_in_allowed_domains`` assertion. The Corpus
+    Protocol intentionally does not expose payload-by-id.
     """
 
     candidates: list[Candidate]
@@ -319,7 +313,7 @@ class _EvalCorpus:
     def lookup_payload(self, canonical_id: str) -> CandidatePayload | None:
         """Return the persisted payload for *canonical_id*, or None if unknown.
 
-        Private to the runner: the public :class:`Corpus` Protocol intentionally
+        Private to the runner. The public :class:`Corpus` Protocol intentionally
         does not expose payloads. We use this only in deterministic mode to
         compute per-candidate ``allowed_hosts`` before calling
         :func:`all_sources_in_allowed_domains`.
@@ -347,11 +341,6 @@ def _build_deterministic_config() -> Config:
     )
 
 
-# ---------------------------------------------------------------------------
-# Dataset / row-id handling
-# ---------------------------------------------------------------------------
-
-
 def _load_dataset(path: Path) -> list[InputContext]:
     """Parse a JSONL dataset into :class:`InputContext` rows.
 
@@ -364,7 +353,7 @@ def _load_dataset(path: Path) -> list[InputContext]:
         line = raw.strip()
         if not line:
             continue
-        # ``json.loads`` returns ``Any``; narrow at the InputContext boundary.
+        # ``json.loads`` returns ``Any``. Narrow at the InputContext boundary.
         parsed: object = json.loads(line)  # pyright: ignore[reportAny]
         rows.append(InputContext.model_validate(parsed))
     return rows
@@ -400,11 +389,6 @@ def _verify_unique_row_ids(rows: list[InputContext]) -> list[str]:
     return ids
 
 
-# ---------------------------------------------------------------------------
-# Per-row scoring
-# ---------------------------------------------------------------------------
-
-
 def _allowed_hosts_for_candidate(
     candidate_id: str,
     eval_corpus: _EvalCorpus | None,
@@ -414,7 +398,7 @@ def _allowed_hosts_for_candidate(
     In deterministic mode (``eval_corpus is not None``), unions the
     fixed allowlist with the candidate's own payload sources. In
     ``--live`` mode (``eval_corpus is None``), reduces to the fixed
-    allowlist only — see module docstring's "Live-mode limitation".
+    allowlist only. See the module docstring's "Live-mode limitation".
     """
     hosts: set[str] = set(_FIXED_HOST_ALLOWLIST)
     if eval_corpus is None:
@@ -448,11 +432,6 @@ def _score_report(report: Report, *, eval_corpus: _EvalCorpus | None) -> dict[st
         "candidates_count": len(report.candidates),
         "assertions": assertions,
     }
-
-
-# ---------------------------------------------------------------------------
-# Pipeline driver
-# ---------------------------------------------------------------------------
 
 
 async def _run_deterministic(
@@ -492,7 +471,7 @@ async def _run_deterministic(
 async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, dict[str, object]]:
     """Run every row through real production deps. May spend real money."""
     # Lazy-imported so deterministic mode doesn't drag CLI deps in.
-    # Both names are private — sanctioned reuse: the runner mirrors the CLI
+    # Both names are private; sanctioned reuse: the runner mirrors the CLI
     # boot path exactly so live evals get the same prod wiring.
     from slopmortem.cli import (  # noqa: PLC0415
         _build_deps,  # pyright: ignore[reportPrivateUsage]

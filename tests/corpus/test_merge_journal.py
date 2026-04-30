@@ -55,7 +55,6 @@ async def test_reverse_index_detects_resolver_flip(journal):
 
 
 async def test_resolver_flipped_terminal_state(journal):
-    # First (source, source_id) lands on acme.com complete.
     await journal.upsert_pending(canonical_id="acme.com", source="hn", source_id="1")
     await journal.mark_complete(
         canonical_id="acme.com",
@@ -64,7 +63,7 @@ async def test_resolver_flipped_terminal_state(journal):
         skip_key="k1",
         merged_at="2026-04-28T00:00:00Z",
     )
-    # Now the resolver flipped this same (hn, 1) to acme-ai.com.
+    # Resolver now flips the same (hn, 1) to acme-ai.com.
     await journal.upsert_resolver_flipped(canonical_id="acme-ai.com", source="hn", source_id="1")
     rows = await journal.fetch_by_key("acme-ai.com", "hn", "1")
     assert len(rows) == 1
@@ -95,7 +94,6 @@ async def test_upsert_alias_blocked_atomic(journal):
 
 
 async def test_pending_idempotent_upsert(journal):
-    # Re-upserting pending for the same row key is allowed and no-ops.
     await journal.upsert_pending(canonical_id="a.com", source="hn", source_id="1")
     await journal.upsert_pending(canonical_id="a.com", source="hn", source_id="1")
     rows = await journal.fetch_pending()

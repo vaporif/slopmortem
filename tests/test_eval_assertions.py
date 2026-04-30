@@ -43,11 +43,6 @@ def _synth(
     )
 
 
-# ---------------------------------------------------------------------------
-# where_diverged_nonempty
-# ---------------------------------------------------------------------------
-
-
 def test_where_diverged_nonempty_empty_string_is_false() -> None:
     assert where_diverged_nonempty(_synth(where_diverged="")) is False
 
