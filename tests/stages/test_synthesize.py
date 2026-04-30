@@ -10,7 +10,7 @@ from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
-from slopmortem.stages.synthesize import synthesize, synthesize_all
+from slopmortem.stages.synthesize import synthesize, synthesize_all, synthesize_prompt_kwargs
 
 _DEFAULT_MODEL = "test-synth-model"
 
@@ -72,13 +72,14 @@ def _synthesis_payload(
     where_diverged: str = "New pitch is web-first; Acme was mobile-only.",
     sources: list[str] | None = None,
 ) -> str:
+    """Build a canned LLM response. failure_date/lifespan_months are derived
+    by the pipeline from the candidate payload, so the LLM no longer emits them.
+    """
     return json.dumps(
         {
             "candidate_id": candidate_id,
             "name": name,
             "one_liner": "B2B fintech for SMB invoicing.",
-            "failure_date": "2023-01-01",
-            "lifespan_months": 60,
             "similarity": {
                 "business_model": {"score": 7.0, "rationale": "both B2B SaaS"},
                 "market": {"score": 6.0, "rationale": "SMB invoicing overlap"},
@@ -106,11 +107,7 @@ def _synthesize_canned(
     out: dict[tuple[str, str, str], FakeResponse] = {}
     for cand in candidates:
         rendered = render_prompt(
-            "synthesize",
-            pitch=ctx.description,
-            candidate_id=cand.canonical_id,
-            candidate_name=cand.payload.name,
-            candidate_body=cand.payload.body,
+            "synthesize", **synthesize_prompt_kwargs(cand, pitch=ctx.description)
         )
         out[llm_canned_key("synthesize", model=model, prompt=rendered)] = FakeResponse(
             text=text, cache_creation_tokens=cache_creation_tokens
@@ -132,6 +129,48 @@ async def test_synthesize_returns_filled_synthesis() -> None:
     assert s.where_diverged.strip() != ""
     assert s.candidate_id == cand.canonical_id
     assert s.similarity.business_model.score >= 0
+
+
+async def test_synthesize_derives_dates_from_payload_not_llm() -> None:
+    """failure_date and lifespan_months come from CandidatePayload, not the LLM body."""
+    cand = _candidate()
+    # _payload uses founding_date=2018-01-01, failure_date=2023-01-01 -> 60 months.
+    fake_llm = FakeLLMClient(
+        canned=_synthesize_canned(
+            [cand], _ctx(), text=_synthesis_payload(candidate_id=cand.canonical_id)
+        ),
+        default_model=_DEFAULT_MODEL,
+    )
+
+    s = await synthesize(cand, _ctx(), fake_llm, Config(), model=_DEFAULT_MODEL)
+
+    assert s.failure_date == cand.payload.failure_date
+    assert s.lifespan_months == 60
+
+
+async def test_synthesize_lifespan_none_when_dates_unknown() -> None:
+    """If the payload lacks one of the dates, lifespan_months collapses to None."""
+    payload = _payload()
+    # CandidatePayload requires both fields typed; flip founding to unknown.
+    payload_dict = payload.model_dump()
+    payload_dict["founding_date"] = None
+    payload_dict["founding_date_unknown"] = True
+    cand = Candidate(
+        canonical_id="acme-corp",
+        score=0.9,
+        payload=CandidatePayload.model_validate(payload_dict),
+    )
+    fake_llm = FakeLLMClient(
+        canned=_synthesize_canned(
+            [cand], _ctx(), text=_synthesis_payload(candidate_id=cand.canonical_id)
+        ),
+        default_model=_DEFAULT_MODEL,
+    )
+
+    s = await synthesize(cand, _ctx(), fake_llm, Config(), model=_DEFAULT_MODEL)
+
+    assert s.lifespan_months is None
+    assert s.failure_date == cand.payload.failure_date  # still pass-through
 
 
 async def test_synthesize_all_warms_cache_before_gather() -> None:

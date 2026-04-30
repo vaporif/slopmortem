@@ -28,6 +28,7 @@ from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis
 from slopmortem.pipeline import QueryPhase, _join_to_candidates, cutoff_iso, run_query
+from slopmortem.stages.synthesize import synthesize_prompt_kwargs
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -181,11 +182,7 @@ def _build_canned(
     )
     for cand in top_n:
         synth_prompt = render_prompt(
-            "synthesize",
-            pitch=ctx.description,
-            candidate_id=cand.canonical_id,
-            candidate_name=cand.payload.name,
-            candidate_body=cand.payload.body,
+            "synthesize", **synthesize_prompt_kwargs(cand, pitch=ctx.description)
         )
         canned[llm_canned_key("synthesize", model=_SYNTH_MODEL, prompt=synth_prompt)] = synth_resp
     return canned

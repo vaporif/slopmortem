@@ -496,10 +496,11 @@ async def _summarize_call(
     model: str | None,
     max_tokens: int | None = None,
 ) -> tuple[str, int, int]:
-    """Return ``(summary, cache_read, cache_creation)``."""
-    from slopmortem.corpus.summarize import summarize_for_rerank  # noqa: PLC0415
+    """Return ``(summary, cache_read, cache_creation)``.
 
-    # We need the raw response cache stats; render + call directly here.
+    Inlined rather than delegating to ``summarize_for_rerank`` because we need
+    the raw cache-token counters, which the helper discards.
+    """
     prompt = render_prompt("summarize", body=text, source_id="")
     res = await llm.complete(
         prompt,
@@ -509,7 +510,6 @@ async def _summarize_call(
         max_tokens=max_tokens,
     )
     summary = res.text.strip()
-    _ = summarize_for_rerank  # imported to keep public surface alive in the module
     return summary, res.cache_read_tokens or 0, res.cache_creation_tokens or 0
 
 
@@ -554,6 +554,7 @@ def _build_payload(  # noqa: PLR0913 - payload assembly takes every store-time f
     body: str,
     slop_score: float,
     sources_seen: list[str],
+    provenance_id: str,
     text_id: str,
     name: str,
     provenance: str,
@@ -573,6 +574,7 @@ def _build_payload(  # noqa: PLR0913 - payload assembly takes every store-time f
         provenance="curated_real" if provenance == "curated" else "scraped",
         slop_score=slop_score,
         sources=sources_seen,
+        provenance_id=provenance_id,
         text_id=text_id,
     )
 
@@ -591,7 +593,6 @@ async def _embed_and_upsert(  # noqa: PLR0913 - every dependency is required at 
     corpus: Corpus,
     embed_client: EmbeddingClient,
     embed_model_id: str,
-    budget: Budget,
     sparse_encoder: SparseEncoder,
 ) -> int:
     """Chunk, embed dense + sparse, and upsert one point per chunk. Returns count."""
@@ -600,8 +601,6 @@ async def _embed_and_upsert(  # noqa: PLR0913 - every dependency is required at 
         return 0
     texts = [c.text for c in chunks]
     embed_result = await embed_client.embed(texts, model=embed_model_id)
-    _ = budget  # embedding clients settle budget internally; we keep the param to
-    # surface the contract here even if we don't reserve again.
     text_id = _text_id_for(canonical_id)
     for c, vec in zip(chunks, embed_result.vectors, strict=True):
         sparse = sparse_encoder(c.text)
@@ -679,7 +678,6 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     slop_score: float,
     force: bool,
     span_events: list[str],
-    budget: Budget,
     sparse_encoder: SparseEncoder,
 ) -> str:
     """Write raw + canonical + chunks for one resolved entry.
@@ -785,7 +783,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         summary=fan.summary,
         body=merged,
         slop_score=slop_score,
-        sources_seen=[entry.url] if entry.url else [f"{entry.source}:{entry.source_id}"],
+        sources_seen=[entry.url] if entry.url else [],
+        provenance_id=f"{entry.source}:{entry.source_id}",
         text_id=text_id,
         name=name,
         provenance=entry.source,
@@ -797,7 +796,6 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         corpus=corpus,
         embed_client=embed_client,
         embed_model_id=config.embed_model_id,
-        budget=budget,
         sparse_encoder=sparse_encoder,
     )
 
@@ -836,7 +834,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     corpus: Corpus,
     llm: LLMClient,
     embed_client: EmbeddingClient,
-    budget: Budget,
+    budget: Budget,  # noqa: ARG001 - consumed by LLM/embed clients at construction time
     slop_classifier: SlopClassifier,
     config: Config,
     post_mortems_root: Path,
@@ -1074,7 +1072,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
                 slop_score=0.0,  # we already filtered slop above
                 force=force,
                 span_events=result.span_events,
-                budget=budget,
                 sparse_encoder=sparse_encoder,
             )
         except Exception as exc:  # noqa: BLE001 - spec line 606: run continues.

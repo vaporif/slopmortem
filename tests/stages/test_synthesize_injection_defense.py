@@ -14,7 +14,7 @@ from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages import synthesize as synth_module
-from slopmortem.stages.synthesize import synthesize
+from slopmortem.stages.synthesize import synthesize, synthesize_prompt_kwargs
 from slopmortem.tracing.events import SpanEvent
 
 _DEFAULT_MODEL = "test-synth-model"
@@ -116,11 +116,7 @@ async def test_synthesize_ignores_injected_instructions(
     del fixture_name  # only used for parametrize id generation
     cand = _candidate(body=body)
     rendered = render_prompt(
-        "synthesize",
-        pitch=_ctx().description,
-        candidate_id=cand.canonical_id,
-        candidate_name=cand.payload.name,
-        candidate_body=cand.payload.body,
+        "synthesize", **synthesize_prompt_kwargs(cand, pitch=_ctx().description)
     )
     fake_llm = FakeLLMClient(
         canned={

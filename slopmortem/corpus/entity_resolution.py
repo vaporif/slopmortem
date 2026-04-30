@@ -37,7 +37,6 @@ from __future__ import annotations
 import json
 import math
 import re
-import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -48,6 +47,7 @@ import yaml
 from anyio import to_thread
 
 from slopmortem._time import utcnow_iso
+from slopmortem.corpus._db import connect
 from slopmortem.llm.prompts import prompt_template_sha, render_prompt
 from slopmortem.models import MergeState
 from slopmortem.tracing.events import SpanEvent
@@ -213,22 +213,13 @@ CREATE TABLE IF NOT EXISTS tier3_decisions (
 """
 
 
-def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, timeout=5.0, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
-
-
 def _ensure_tier3_table_sync(db_path: Path) -> None:
-    with _connect(db_path) as conn:
+    with connect(db_path) as conn:
         conn.execute(_TIER3_DECISIONS_SCHEMA)
 
 
 def _read_founding_year_sync(db_path: Path, registrable_domain: str) -> int | None:
-    with _connect(db_path) as conn:
+    with connect(db_path) as conn:
         cur = conn.execute(
             """
             SELECT founding_year FROM founding_year_cache
@@ -251,7 +242,7 @@ def _write_founding_year_sync(
     content_sha256: str,
     founding_year: int | None,
 ) -> None:
-    with _connect(db_path) as conn:
+    with connect(db_path) as conn:
         conn.execute(
             """
             INSERT INTO founding_year_cache
@@ -270,8 +261,7 @@ def _read_tier3_decision_sync(
     haiku_model_id: str,
     tiebreaker_prompt_hash: str,
 ) -> str | None:
-    with _connect(db_path) as conn:
-        conn.execute(_TIER3_DECISIONS_SCHEMA)
+    with connect(db_path) as conn:
         cur = conn.execute(
             """
             SELECT decision FROM tier3_decisions
@@ -294,8 +284,7 @@ def _write_tier3_decision_sync(  # noqa: PLR0913 — keyword-only cache write
     tiebreaker_prompt_hash: str,
     decided_at: str,
 ) -> None:
-    with _connect(db_path) as conn:
-        conn.execute(_TIER3_DECISIONS_SCHEMA)
+    with connect(db_path) as conn:
         conn.execute(
             """
             INSERT INTO tier3_decisions
@@ -327,7 +316,7 @@ def _write_pending_review_sync(  # noqa: PLR0913 — keyword-only review write
     haiku_rationale: str,
     raw_section_heads: str,
 ) -> None:
-    with _connect(db_path) as conn:
+    with connect(db_path) as conn:
         conn.execute(
             """
             INSERT INTO pending_review

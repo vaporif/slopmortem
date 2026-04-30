@@ -107,8 +107,33 @@ class Facets(BaseModel):
     failure_year: int | None = None
 
 
+class LLMSynthesis(BaseModel):
+    """The fields the LLM emits for one candidate.
+
+    `failure_date` and `lifespan_months` are deliberately absent: those are
+    derived deterministically from the candidate's `CandidatePayload` in
+    :func:`slopmortem.stages.synthesize.synthesize`, not asked of the LLM
+    (which used to fabricate or mis-extract them from prose).
+    """
+
+    candidate_id: str
+    name: str
+    one_liner: str
+    similarity: SimilarityScores
+    why_similar: str
+    where_diverged: str
+    failure_causes: list[str]
+    lessons_for_input: list[str]
+    sources: list[str]
+
+
 class Synthesis(BaseModel):
-    """The synthesized post-mortem analogue the LLM produces per candidate."""
+    """The synthesized post-mortem analogue per candidate.
+
+    Composed of the LLM-emitted fields (:class:`LLMSynthesis`) plus
+    `failure_date` and `lifespan_months`, which are derived from the
+    candidate's typed payload dates rather than re-extracted from prose.
+    """
 
     candidate_id: str
     name: str
@@ -122,9 +147,55 @@ class Synthesis(BaseModel):
     lessons_for_input: list[str]
     sources: list[str]
 
+    @classmethod
+    def from_llm(
+        cls,
+        llm_synth: LLMSynthesis,
+        *,
+        founding_date: date | None,
+        failure_date: date | None,
+    ) -> Synthesis:
+        """Build a :class:`Synthesis` from the LLM's output plus typed payload dates.
+
+        `failure_date` is taken straight from the payload (the LLM does not
+        see it). `lifespan_months` is the integer month delta between
+        `founding_date` and `failure_date`; ``None`` when either is missing
+        or the delta is negative (corpus error).
+        """
+        lifespan = _months_between(founding_date, failure_date)
+        return cls(
+            candidate_id=llm_synth.candidate_id,
+            name=llm_synth.name,
+            one_liner=llm_synth.one_liner,
+            failure_date=failure_date,
+            lifespan_months=lifespan,
+            similarity=llm_synth.similarity,
+            why_similar=llm_synth.why_similar,
+            where_diverged=llm_synth.where_diverged,
+            failure_causes=llm_synth.failure_causes,
+            lessons_for_input=llm_synth.lessons_for_input,
+            sources=llm_synth.sources,
+        )
+
+
+def _months_between(founding: date | None, failure: date | None) -> int | None:
+    """Whole months between two dates, or ``None`` if either is missing or the delta is negative."""
+    if founding is None or failure is None:
+        return None
+    months = (failure.year - founding.year) * 12 + (failure.month - founding.month)
+    return months if months >= 0 else None
+
 
 class CandidatePayload(BaseModel):
-    """Persisted candidate doc: body, facets, provenance, and text id."""
+    """Persisted candidate doc: body, facets, provenance, and text id.
+
+    ``sources`` is URL-only (may be empty when the upstream entry had no URL,
+    e.g. CSV imports). ``provenance_id`` is the synthetic ``"<source>:<source_id>"``
+    audit string that always identifies where the doc came from. The previous
+    behavior — falling back to the synthetic id inside ``sources`` — broke the
+    synth-stage host allowlist, which silently dropped every cited URL because
+    ``urlparse("curated:Celsius Network").hostname is None``.
+    """
 
     name: str
     summary: str
@@ -137,6 +208,7 @@ class CandidatePayload(BaseModel):
     provenance: Literal["curated_real", "scraped"]
     slop_score: float
     sources: list[str]
+    provenance_id: str = ""
     text_id: str
 
 
