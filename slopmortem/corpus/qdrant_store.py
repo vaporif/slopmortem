@@ -302,10 +302,30 @@ class QdrantCorpus:
         return out
 
     async def upsert_chunk(self, point: Any) -> None:  # pyright: ignore[reportExplicitAny]
-        """Upsert a single chunk point into the collection (used by ingest)."""
+        """Upsert a single chunk point into the collection (used by ingest).
+
+        Ingest hands us :class:`slopmortem.ingest._Point` (a thin dataclass
+        with ``id``, ``vector={"dense": list[float], "sparse": dict[int, float]}``,
+        ``payload``). qdrant-client's ``PointsList`` is strict pydantic v2 and
+        rejects arbitrary dataclasses, so build a real ``PointStruct`` here.
+        """
+        from qdrant_client.models import PointStruct, SparseVector  # noqa: PLC0415
+
+        sparse = point.vector["sparse"]
+        struct = PointStruct(
+            id=point.id,
+            vector={
+                "dense": point.vector["dense"],
+                "sparse": SparseVector(
+                    indices=list(sparse),
+                    values=list(sparse.values()),
+                ),
+            },
+            payload=point.payload,
+        )
         await self._client.upsert(
             collection_name=self._collection,
-            points=[point],
+            points=[struct],
         )
 
 
