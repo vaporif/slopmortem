@@ -1,7 +1,7 @@
-"""HN Algolia source — URL prefix + RECORD-gated cassette round-trip.
+"""HN Algolia source: URL prefix and RECORD-gated cassette round-trip.
 
 The endpoint must be ``/api/v1/search_by_date`` (chronological, newest-first),
-not ``/search`` (relevance-ranked) — see spec line 242 and plan §1901. The
+not ``/search`` (relevance-ranked); see spec line 242 and plan §1901. The
 URL-prefix test guards against an accidental swap.
 """
 

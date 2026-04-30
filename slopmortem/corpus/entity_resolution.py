@@ -153,9 +153,6 @@ _PLATFORM_DOMAINS: frozenset[str] = _load_platform_domains()
 _HIERARCHY_OVERRIDES: dict[str, list[str]] = _load_corporate_hierarchy_overrides()
 
 
-# ─── Pure helpers ──────────────────────────────────────────────────────────────
-
-
 def _registrable_domain(url: str) -> str:
     extracted = tldextract.extract(url)
     if not extracted.domain or not extracted.suffix:
@@ -355,9 +352,6 @@ def _write_pending_review_sync(  # noqa: PLR0913 — keyword-only review write
         )
 
 
-# ─── Resolver internals ────────────────────────────────────────────────────────
-
-
 def _candidate_tier1_id(url: str) -> tuple[str, bool]:
     """Return ``(registrable_domain, is_platform)``."""
     domain = _registrable_domain(url)
@@ -388,7 +382,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
     if similarity <= band[0]:
         return "different", "auto: similarity below lower band"
     if llm_client is None:
-        # In-band but no LLM available → conservative: do NOT collapse.
+        # In-band but no LLM available: conservative, do NOT collapse.
         return "different", "no llm: defaulting to different inside calibration band"
     pk = _pair_key(canonical_existing, canonical_new)
     tiebreaker_hash = prompt_template_sha(_TIEBREAKER_PROMPT_NAME)

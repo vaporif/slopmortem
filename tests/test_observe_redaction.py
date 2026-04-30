@@ -261,11 +261,6 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
     )
 
 
-# ---------------------------------------------------------------------------
-# Test
-# ---------------------------------------------------------------------------
-
-
 async def test_no_corpus_body_in_laminar_spans(monkeypatch: pytest.MonkeyPatch) -> None:
     """Run the full pipeline; assert the corpus-body sentinel never reaches a span."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
@@ -311,11 +306,11 @@ async def test_no_corpus_body_in_laminar_spans(monkeypatch: pytest.MonkeyPatch) 
             config=cfg,
             budget=budget,
         )
-        assert report.candidates  # sanity: pipeline produced output
+        assert report.candidates  # sanity check: pipeline produced output
 
         Laminar.flush()
         spans = exporter.get_finished_spans()
-        # Sanity: the three decorated stages emitted spans.
+        # Sanity check: the three decorated stages emitted spans.
         span_names = {s.name for s in spans}
         assert "stage.facet_extract" in span_names
         assert "stage.retrieve" in span_names

@@ -69,7 +69,6 @@ class QueryProgress(Protocol):
     future shared base is straightforward.
     """
 
-
     def start_phase(self, phase: QueryPhase, total: int) -> None:
         """Announce *phase* with an expected ``total`` of advances."""
 

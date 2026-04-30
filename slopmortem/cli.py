@@ -3,7 +3,7 @@
 
 The ``query`` command is the production entry point for the synthesis pipeline.
 It loads :class:`Config`, initializes Laminar tracing (gated on the endpoint
-guard in :mod:`slopmortem.tracing` plus an env-var API key), constructs the
+guard in :mod:`slopmortem.tracing` and an env-var API key), constructs the
 real OpenRouter LLM client, the OpenAI embedding client, and the Qdrant corpus,
 then dispatches to :func:`slopmortem.pipeline.run_query`. Stage progress goes
 to stderr (TTY-gated); the rendered Markdown report goes to stdout.
@@ -12,9 +12,9 @@ The ``replay`` command iterates an evals dataset (Task 11 ships the dataset
 format and content). The missing-dataset path exits with code 2 so CI smoke
 tests can probe the wiring without a fixture corpus.
 
-The ``ingest`` command assembles real :class:`Source` / :class:`Enricher`
-/ :class:`MergeJournal` / :class:`Corpus` / :class:`LLMClient` /
-:class:`EmbeddingClient` / :class:`SlopClassifier` instances from
+The ``ingest`` command assembles real :class:`Source`, :class:`Enricher`,
+:class:`MergeJournal`, :class:`Corpus`, :class:`LLMClient`,
+:class:`EmbeddingClient`, and :class:`SlopClassifier` instances from
 :class:`Config` and env vars and dispatches to
 :func:`slopmortem.ingest.ingest`. ``--list-review`` is a read-only path that
 queries :class:`MergeJournal` for the pending entity-resolution review queue
