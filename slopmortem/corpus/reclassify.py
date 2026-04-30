@@ -86,11 +86,10 @@ def _row_to_pending(row: dict[str, object], post_mortems_root: Path) -> _Pending
 async def _score_all(
     pending: list[_Pending], slop_classifier: SlopClassifier
 ) -> list[float | BaseException]:
-    """Score every pending body. Warm up the lazy-loaded model on the first call alone.
-
-    ``BinocularsSlopClassifier`` lazy-loads its ~150MB model on the first
-    :meth:`score` call; concurrent first-callers would each load. The first
-    body is awaited in isolation so the rest can fan out safely.
+    """Score every pending body. The first call is awaited in isolation
+    before fan-out so any one-time setup in the classifier (cache warm,
+    HTTP connection pool, lazy model load) happens once instead of in N
+    racing copies.
     """
     if not pending:
         return []
@@ -122,7 +121,7 @@ async def reclassify_quarantined(
         journal: The merge journal whose ``quarantine_journal`` table we
             iterate (via :meth:`MergeJournal.fetch_quarantined`).
         slop_classifier: The current classifier; usually a fresh
-            :class:`BinocularsSlopClassifier` reflecting the new
+            :class:`HaikuSlopClassifier` reflecting the new
             threshold or model id.
         post_mortems_root: Root containing ``raw/``, ``canonical/``,
             ``quarantine/`` subtrees.

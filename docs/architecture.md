@@ -99,7 +99,7 @@ The initial 500-URL seed costs about $7.50. The cap is $15 because retries happe
 slopmortem/
   cli.py                 # entry point; every command goes through anyio.run
   pipeline.py            # query orchestration, async stage composition
-  ingest.py              # ingest orchestration + Binoculars slop classifier
+  ingest.py              # ingest orchestration + Haiku slop classifier
   render.py              # Report → Markdown
   models.py              # InputContext, Report, Synthesis, shared Pydantic types
   config.py              # pydantic-settings; toml + env + .env

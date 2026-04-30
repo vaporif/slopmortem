@@ -33,7 +33,7 @@ from slopmortem.config import load_config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
 from slopmortem.corpus.sources.curated import CuratedSource
-from slopmortem.ingest import BinocularsSlopClassifier, ingest
+from slopmortem.ingest import HaikuSlopClassifier, ingest
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
@@ -157,7 +157,7 @@ async def _record(
             )
             raise ValueError(msg)
 
-        classifier = BinocularsSlopClassifier()
+        classifier = HaikuSlopClassifier(llm=llm, model=config.model_summarize)
 
         if config.embed_model_id not in EMBED_DIMS:
             msg = f"unknown embed model {config.embed_model_id!r}; add to EMBED_DIMS"

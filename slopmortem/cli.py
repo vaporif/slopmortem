@@ -186,7 +186,20 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
     # Spec: §Quarantine and reclassify line 252.
     if reclassify:
         journal = _build_journal(post_mortems_root)
-        classifier = _build_slop_classifier()
+        # reclassify is a live operation that must hit the slop judge for real;
+        # construct only the LLM (no embedder/qdrant) and route it into the
+        # Haiku-backed classifier.
+        budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
+        openrouter_sdk = AsyncOpenAI(
+            api_key=os.environ.get("OPENROUTER_API_KEY", "missing-OPENROUTER_API_KEY"),
+            base_url=config.openrouter_base_url,
+        )
+        llm = OpenRouterClient(
+            sdk=openrouter_sdk, budget=budget, model=config.model_summarize
+        )
+        classifier = _build_slop_classifier(
+            dry_run=False, llm=llm, model=config.model_summarize
+        )
         report = await reclassify_quarantined(
             journal=journal,
             slop_classifier=classifier,
@@ -214,7 +227,7 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
         return
 
     llm, embedder, corpus, budget, journal, classifier = _build_ingest_deps(
-        config, post_mortems_root
+        config, post_mortems_root, dry_run=dry_run
     )
     # The ingest-side Corpus Protocol is wider than the query-side one used by
     # ``_set_corpus``; the underlying ``QdrantCorpus`` instance satisfies both.
@@ -408,11 +421,26 @@ def _build_journal(post_mortems_root: Path) -> MergeJournal:
     return MergeJournal(journal_path)
 
 
-def _build_slop_classifier() -> SlopClassifier:
-    """Construct the production :class:`BinocularsSlopClassifier`."""
-    from slopmortem.ingest import BinocularsSlopClassifier  # noqa: PLC0415
+def _build_slop_classifier(
+    *,
+    dry_run: bool,
+    llm: LLMClient | None = None,
+    model: str | None = None,
+) -> SlopClassifier:
+    """Construct the slop classifier.
 
-    return BinocularsSlopClassifier()
+    Dry-run uses :class:`FakeSlopClassifier` so the run requires no API key
+    and emits no LLM cost. Live ingest uses :class:`HaikuSlopClassifier`,
+    which sends one Haiku call per entry and quarantines anything that
+    isn't a specific dead-company narrative.
+    """
+    if dry_run or llm is None or model is None:
+        from slopmortem.ingest import FakeSlopClassifier  # noqa: PLC0415
+
+        return FakeSlopClassifier()
+    from slopmortem.ingest import HaikuSlopClassifier  # noqa: PLC0415
+
+    return HaikuSlopClassifier(llm=llm, model=model)
 
 
 def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
@@ -439,12 +467,15 @@ def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpu
 def _build_ingest_deps(
     config: Config,
     post_mortems_root: Path,
+    *,
+    dry_run: bool,
 ) -> tuple[LLMClient, EmbeddingClient, IngestCorpus, Budget, MergeJournal, SlopClassifier]:
     """Construct the full ingest-side wiring: LLM / embed / corpus / budget / journal / classifier.
 
     Mirrors :func:`_build_deps` but uses ``max_cost_usd_per_ingest`` for the
     budget cap and additionally constructs a :class:`MergeJournal` and the
-    production :class:`BinocularsSlopClassifier`.
+    slop classifier. ``dry_run=True`` swaps in :class:`FakeSlopClassifier`
+    so the run needs no real API key.
     """
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
 
@@ -462,7 +493,11 @@ def _build_ingest_deps(
 
     corpus = _build_ingest_corpus(config, post_mortems_root)
     journal = _build_journal(post_mortems_root)
-    classifier = _build_slop_classifier()
+    classifier = _build_slop_classifier(
+        dry_run=dry_run,
+        llm=llm,
+        model=config.model_summarize,
+    )
     return llm, embedder, corpus, budget, journal, classifier
 
 

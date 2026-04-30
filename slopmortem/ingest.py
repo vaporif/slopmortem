@@ -37,11 +37,12 @@ through the bounded fan-out limiter for the facet+summarize batch.
 
 import contextlib
 import hashlib
+import json
 import logging
 import secrets
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
 
 import anyio
 from anyio import to_thread
@@ -170,39 +171,49 @@ class FakeSlopClassifier:
         return self.default_score
 
 
-class BinocularsSlopClassifier:
-    """Production slop classifier — lazy-loads ``binoculars`` (~150MB) on first call.
+@dataclass
+class HaikuSlopClassifier:
+    """Slop classifier that asks Haiku to judge dead-company relevance.
 
-    Tests should never instantiate this; use :class:`FakeSlopClassifier`.
+    One LLM call per text. Returns 0.0 when Haiku says the text describes a
+    specific dead company, else 1.0 (which exceeds ``slop_threshold=0.7``
+    and quarantines the entry).
     """
 
-    def __init__(self) -> None:
-        """Defer model construction; the model loads on first :meth:`score` call."""
-        self._impl: object | None = None
+    llm: LLMClient
+    model: str
+    char_limit: int = 1500
 
     async def score(self, text: str) -> float:
-        """Run binoculars in a thread; returns ``slop_score ∈ [0, 1]``."""
-        impl = self._impl
-        if impl is None:
-            # Binoculars ships no type stubs — import dynamically and treat the
-            # returned class as `object`. The error suppressions below are
-            # gated by reportAttributeAccessIssue on the dynamic call.
-            import binoculars  # noqa: PLC0415
-
-            ctor_attr: object = getattr(binoculars, "Binoculars", None)
-            if ctor_attr is None:
-                msg = "binoculars module has no Binoculars class"
-                raise RuntimeError(msg)
-            ctor = cast("Callable[[], object]", ctor_attr)
-            impl = await to_thread.run_sync(ctor)
-            self._impl = impl
-        impl_obj = impl
-
-        def _run() -> float:
-            ans = impl_obj.predict(text)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-            return float(ans)  # pyright: ignore[reportUnknownArgumentType]
-
-        return await to_thread.run_sync(_run)
+        """Ask Haiku whether *text* describes a dead company; map to 0.0 or 1.0."""
+        snippet = text[: self.char_limit]
+        prompt = render_prompt("slop_judge", text=snippet)
+        result = await self.llm.complete(
+            prompt,
+            model=self.model,
+            cache=False,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "SlopJudge",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"is_dead_company": {"type": "boolean"}},
+                        "required": ["is_dead_company"],
+                        "additionalProperties": False,
+                    },
+                    "strict": True,
+                },
+            },
+            extra_body={"prompt_template_sha": prompt_template_sha("slop_judge")},
+        )
+        try:
+            parsed = json.loads(result.text)
+        except json.JSONDecodeError:
+            # Conservative on parse failure: keep the entry rather than silently drop.
+            return 0.0
+        is_dead = parsed.get("is_dead_company") if isinstance(parsed, dict) else None
+        return 0.0 if is_dead is True else 1.0
 
 
 # ─── Result type ───────────────────────────────────────────────────────────────
