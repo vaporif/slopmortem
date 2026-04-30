@@ -57,7 +57,6 @@ from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
     Progress,
-    ProgressBar,
     SpinnerColumn,
     Task,
     TaskID,
@@ -93,6 +92,8 @@ from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
     from types import TracebackType
+
+    from rich.progress_bar import ProgressBar
 
     from slopmortem.config import Config
     from slopmortem.corpus.merge import MergeJournal
