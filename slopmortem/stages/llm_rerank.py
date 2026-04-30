@@ -76,6 +76,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
         "llm_rerank",
         pitch=pitch,
         facets=facets.model_dump(),
+        top_n=config.N_synthesize,
         candidates=[
             {
                 "candidate_id": c.canonical_id,

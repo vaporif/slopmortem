@@ -163,6 +163,7 @@ def _build_canned(
         "llm_rerank",
         pitch=ctx.description,
         facets=parsed_facets.model_dump(),
+        top_n=len(top_n),
         candidates=[
             {
                 "candidate_id": c.canonical_id,

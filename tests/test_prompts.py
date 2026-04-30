@@ -26,6 +26,7 @@ def test_llm_rerank_renders_with_candidates():
         "llm_rerank",
         pitch="medical scribing for dermatologists",
         facets={"sector": "healthtech"},
+        top_n=1,
         candidates=[
             {"candidate_id": "a.com", "summary": "ehr integration vendor", "name": "A"},
         ],

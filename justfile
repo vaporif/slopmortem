@@ -51,3 +51,83 @@ format:
 
 typecheck:
     uv run basedpyright
+
+# Ingest the first N entries with all enrichers + the Crunchbase CSV adapter.
+# Default N=50. Override: `just ingest 100`, `just ingest 500`. Use `just ingest-all` for no limit.
+ingest LIMIT="50":
+    uv run slopmortem ingest \
+        --limit {{LIMIT}} \
+        --enrich-wayback \
+        --tavily-enrich \
+        --crunchbase-csv data/crunchbase/companies-closed.csv
+
+# Ingest the entire corpus (no --limit). Same enrichers as `ingest`. Cost scales with corpus size.
+ingest-all:
+    uv run slopmortem ingest \
+        --enrich-wayback \
+        --tavily-enrich \
+        --crunchbase-csv data/crunchbase/companies-closed.csv
+
+# Run the full query pipeline (facet -> retrieve -> rerank -> synthesize) against PITCH.
+# Append extra flags after the pitch, e.g.: `just query "..." --name MyCo --years 10`.
+query PITCH *FLAGS:
+    uv run slopmortem query {{quote(PITCH)}} {{FLAGS}}
+
+# Run retrieve-only against PITCH; skips rerank + synthesize. Cheap, useful for tuning facets/retrieval.
+query-debug PITCH *FLAGS:
+    uv run slopmortem query {{quote(PITCH)}} --debug-retrieve {{FLAGS}}
+
+# Run once on a fresh checkout, before `just ingest`. The recipe is idempotent
+# and re-runnable: existing values are shown masked (first 4 + last 4 chars)
+# and pressing Enter keeps them; typing a new value overwrites. Blank inputs
+# for never-set keys are skipped so optional keys stay out of the file until
+# you need them.
+#
+# Keys prompted (in order):
+#   OPENROUTER_API_KEY   required — every LLM call routes through OpenRouter
+#   TAVILY_API_KEY       optional — only for `--tavily-enrich` ingest +
+#                                   Tavily-augmented synthesis
+#   OPENAI_API_KEY       optional — only if you flip `embedding_provider` from
+#                                   the default fastembed to openai in
+#                                   slopmortem.toml
+#   LMNR_PROJECT_API_KEY optional — only if `enable_tracing = true` in
+#                                   slopmortem.toml (Laminar tracing)
+# Interactively populate .env with the API keys slopmortem reads at startup.
+init-env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ENV_FILE=.env
+    touch "$ENV_FILE"
+
+    upsert() {
+        local key="$1" desc="$2" required="$3"
+        local current label prompt value
+        current=$(grep -E "^${key}=" "$ENV_FILE" | sed -E "s/^${key}=//" | head -1 || true)
+        if [ -n "$current" ] && [ "${#current}" -gt 8 ]; then
+            label="[${current:0:4}…${current: -4}]"
+        elif [ -n "$current" ]; then
+            label="[set]"
+        elif [ "$required" = "yes" ]; then
+            label="(required)"
+        else
+            label="(optional, leave blank to skip)"
+        fi
+        prompt="${key} — ${desc} ${label}: "
+        read -r -p "$prompt" value
+        if [ -z "$value" ]; then
+            return 0
+        fi
+        if grep -qE "^${key}=" "$ENV_FILE"; then
+            sed -i.bak -E "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+            rm -f "$ENV_FILE.bak"
+        else
+            printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+        fi
+    }
+
+    upsert OPENROUTER_API_KEY   "every LLM call routes through OpenRouter"                       yes
+    upsert TAVILY_API_KEY       "needed for --tavily-enrich during ingest and Tavily synthesis"  no
+    upsert OPENAI_API_KEY       "only if you switch embedding_provider from fastembed to openai" no
+    upsert LMNR_PROJECT_API_KEY "Laminar tracing; only if enable_tracing=true in slopmortem.toml" no
+
+    echo "wrote $ENV_FILE"
