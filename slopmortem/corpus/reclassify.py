@@ -86,10 +86,11 @@ def _row_to_pending(row: dict[str, object], post_mortems_root: Path) -> _Pending
 async def _score_all(
     pending: list[_Pending], slop_classifier: SlopClassifier
 ) -> list[float | BaseException]:
-    """Score every pending body. The first call is awaited in isolation
-    before fan-out so any one-time setup in the classifier (cache warm,
-    HTTP connection pool, lazy model load) happens once instead of in N
-    racing copies.
+    """Score every pending body.
+
+    The first call is awaited in isolation before fan-out so any one-time
+    setup in the classifier (cache warm, HTTP connection pool, lazy model
+    load) happens once instead of in N racing copies.
     """
     if not pending:
         return []

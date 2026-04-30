@@ -47,10 +47,7 @@ class Config(BaseSettings):
     taxonomy_version: str = "v1"
     reliability_rank_version: str = "v1"
 
-    enable_tavily_enrich: bool = False
     enable_tavily_synthesis: bool = False
-    enable_wayback: bool = False
-    enable_crunchbase: bool = False
     enable_tracing: bool = False
     strict_deaths: bool = False
 
@@ -60,6 +57,18 @@ class Config(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     tavily_api_key: SecretStr = SecretStr("")
     laminar_api_key: SecretStr = SecretStr("")
+
+    # Env vars the CLI reads via ``os.environ`` directly. Declared here so
+    # that ``extra="forbid"`` doesn't reject ``.env`` lines for them — typos
+    # in TOML knobs still raise, but a populated ``.env`` doesn't break load.
+    lmnr_project_api_key: SecretStr = SecretStr("")
+    lmnr_base_url: str = ""
+    lmnr_allow_remote: str = ""
+    qdrant_host: str = "localhost"
+    qdrant_port: int = 6333
+    qdrant_collection: str = "slopmortem"
+    post_mortems_root: str = "./post_mortems"
+    merge_journal_path: str = ""
 
     @model_validator(mode="after")
     def _check_k_ge_n(self) -> Config:

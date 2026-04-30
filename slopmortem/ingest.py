@@ -737,6 +737,8 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         sparse_encoder: Override the BM25 sparse encoder. ``None`` lazy-loads
             the production fastembed model on first call. Tests pass a
             no-op stub so they don't trigger the ~150 MB ONNX download.
+        limit: Optional cap on entries gathered from sources. ``None`` runs
+            unbounded; when set, sources past the cap aren't started.
 
     Returns:
         Counters and span event names for the run.

@@ -207,12 +207,8 @@ async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
             api_key=os.environ.get("OPENROUTER_API_KEY", "missing-OPENROUTER_API_KEY"),
             base_url=config.openrouter_base_url,
         )
-        llm = OpenRouterClient(
-            sdk=openrouter_sdk, budget=budget, model=config.model_summarize
-        )
-        classifier = _build_slop_classifier(
-            dry_run=False, llm=llm, model=config.model_summarize
-        )
+        llm = OpenRouterClient(sdk=openrouter_sdk, budget=budget, model=config.model_summarize)
+        classifier = _build_slop_classifier(dry_run=False, llm=llm, model=config.model_summarize)
         report = await reclassify_quarantined(
             journal=journal,
             slop_classifier=classifier,

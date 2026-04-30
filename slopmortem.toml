@@ -23,9 +23,6 @@ retry_initial_backoff = 1.0
 taxonomy_version = "v1"
 reliability_rank_version = "v1"
 
-enable_tavily_enrich = false
 enable_tavily_synthesis = false
-enable_wayback = false
-enable_crunchbase = false
 enable_tracing = false
 strict_deaths = false

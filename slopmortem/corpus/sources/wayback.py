@@ -118,7 +118,7 @@ class WaybackEnricher:
         title + story_text directly). Without the markdown_text guard, a
         successful Wayback recovery would *overwrite* HN's own body with whatever
         the linked URL's snapshot happened to be — a quality regression on top of
-        the latency cost (archive.org is ~5× slower for deep-linked HN URLs than
+        the latency cost (archive.org is ~5x slower for deep-linked HN URLs than
         for the root-domain Crunchbase URLs Wayback was actually designed for).
 
         Args:

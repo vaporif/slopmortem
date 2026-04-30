@@ -117,7 +117,9 @@ class CuratedSource:
             if not text:
                 logger.info("curated: extracted text below length floor for %s", url)
                 continue
-            logger.info("curated: ok %s (%d bytes html, %d chars text)", url, len(resp.text), len(text))
+            logger.info(
+                "curated: ok %s (%d bytes html, %d chars text)", url, len(resp.text), len(text)
+            )
             startup_name = row.get("startup_name")
             source_id = str(startup_name) if isinstance(startup_name, str) and startup_name else url
             yield RawEntry(
