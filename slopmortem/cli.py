@@ -31,7 +31,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated, Self, cast
 
 # Silence gRPC C-Core's INFO-level log channel BEFORE the Laminar import below
 # transitively pulls in grpcio. Without this, the OTLP exporter's connection
@@ -43,16 +43,17 @@ os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
 os.environ.setdefault("GRPC_TRACE", "")
 os.environ.setdefault("GLOG_minloglevel", "2")
 
-import anyio  # noqa: E402 — must follow the GRPC env-var setup above
-import typer  # noqa: E402
-from lmnr import Laminar  # noqa: E402
-from openai import AsyncOpenAI  # noqa: E402
+import anyio  # must follow the GRPC env-var setup above
+import typer
+from lmnr import Laminar
+from openai import AsyncOpenAI
 from rich.console import Console
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
+    TaskID,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
@@ -81,6 +82,7 @@ from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from types import TracebackType
 
     from slopmortem.config import Config
     from slopmortem.corpus.merge import MergeJournal
@@ -186,7 +188,7 @@ def ingest_cmd(  # noqa: PLR0913 — every flag mirrors the spec; user types kwa
     )
 
 
-async def _run_ingest(  # noqa: PLR0913 — the ingest CLI surface is wide.
+async def _run_ingest(  # noqa: PLR0913, C901 — the ingest CLI surface is wide.
     *,
     dry_run: bool,
     force: bool,
@@ -601,8 +603,8 @@ class RichIngestProgress:
             TextColumn("{task.description}", justify="left"),
             BarColumn(
                 bar_width=None,
-                style="grey50",          # empty / to-do portion (default was red)
-                complete_style="cyan",   # filled while task is in flight
+                style="grey50",  # empty / to-do portion (default was red)
+                complete_style="cyan",  # filled while task is in flight
                 finished_style="green",  # bar after the task is fully complete
                 pulse_style="cyan",
             ),
@@ -614,17 +616,22 @@ class RichIngestProgress:
             console=self._console,
             transient=False,
         )
-        self._tasks: dict[IngestPhase, int] = {}
+        self._tasks: dict[IngestPhase, TaskID] = {}
         self._phase_errors: dict[IngestPhase, int] = {}
 
-    def __enter__(self) -> RichIngestProgress:
+    def __enter__(self) -> Self:
         """Start the live render."""
         self._progress.__enter__()
         return self
 
-    def __exit__(self, *exc: object) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Tear down the live render."""
-        self._progress.__exit__(*exc)
+        self._progress.__exit__(exc_type, exc_val, exc_tb)
 
     @property
     def console(self) -> Console:

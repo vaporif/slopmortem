@@ -173,19 +173,19 @@ class IngestProgress(Protocol):
 class NullProgress:
     """No-op :class:`IngestProgress` used when no display surface is attached."""
 
-    def start_phase(self, phase: IngestPhase, total: int) -> None:  # noqa: ARG002
+    def start_phase(self, phase: IngestPhase, total: int) -> None:
         """No-op."""
 
-    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:  # noqa: ARG002
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
         """No-op."""
 
-    def end_phase(self, phase: IngestPhase) -> None:  # noqa: ARG002
+    def end_phase(self, phase: IngestPhase) -> None:
         """No-op."""
 
-    def log(self, message: str) -> None:  # noqa: ARG002
+    def log(self, message: str) -> None:
         """No-op."""
 
-    def error(self, phase: IngestPhase, message: str) -> None:  # noqa: ARG002
+    def error(self, phase: IngestPhase, message: str) -> None:
         """No-op."""
 
 
@@ -831,6 +831,8 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             no-op stub so they don't trigger the ~150 MB ONNX download.
         limit: Optional cap on entries gathered from sources. ``None`` runs
             unbounded; when set, sources past the cap aren't started.
+        progress: Optional :class:`IngestProgress` sink for phase-level updates.
+            Defaults to :class:`NullProgress` when ``None``.
 
     Returns:
         Counters and span event names for the run.
@@ -864,9 +866,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
             enriched = await _enrich_pipeline(entry, enrichers)
         except Exception as exc:  # noqa: BLE001 — per-entry isolation.
             logger.warning("ingest: enricher failed for %r: %s", entry.source_id, exc)
-            progress.error(
-                IngestPhase.CLASSIFY, f"enricher failed for {entry.source_id}: {exc}"
-            )
+            progress.error(IngestPhase.CLASSIFY, f"enricher failed for {entry.source_id}: {exc}")
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.CLASSIFY)
@@ -911,7 +911,9 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 — orchestration tak
         keepers.append((enriched, body))
         progress.advance_phase(IngestPhase.CLASSIFY)
     progress.end_phase(IngestPhase.CLASSIFY)
-    progress.log(f"classified: {len(keepers)} kept, {result.quarantined} quarantined, {result.skipped} skipped")
+    quarantined = result.quarantined
+    skipped = result.skipped
+    progress.log(f"classified: {len(keepers)} kept, {quarantined} quarantined, {skipped} skipped")
 
     # ─── Dry-run early exit: only count, never write. ─────────────────────────
     if dry_run:
