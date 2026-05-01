@@ -301,22 +301,25 @@ async def test_no_corpus_body_in_laminar_spans(monkeypatch: pytest.MonkeyPatch) 
     # active span processor on the underlying TracerProvider with one backed by
     # InMemorySpanExporter. This is the only intercept point exposed by
     # lmnr-python at this version; cf. module docstring.
-    Laminar.initialize(
-        project_api_key="test-key",
-        base_url="http://localhost",
-        http_port=1,
-        grpc_port=1,
-        disable_batch=True,
-    )
-    exporter = InMemorySpanExporter()
-    new_multi = SynchronousMultiSpanProcessor()
-    new_multi.add_span_processor(SimpleSpanProcessor(exporter))
-    tracer_provider = TracerWrapper.instance._tracer_provider
-    assert tracer_provider is not None
-    tracer_provider._active_span_processor.shutdown()
-    tracer_provider._active_span_processor = new_multi
-
+    # initialize() must sit inside the try: if the processor swap below
+    # raises, Laminar would otherwise stay initialized and leak a real
+    # trace_id into other tests on the same xdist worker.
     try:
+        Laminar.initialize(
+            project_api_key="test-key",
+            base_url="http://localhost",
+            http_port=1,
+            grpc_port=1,
+            disable_batch=True,
+        )
+        exporter = InMemorySpanExporter()
+        new_multi = SynchronousMultiSpanProcessor()
+        new_multi.add_span_processor(SimpleSpanProcessor(exporter))
+        tracer_provider = TracerWrapper.instance._tracer_provider
+        assert tracer_provider is not None
+        tracer_provider._active_span_processor.shutdown()
+        tracer_provider._active_span_processor = new_multi
+
         report = await run_query(
             ctx,
             llm=fake_llm,

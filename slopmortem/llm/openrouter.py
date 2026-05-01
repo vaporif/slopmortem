@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 
+from slopmortem.budget import BudgetExceededError
 from slopmortem.concurrency import gather_resilient
 from slopmortem.llm.client import CompletionResult
 from slopmortem.tracing.events import SpanEvent
@@ -111,6 +112,12 @@ class OpenRouterClient:
         max_tokens: int | None = None,
     ) -> CompletionResult:
         """Run a chat completion, including the tool-call loop and transient-error retries."""
+        # Cheap pre-call gate so a runaway loop stops issuing calls once the
+        # budget is exhausted. Concurrent fan-out can still tail-overshoot by
+        # up to N_synthesize x per-call cost.
+        if self._budget.remaining <= 0.0:
+            msg = f"budget exhausted: remaining {self._budget.remaining:.4f}"
+            raise BudgetExceededError(msg)
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
         registered = {t.name: t for t in (tools or [])}
@@ -190,11 +197,9 @@ class OpenRouterClient:
             raise RuntimeError(msg)
         finally:
             if cost > 0.0:
-                # Settle without a prior reserve: OpenRouter cost is unknown
-                # until usage lands, and the budget cap isn't enforced here
-                # the way it is for embeddings. settle with an unknown id is
-                # a no-op for the reservation map and just credits spent_usd,
-                # so Report.pipeline_meta.cost_usd_total reflects real spend.
+                # True cost lands on response.usage.cost, so we settle without
+                # a prior reserve. settle() raises if spent crosses the cap;
+                # the pre-call gate above stops the next call.
                 await self._budget.settle("openrouter:complete", cost)
 
     @staticmethod

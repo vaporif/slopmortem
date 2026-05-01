@@ -29,7 +29,7 @@ Use `uv` for everything. Don't invoke `pip`, `python -m venv`, or `poetry`.
 
 ## Configuration
 
-Precedence (highest wins): `slopmortem.local.toml` → env vars → `.env` → `slopmortem.toml` (tracked defaults). Loader: `slopmortem/config.py`. Pydantic-settings with `extra="forbid"` — unknown keys are an error, not a warning.
+Precedence (highest wins): env vars → `.env` → `slopmortem.local.toml` → `slopmortem.toml` (tracked defaults). Loader: `slopmortem/config.py`. Pydantic-settings with `extra="forbid"` — unknown keys are an error, not a warning. Env always wins; personal overrides go in `slopmortem.local.toml`, but if you also export the same key in env, env beats it.
 
 - **Don't edit `slopmortem.toml` for personal tweaks.** That file is the documented default surface. Personal overrides go in `slopmortem.local.toml` (gitignored).
 - Secrets go in `.env` (gitignored). `OPENROUTER_API_KEY` is the only required key; Tavily, OpenAI, Laminar are gated by feature flags.

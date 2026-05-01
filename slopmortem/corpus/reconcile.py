@@ -36,9 +36,10 @@ import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
-import yaml
 from anyio import to_thread
 from pydantic import BaseModel, Field
+
+from slopmortem.corpus.disk import read_front_matter
 
 if TYPE_CHECKING:
     from slopmortem.corpus.merge import MergeJournal
@@ -79,24 +80,6 @@ def _text_id(canonical_id: str) -> str:
     return hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:16]
 
 
-def _read_front_matter(path: Path) -> dict[str, object]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        return {}
-    end = text.find("\n---\n", 4)
-    if end == -1:
-        return {}
-    fm_text = text[4:end]
-    parsed = yaml.safe_load(fm_text)  # pyright: ignore[reportAny]  # yaml is loosely typed
-    if not isinstance(parsed, dict):
-        return {}
-    # parsed is dict[Any, Any] from yaml; coerce to dict[str, object] explicitly.
-    out: dict[str, object] = {}
-    for k, v in parsed.items():  # pyright: ignore[reportUnknownVariableType]
-        out[str(k)] = v  # pyright: ignore[reportUnknownArgumentType]
-    return out
-
-
 async def _scan_orphan_tmps(root: Path) -> list[ReconcileRow]:
     def _walk() -> list[Path]:
         if not root.exists():
@@ -133,7 +116,7 @@ async def _scan_canonical_tree(
     paths = await to_thread.run_sync(_walk)
     rows: list[ReconcileRow] = []
     for p in paths:
-        fm = _read_front_matter(p)
+        fm = read_front_matter(p)
         canonical_id = fm.get("canonical_id")
         if not isinstance(canonical_id, str):
             continue
@@ -233,7 +216,7 @@ async def _scan_raw_tree(
     raw_files = await to_thread.run_sync(_walk)
     rows: list[ReconcileRow] = []
     for p, source in raw_files:
-        fm = _read_front_matter(p)
+        fm = read_front_matter(p)
         canonical_raw = fm.get("canonical_id")
         canonical_id = canonical_raw if isinstance(canonical_raw, str) else None
         canonical_present = (

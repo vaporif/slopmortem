@@ -128,5 +128,5 @@ async def test_synthesize_ignores_injected_instructions(
     # Sources are sourced from CandidatePayload, not the LLM, so the only
     # thing we need to confirm is that the injection signal was emitted.
     assert s.sources == cand.payload.sources
-    # Span event was emitted for this turn.
     assert SpanEvent.PROMPT_INJECTION_ATTEMPTED in captured_events
+    assert s.injection_detected is True

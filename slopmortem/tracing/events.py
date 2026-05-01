@@ -22,4 +22,5 @@ class SpanEvent(StrEnum):
     SLOP_QUARANTINED = "slop_quarantined"
     SOURCE_FETCH_FAILED = "source_fetch_failed"
     INGEST_ENTRY_FAILED = "ingest_entry_failed"
+    INGEST_ENTRY_EMPTY_CHUNKS = "ingest_entry_empty_chunks"
     RECONCILE_REPAIR_APPLIED = "reconcile_repair_applied"

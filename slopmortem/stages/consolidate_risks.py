@@ -54,6 +54,10 @@ async def consolidate_risks(  # noqa: PLR0913 — every dep is required wiring a
     if not syntheses:
         return TopRisks()
 
+    if any(s.injection_detected for s in syntheses):
+        _emit_event(SpanEvent.PROMPT_INJECTION_ATTEMPTED)
+        return TopRisks(risks=[], injection_detected=True)
+
     candidate_ids = [s.candidate_id for s in syntheses]
     valid_ids = set(candidate_ids)
 
