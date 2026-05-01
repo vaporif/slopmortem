@@ -173,8 +173,9 @@ def _select_top_n(
 ) -> tuple[list[Candidate], int]:
     """Apply min-similarity, join to candidates, cap at N. Returns (top_n, dropped_count).
 
-    The reranker always returns exactly ``n_synthesize`` rows, so any
-    shortfall here is the min_similarity filter dropping rows.
+    The reranker returns up to ``n_synthesize`` rows — fewer when retrieve
+    under-fills. ``dropped_count`` conflates that under-fill with min-sim
+    drops.
     """
     survivors = _filter_by_min_similarity(ranked, threshold)
     _log_min_similarity_drop(
