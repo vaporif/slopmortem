@@ -19,11 +19,11 @@ if TYPE_CHECKING:
 
 # ``ignore_inputs=["candidates"]`` matches the top-level parameter name only
 # (lmnr-python's filter is ``k in ignore_inputs`` against
-# ``inspect.signature(func).parameters.keys()``; cf. spec line 919). Dropping the
-# ``Candidate`` list keeps ``payload.body`` out of span attributes; a redacted
+# ``inspect.signature(func).parameters.keys()`` — see spec line 919). Dropping
+# the Candidate list keeps payload.body out of span attributes; a redacted
 # ``(canonical_id, name)`` projection is re-attached via
-# ``Laminar.set_span_attributes``. Output (``LlmRerankResult``) carries no body
-# and stays auto-captured.
+# Laminar.set_span_attributes. Output (LlmRerankResult) carries no body and
+# stays auto-captured.
 @observe(name="stage.llm_rerank", ignore_inputs=["candidates"])
 async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the call site
     candidates: list[Candidate],

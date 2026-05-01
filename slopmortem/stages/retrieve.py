@@ -2,9 +2,9 @@
 
 Thin orchestrator. The hybrid-retrieval contract (FormulaQuery + RRF +
 recency-branch filter + collapse-to-parents + alias-graph dedup) lives in
-:meth:`slopmortem.corpus.qdrant_store.QdrantCorpus.query` — this stage embeds
+:meth:`slopmortem.corpus.qdrant_store.QdrantCorpus.query`. This stage embeds
 the user's description (dense via :class:`EmbeddingClient`, sparse via
-``embed_sparse.encode``) and forwards every other knob through unchanged.
+``embed_sparse.encode``) and forwards every other knob unchanged.
 """
 
 from __future__ import annotations
@@ -23,15 +23,15 @@ if TYPE_CHECKING:
 type SparseEncoder = Callable[[str], dict[int, float]]
 
 
-# Note: lmnr-python at this version exposes ``ignore_output`` (singular bool); the
-# plan referenced ``ignore_outputs`` which does not exist. ``ignore_output=True``
-# drops the auto-captured ``Candidate`` output and we re-attach a redacted
+# lmnr-python at this version exposes ``ignore_output`` (singular bool); the
+# plan referenced ``ignore_outputs``, which does not exist. ``ignore_output=True``
+# drops the auto-captured Candidate output and we re-attach a redacted
 # ``(canonical_id, score, name, facets, slop_score)`` projection via
-# ``Laminar.set_span_attributes``. ``ignore_inputs=["corpus"]`` is also required
-# because the auto-capture serializes the ``Corpus`` argument (test fakes embed
-# their candidate corpus inline; production stores would still serialize the
-# client handle, which is not useful trace content). Body never crosses the
-# trace boundary.
+# ``Laminar.set_span_attributes``. ``ignore_inputs=["corpus"]`` is also needed
+# because auto-capture serializes the Corpus argument — test fakes embed their
+# candidate corpus inline; production stores would still serialize the client
+# handle, which isn't useful trace content. Body never crosses the trace
+# boundary.
 @observe(name="stage.retrieve", ignore_output=True, ignore_inputs=["corpus"])
 async def retrieve(  # noqa: PLR0913 — every dependency is required at the call site
     *,
@@ -47,25 +47,25 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
     """Embed *description* and run hybrid retrieve against *corpus*.
 
     Args:
-        description: User's pitch text. Both the dense and sparse query
-            inputs come from this verbatim. No HyDE expansion (see spec
-            line 213; rerank slack absorbs the modality gap).
-        facets: Soft-boost facets from the facet-extract stage; ``"other"``
+        description: User's pitch text. Both dense and sparse query inputs
+            come from this verbatim. No HyDE expansion (spec line 213; rerank
+            slack absorbs the modality gap).
+        facets: Soft-boost facets from the facet-extract stage. ``"other"``
             values are skipped inside :meth:`Corpus.query`.
         corpus: Read-side :class:`Corpus` impl. Production is
             :class:`QdrantCorpus`.
         embedding_client: Async dense embedder (OpenAI in production,
             :class:`FakeEmbeddingClient` in tests).
         cutoff_iso: ISO-8601 lower bound for the recency filter, or ``None``
-            to disable the filter entirely.
-        strict_deaths: When ``True``, Corpus retains only docs with a known
+            to disable filtering entirely.
+        strict_deaths: When ``True``, Corpus keeps only docs with a known
             ``failure_date`` ≥ ``cutoff_iso``.
-        k_retrieve: Final number of parent candidates to return. Caller
-            sets this from ``Config.K_retrieve``.
-        sparse_encoder: Override the BM25 sparse encoder. ``None`` lazy-loads
-            the production fastembed model on first call. Tests pass a
-            no-op stub so they don't trigger the ~150 MB ONNX download
-            (mirrors the same pattern used by ``ingest()``).
+        k_retrieve: Final number of parent candidates to return. Caller sets
+            this from ``Config.K_retrieve``.
+        sparse_encoder: BM25 sparse encoder override. ``None`` lazy-loads the
+            production fastembed model on first call. Tests pass a no-op stub
+            so they don't trigger the ~150 MB ONNX download (same pattern as
+            ``ingest()``).
 
     Returns:
         Up to ``k_retrieve`` :class:`Candidate` objects in descending
