@@ -16,7 +16,9 @@ Reports lead with a "Top risks across all comparables" section: pure-Python clus
 
 ## Running it
 
-Dev shell is a Nix flake. With direnv: `direnv allow` and the shell loads on `cd`. Without: `nix develop`. The shellHook calls `uv venv` + `uv sync --frozen`, so Python is ready by the time the prompt returns. Then `just` for the rest.
+Dev shell is a Nix flake (reproducible, pinned toolchain). With direnv: `direnv allow` and the shell loads on `cd`. Without: `nix develop`.
+
+The shellHook calls `uv venv` + `uv sync --frozen`, so Python is ready by the time the prompt returns. Then `just` for the rest.
 
 Secrets go in `.env` (gitignored); `just init-env` walks the prompts and is re-runnable. Knobs live in `slopmortem.toml` with comments.
 
@@ -24,11 +26,11 @@ First-run sequence:
 
 ```
 direnv allow                         # or: nix develop
-just init-env                        # interactive — fill OPENROUTER_API_KEY, skip the rest
+just init-env                        # interactive — fill OPENROUTER_API_KEY, skip the rest (Tavily/OpenAI/Laminar are feature-gated)
 docker compose up -d qdrant          # Qdrant on :6333
 slopmortem embed-prefetch            # one-time ~550 MB ONNX download
-just ingest                          # 50 entries with all enrichers; or `just ingest-all`
-just query "your pitch here"         # ~$0.40 per call, run whenever; or `just query-debug` to skip rerank+synth
+just ingest                          # ~$0.75 for 50 entries with all enrichers; or `just ingest-all`
+just query "your pitch here"         # ~$0.10 warm / ~$0.30 cold cache; or `just query-debug` to skip rerank+synth
 ```
 
 Ingest picks up curated + HN automatically. Useful flags:
@@ -88,9 +90,8 @@ Every LLM and HTTP call made during tests or evals replays from `tests/fixtures/
 
 ## Known limitations
 
-- **Alias-graph dedup is K-bounded.** `QdrantCorpus.query` fetches alias edges only for the canonicals that survived into the top-`K_retrieve` set. If `A↔B↔C` are aliased and `B` was pruned upstream (recency, facet boost, RRF), the chain only collapses on the hops touching retrieved nodes — so `A` and `C` can surface as separate candidates instead of one component. Harmless when alias chains are ≤1 hop, which is the common case. Fix would be a transitive-closure pass over `fetch_aliases`; revisit if it shows up in real queries.
-- **Chunk-to-parent over-fetch ratio assumes ~4 chunks/doc.** Qdrant over-fetches `K_retrieve * 4` chunks expecting them to collapse to ≥`K_retrieve` parents. Long post-mortems chunk into many more pieces and can silently under-fill the parent set. Re-tune the multiplier (or move to a parent-aware fetcher) before relying on `K_retrieve` as a hard floor on a real corpus.
-- **LLM rerank cost is linear in `K_retrieve`.** Every candidate's summary goes into one prompt; doubling K doubles tokens. Fine at K=30; revisit (two-stage rerank, local cross-encoder, or tighter summaries) if K grows.
+- Chunk-to-parent over-fetch assumes ~4 chunks/doc — long post-mortems can under-fill the parent set ([#25](https://github.com/vaporif/premortem/issues/25)).
+- LLM rerank cost is linear in `K_retrieve` — fine at K=30, revisit if K grows ([#27](https://github.com/vaporif/premortem/issues/27)).
 
 ## Examples
 
