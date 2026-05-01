@@ -101,9 +101,14 @@ from slopmortem.models import (
     Synthesis,
 )
 from slopmortem.pipeline import run_query
-from slopmortem.stages.synthesize import (
-    _FIXED_HOST_ALLOWLIST,  # pyright: ignore[reportPrivateUsage] — sanctioned reuse, see module docstring
-)
+
+# Fixed host allowlist for the eval-time ``all_sources_in_allowed_domains``
+# assertion in live mode (when no in-memory corpus is available to widen the
+# set with payload sources). web.archive.org is intentionally NOT here —
+# Wayback proxies arbitrary URLs and would bypass host-level allowlist
+# semantics. The synthesize stage no longer consults this constant; sources
+# come from CandidatePayload directly.
+_FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -201,8 +206,8 @@ def _rerank_payload(canonical_ids: list[str]) -> str:
 def _synthesis_payload(canonical_id: str) -> str:
     """Canned LLMSynthesis JSON.
 
-    failure_date/lifespan_months are derived by the pipeline from
-    CandidatePayload, so the LLM no longer emits them.
+    failure_date, lifespan_months, and sources are derived/passed-through by
+    the pipeline from CandidatePayload, so the LLM no longer emits them.
     """
     return json.dumps(
         {
@@ -219,7 +224,6 @@ def _synthesis_payload(canonical_id: str) -> str:
             "where_diverged": "Pitch is web-first; analogue was mobile-only.",
             "failure_causes": ["CAC > LTV"],
             "lessons_for_input": ["target larger ACVs"],
-            "sources": [f"https://news.ycombinator.com/item?id={canonical_id}"],
         }
     )
 

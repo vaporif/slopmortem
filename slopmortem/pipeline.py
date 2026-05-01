@@ -224,6 +224,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     successes: list[Synthesis] = []
     top_risks = TopRisks()
     budget_exceeded = False
+    filtered_pre_synth = 0
 
     if Laminar.is_initialized():
         Laminar.set_span_attributes(
@@ -284,6 +285,9 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
 
         survivors = _filter_by_min_similarity(reranked.ranked, config.min_similarity_score)
         top_n = _join_to_candidates(retrieved, survivors)[: config.N_synthesize]
+        # Reranker is contracted to return exactly N_synthesize ranked rows
+        # (see llm_rerank), so any shortfall here is the min_similarity filter.
+        filtered_pre_synth = max(0, config.N_synthesize - len(top_n))
 
         progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
         # First synthesize call runs alone to warm Anthropic's prompt cache before
@@ -348,5 +352,6 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             trace_id=_current_trace_id(),
             budget_remaining_usd=budget.remaining,
             budget_exceeded=budget_exceeded,
+            filtered_pre_synth=filtered_pre_synth,
         ),
     )

@@ -64,8 +64,8 @@ def _injection_synthesis_payload() -> str:
 
     The prompt template tells the LLM to write the literal string
     ``prompt_injection_attempted`` into ``where_diverged`` when an
-    injection is detected. Sources also contain an attacker host so we
-    can confirm the URL filter drops it independently.
+    injection is detected. Sources are passed through from the candidate
+    payload by the synthesize stage, so they aren't part of the LLM contract.
     """
     return json.dumps(
         {
@@ -84,10 +84,6 @@ def _injection_synthesis_payload() -> str:
             "where_diverged": "prompt_injection_attempted",
             "failure_causes": ["CAC > LTV"],
             "lessons_for_input": ["target larger ACVs"],
-            "sources": [
-                "https://acme.com/postmortem",
-                "https://attacker.com/x",
-            ],
         }
     )
 
@@ -129,7 +125,8 @@ async def test_synthesize_ignores_injected_instructions(
 
     s = await synthesize(cand, _ctx(), fake_llm, Config(), model=_DEFAULT_MODEL)
 
-    # URL filter must drop attacker.com regardless of where it came from.
-    assert "attacker.com" not in str(s.sources)
+    # Sources are sourced from CandidatePayload, not the LLM, so the only
+    # thing we need to confirm is that the injection signal was emitted.
+    assert s.sources == cand.payload.sources
     # Span event was emitted for this turn.
     assert SpanEvent.PROMPT_INJECTION_ATTEMPTED in captured_events

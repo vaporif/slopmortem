@@ -7,7 +7,6 @@ Rules:
 - `where_diverged` must name at least one concrete dimension where the new pitch differs from the dead startup; if you cannot find one, say so explicitly rather than fabricate.
 - `failure_causes` are short noun-phrases (e.g. "regulatory rejection", "CAC > LTV"). 3-7 items.
 - `lessons_for_input` are imperative one-liners aimed at the new founder. 3-5 items.
-- `sources` lists URLs from the candidate's own provenance. Do not include URLs that were not present in the document.
 - `similarity` uses the same SimilarityScores schema as the reranker (business_model, market, gtm, stage_scale).
 - Do NOT include `failure_date` or `lifespan_months`: those are derived from the candidate's typed payload by the pipeline, not from prose. The schema below does not include them.
 - Tools available: `get_post_mortem(canonical_id, max_chars)` for full text of a candidate, `search_corpus(q, facets)` for adjacent dead startups. The focal candidate's body is already inlined below — do NOT call `get_post_mortem` for it. Use `get_post_mortem` only for OTHER candidates surfaced via `search_corpus`. Use both tools sparingly and only when the inlined document leaves a real gap.

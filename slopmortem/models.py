@@ -110,9 +110,11 @@ class Facets(BaseModel):
 class LLMSynthesis(BaseModel):
     """Fields the LLM emits for one candidate.
 
-    failure_date and lifespan_months are intentionally missing here. They get
-    derived from the candidate's CandidatePayload in stages.synthesize, not
-    asked of the LLM, which used to fabricate them from prose.
+    failure_date, lifespan_months, and sources are intentionally missing. The
+    dates are derived from CandidatePayload in stages.synthesize; sources are
+    passed through from CandidatePayload as well, since the LLM never sees
+    provenance URLs (the body is plain text after extract_clean) and used to
+    either emit nothing or hallucinate URLs that the host filter then dropped.
     """
 
     candidate_id: str
@@ -123,15 +125,15 @@ class LLMSynthesis(BaseModel):
     where_diverged: str
     failure_causes: list[str]
     lessons_for_input: list[str]
-    sources: list[str]
 
 
 class Synthesis(BaseModel):
     """Synthesized post-mortem analogue for one candidate.
 
-    LLMSynthesis fields plus failure_date and lifespan_months, the latter two
-    derived from the candidate's typed payload dates rather than re-extracted
-    from prose.
+    LLMSynthesis fields plus failure_date, lifespan_months, and sources.
+    The dates are derived from the candidate's typed payload; ``sources``
+    is passed through directly from ``CandidatePayload.sources`` rather than
+    asked of the LLM, since the LLM never sees provenance URLs anyway.
     """
 
     candidate_id: str
@@ -153,8 +155,9 @@ class Synthesis(BaseModel):
         *,
         founding_date: date | None,
         failure_date: date | None,
+        sources: list[str],
     ) -> Synthesis:
-        """Build a Synthesis from the LLM's output plus typed payload dates."""
+        """Build a Synthesis from the LLM's output plus typed payload dates and sources."""
         lifespan = _months_between(founding_date, failure_date)
         return cls(
             candidate_id=llm_synth.candidate_id,
@@ -167,7 +170,7 @@ class Synthesis(BaseModel):
             where_diverged=llm_synth.where_diverged,
             failure_causes=llm_synth.failure_causes,
             lessons_for_input=llm_synth.lessons_for_input,
-            sources=llm_synth.sources,
+            sources=sources,
         )
 
 
@@ -258,6 +261,7 @@ class PipelineMeta(BaseModel):
     trace_id: str | None
     budget_remaining_usd: float
     budget_exceeded: bool
+    filtered_pre_synth: int = 0
 
 
 class ConsolidatedRisk(BaseModel):

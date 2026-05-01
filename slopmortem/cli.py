@@ -486,7 +486,7 @@ async def _query(
         raise
 
     if bar is not None:
-        _render_query_footer(bar.console, report, n_target=config.N_synthesize)
+        _render_query_footer(bar.console, report)
 
     if not report.candidates:
         typer.echo(_NOT_FOUND_MARKDOWN)
@@ -991,14 +991,16 @@ class RichQueryProgress(_RichPhaseProgress[QueryPhase]):
         super().__init__(_QUERY_PHASE_LABELS)
 
 
-def _render_query_footer(console: Console, report: Report, n_target: int) -> None:
+def _render_query_footer(console: Console, report: Report) -> None:
     """Print a summary panel to *console* after a query run."""
     meta = report.pipeline_meta
     parts = [
         f"cost=${meta.cost_usd_total:.4f}",
         f"latency={meta.latency_ms_total}ms",
-        f"synthesized={len(report.candidates)}/{n_target}",
+        f"synthesized={len(report.candidates)}",
     ]
+    if meta.filtered_pre_synth > 0:
+        parts.append(f"filtered_pre_synth={meta.filtered_pre_synth}")
     if meta.trace_id:
         parts.append(f"trace={meta.trace_id}")
     if meta.budget_exceeded:
@@ -1065,7 +1067,7 @@ async def _replay(dataset: str) -> None:
                 progress=bar,
             )
             if bar is not None:
-                _render_query_footer(bar.console, report, n_target=config.N_synthesize)
+                _render_query_footer(bar.console, report)
             typer.echo(render(report))
 
 

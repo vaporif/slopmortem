@@ -14,7 +14,6 @@ hook is a no-op stub until that ships.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
 
 from lmnr import Laminar
 
@@ -56,11 +55,6 @@ def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, A
     }
 
 
-# Fixed host allowlist applied on top of per-candidate payload.sources hosts.
-# web.archive.org is intentionally NOT here — Wayback proxies arbitrary URLs
-# and would bypass host-level allowlist semantics.
-_FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
-
 # Literal contract from synthesize.j2: the LLM must put this exact string in
 # ``where_diverged`` when it detects an injection attempt.
 _INJECTION_MARKER = "prompt_injection_attempted"
@@ -97,12 +91,11 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
             client default (no cap sent upstream).
 
     Returns:
-        Parsed :class:`Synthesis`. ``sources`` is filtered against
-        ``candidate.payload.sources`` hosts plus ``news.ycombinator.com``;
-        off-allowlist URLs drop silently (no per-URL span event in the closed
-        enum). When the LLM marks ``where_diverged ==
-        "prompt_injection_attempted"``, ``_emit_event`` fires
-        :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED`.
+        Parsed :class:`Synthesis`. ``sources`` is passed through directly from
+        ``candidate.payload.sources`` (the LLM never sees provenance URLs, so
+        asking it to cite them produced empty or hallucinated lists). When the
+        LLM marks ``where_diverged == "prompt_injection_attempted"``,
+        ``_emit_event`` fires :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED`.
 
     Raises:
         ValidationError: The LLM emitted JSON that doesn't validate against
@@ -136,27 +129,12 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
     if llm_parsed.where_diverged.strip() == _INJECTION_MARKER:
         _emit_event(SpanEvent.PROMPT_INJECTION_ATTEMPTED)
 
-    allowed_hosts = _build_allowed_hosts(candidate.payload.sources)
-    filtered_sources = [url for url in llm_parsed.sources if _hostname(url) in allowed_hosts]
     return Synthesis.from_llm(
-        llm_parsed.model_copy(update={"sources": filtered_sources}),
+        llm_parsed,
         founding_date=candidate.payload.founding_date,
         failure_date=candidate.payload.failure_date,
+        sources=candidate.payload.sources,
     )
-
-
-def _hostname(url: str) -> str | None:
-    """Best-effort hostname extraction; never raises."""
-    try:
-        return urlparse(url).hostname
-    except ValueError:
-        return None
-
-
-def _build_allowed_hosts(candidate_sources: list[str]) -> frozenset[str]:
-    """Union of candidate-source hosts and the fixed allowlist (``news.ycombinator.com``)."""
-    candidate_hosts = {h for src in candidate_sources if (h := _hostname(src))}
-    return frozenset(candidate_hosts | _FIXED_HOST_ALLOWLIST)
 
 
 async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fan-out wrapper
