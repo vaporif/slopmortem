@@ -69,6 +69,7 @@ def _make_report(ctx: InputContext, candidates: list[Synthesis]) -> Report:
         pipeline_meta=PipelineMeta(
             K_retrieve=6,
             N_synthesize=3,
+            min_similarity_score=4.0,
             models={"facet": "f", "rerank": "r", "synthesize": "s"},
             cost_usd_total=0.0,
             latency_ms_total=0,

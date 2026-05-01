@@ -251,6 +251,7 @@ class PipelineMeta(BaseModel):
 
     K_retrieve: int
     N_synthesize: int
+    min_similarity_score: float
     models: dict[str, str]
     cost_usd_total: float
     latency_ms_total: int

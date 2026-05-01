@@ -7,6 +7,11 @@ K_retrieve = 30
 # synthesis (the expensive Sonnet calls). Each adds ~$0.05 to a query.
 N_synthesize = 5
 
+# Minimum mean perspective score (0-10) a candidate must hit to reach
+# synthesis. Cuts weak matches before paying synthesis cost. If nothing
+# clears the bar, the report renders an empty-state banner.
+min_similarity_score = 4.0
+
 # Cap on parallel ingest workers (facet+summarize+slop_judge fan-out).
 # Anyio CapacityLimiter; raise for faster ingest, lower if you hit
 # OpenRouter rate limits.

@@ -116,6 +116,20 @@ def cutoff_iso(years_filter: int | None) -> str | None:
     return (datetime.now(UTC) - timedelta(days=_DAYS_PER_YEAR * years_filter)).date().isoformat()
 
 
+def _mean_perspective_score(scored: ScoredCandidate) -> float:
+    """Mean of the four 0-10 perspective scores on a reranked candidate."""
+    s = scored.perspective_scores
+    scores = [s.business_model.score, s.market.score, s.gtm.score, s.stage_scale.score]
+    return sum(scores) / len(scores)
+
+
+def _filter_by_min_similarity(
+    ranked: list[ScoredCandidate], threshold: float
+) -> list[ScoredCandidate]:
+    """Drop candidates whose mean perspective score is below ``threshold``."""
+    return [s for s in ranked if _mean_perspective_score(s) >= threshold]
+
+
 def _join_to_candidates(
     retrieved: list[Candidate], ranked: list[ScoredCandidate]
 ) -> list[Candidate]:
@@ -202,6 +216,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
                 "config.taxonomy_version": config.taxonomy_version,
                 "config.K_retrieve": config.K_retrieve,
                 "config.N_synthesize": config.N_synthesize,
+                "config.min_similarity_score": config.min_similarity_score,
                 "config.strict_deaths": config.strict_deaths,
                 "config.model_facet": config.model_facet,
                 "config.model_rerank": config.model_rerank,
@@ -249,7 +264,8 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         progress.advance_phase(QueryPhase.RERANK)
         progress.end_phase(QueryPhase.RERANK)
 
-        top_n = _join_to_candidates(retrieved, reranked.ranked)[: config.N_synthesize]
+        survivors = _filter_by_min_similarity(reranked.ranked, config.min_similarity_score)
+        top_n = _join_to_candidates(retrieved, survivors)[: config.N_synthesize]
 
         progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
 
@@ -288,6 +304,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         pipeline_meta=PipelineMeta(
             K_retrieve=config.K_retrieve,
             N_synthesize=config.N_synthesize,
+            min_similarity_score=config.min_similarity_score,
             models={
                 "facet": config.model_facet,
                 "rerank": config.model_rerank,

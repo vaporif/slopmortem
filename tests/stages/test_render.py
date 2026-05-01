@@ -82,6 +82,7 @@ def _report() -> Report:
         pipeline_meta=PipelineMeta(
             K_retrieve=30,
             N_synthesize=5,
+            min_similarity_score=4.0,
             models={"rerank": "anthropic/claude-sonnet-4.6"},
             cost_usd_total=0.42,
             latency_ms_total=1234,
@@ -158,6 +159,31 @@ def test_render_omits_top_risks_when_empty() -> None:
     report_no_risks = report.model_copy(update={"top_risks": TopRisks(clusters=[])})
     md = render(report_no_risks)
     assert "## Top risks across all comparables" not in md
+
+
+def test_render_emits_banner_when_no_candidates_pass_threshold() -> None:
+    """Empty candidates list with a finished run renders the threshold banner."""
+    report = _report().model_copy(update={"candidates": [], "top_risks": TopRisks(clusters=[])})
+    md = render(report)
+    assert "No comparables passed similarity threshold 4.0" in md
+    assert "min_similarity_score" in md
+    assert "## Acme" not in md
+    assert "## BetaCo" not in md
+
+
+def test_render_skips_banner_on_budget_exceeded() -> None:
+    """Budget-truncated runs skip the banner — the empty candidates have a different cause."""
+    report = _report().model_copy(update={"candidates": [], "top_risks": TopRisks(clusters=[])})
+    report = report.model_copy(
+        update={"pipeline_meta": report.pipeline_meta.model_copy(update={"budget_exceeded": True})}
+    )
+    md = render(report)
+    assert "No comparables passed similarity threshold" not in md
+
+
+def test_render_footer_includes_min_similarity_score() -> None:
+    md = render(_report())
+    assert "min_similarity_score: 4.0" in md
 
 
 def test_render_is_pure_no_io() -> None:
