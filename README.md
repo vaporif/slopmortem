@@ -1,6 +1,6 @@
 # slopmortem
 
-![demo](example.gif)
+![demo](docs/examples/crypto-savings-yield/example.gif)
 
 You give it a pitch, it finds dead startups that tried something similar.
 

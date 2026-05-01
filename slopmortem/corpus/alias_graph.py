@@ -70,7 +70,6 @@ def collapse_alias_components(
         if a in cand_ids and b in cand_ids:
             _union(parents, a, b)
 
-    # Group by root.
     by_root: dict[str, list[Candidate]] = {}
     for c in candidates:
         by_root.setdefault(_find(parents, c.canonical_id), []).append(c)

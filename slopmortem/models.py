@@ -13,8 +13,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 # Closed-enum facet fields whose values MUST be in taxonomy.yml. Free-form
-# fields (sub_sector, product_type, price_point, founding_year, failure_year)
-# stay open and aren't enum-validated.
+# fields like sub_sector, product_type, price_point, founding_year, and
+# failure_year stay open and aren't enum-validated.
 _CLOSED_FACET_FIELDS: tuple[str, ...] = (
     "sector",
     "business_model",

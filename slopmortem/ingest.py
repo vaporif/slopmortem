@@ -683,7 +683,6 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     Returns:
         Either ``"processed"`` or ``"skipped"``.
     """
-    # Step 1: resolve canonical_id (tier-1/2/3 + alias + flip prechecks).
     name = entry.source_id  # ingest's name extraction is best-effort in v1
     sector = fan.facets.sector
     res = await resolve_entity(
@@ -702,9 +701,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         return "skipped"
     canonical_id = res.canonical_id
 
-    # Step 2: build the merged section list. v1 ingest only knows about THIS raw
-    # section; merging with prior raw on disk happens via the read-back path in
-    # reconcile / multi-source ingest. combined_text gets the single section here.
+    # v1 ingest only knows about THIS raw section. Merging with prior raw on
+    # disk happens via the read-back path in reconcile / multi-source ingest.
     section = Section(
         text=body,
         reliability_rank=_reliability_for(entry.source),
@@ -725,19 +723,16 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         reliability_rank_version=config.reliability_rank_version,
     )
 
-    # Step 3: skip-key short-circuit unless --force.
     existing = await journal.fetch_by_key(canonical_id, entry.source, entry.source_id)
     if not force and existing:
         row = existing[0]
         if row.get("merge_state") == "complete" and row.get("skip_key") == skip_key:
             return "skipped"
 
-    # Step 4: pending row.
     await journal.upsert_pending(
         canonical_id=canonical_id, source=entry.source, source_id=entry.source_id
     )
 
-    # Step 5: atomic raw write.
     text_id = _text_id_for(canonical_id)
     await write_raw_atomic(
         post_mortems_root,
@@ -756,7 +751,6 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         },
     )
 
-    # Step 6: atomic canonical write (one-section merge in this ingest).
     await write_canonical_atomic(
         post_mortems_root,
         text_id,
@@ -770,8 +764,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         },
     )
 
-    # Step 7: chunks + embed + qdrant. Re-upsert path: delete then re-upsert all
-    # chunk points for this canonical_id so prior-run orphans don't pile up.
+    # Delete then re-upsert all chunk points for this canonical_id so prior-run
+    # orphans don't pile up.
     if existing:
         with contextlib.suppress(Exception):
             await corpus.delete_chunks_for_canonical(canonical_id)
@@ -796,7 +790,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         sparse_encoder=sparse_encoder,
     )
 
-    # Step 8: mark complete with skip_key LAST.
+    # mark_complete must run LAST: skip_key being set is the only signal a
+    # later ingest uses to short-circuit this entry.
     await journal.mark_complete(
         canonical_id=canonical_id,
         source=entry.source,
@@ -925,11 +920,9 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
 
         sparse_encoder = _encode_sparse
 
-    # Step 1: pull every entry. Per-source errors counted, run continues.
-    # `limit` short-circuits gathering; sources past the cap aren't started.
-    # When set, ``total=limit`` gives Rich a real denominator so the ETA
-    # column works. Without ``--limit`` the count isn't known up front, so we
-    # pass ``None`` (indeterminate, pulsing bar) rather than lying with ``0``.
+    # When ``--limit`` is set, ``total=limit`` gives Rich a real denominator
+    # so the ETA column works. Without it, the count isn't known up front,
+    # so pass ``None`` (indeterminate, pulsing bar) rather than lying with 0.
     progress.start_phase(IngestPhase.GATHER, total=limit)
     entries, source_failures = await _gather_entries(
         sources, span_events=result.span_events, limit=limit, progress=progress
@@ -938,7 +931,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     progress.log(f"gathered {len(entries)} entries from {len(sources)} sources")
     result.source_failures = source_failures
 
-    # Step 2: enrich, slop classify, length-floor.
     progress.start_phase(IngestPhase.CLASSIFY, total=len(entries))
     keepers: list[tuple[RawEntry, str]] = []  # (entry, body) post-extract.
     for entry in entries:
@@ -997,7 +989,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     skipped = result.skipped
     progress.log(f"classified: {len(keepers)} kept, {quarantined} quarantined, {skipped} skipped")
 
-    # Dry-run early exit: only count, never write.
     if dry_run:
         result.would_process = len(keepers)
         _emit_collected_events()
@@ -1007,7 +998,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
         _emit_collected_events()
         return result
 
-    # Step 3: cache-warm one serial call so fan-out runs hot.
     progress.start_phase(IngestPhase.CACHE_WARM, total=1)
     warmed, warm_creation, warm_events = await _cache_warm(
         llm=llm,
@@ -1021,12 +1011,12 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     result.cache_creation_tokens_warm = warm_creation
     result.span_events.extend(warm_events)
 
-    # Step 4: bounded fan-out for facets and summarize.
     progress.start_phase(IngestPhase.FAN_OUT, total=len(keepers))
     fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
     progress.end_phase(IngestPhase.FAN_OUT)
 
-    # Step 5: read-ratio probe on first 5 fan-out responses.
+    # Read-ratio probe on the first N fan-out responses; emit a span event if
+    # the cache isn't being read.
     probe = [r for r in fanout if isinstance(r, _FanoutResult)][:_CACHE_READ_RATIO_PROBE_N]
     if probe:
         total_read = sum(r.cache_read for r in probe)
@@ -1037,7 +1027,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             if ratio < _CACHE_READ_RATIO_THRESHOLD:
                 result.span_events.append(SpanEvent.CACHE_READ_RATIO_LOW.value)
 
-    # Step 6: per-entry sequential write phase.
     progress.start_phase(IngestPhase.WRITE, total=len(keepers))
     for (entry, body), fan in zip(keepers, fanout, strict=True):
         if isinstance(fan, BaseException):

@@ -78,7 +78,10 @@ def to_strict_response_schema(
 
 
 def synthesis_tools(config: Config) -> list[ToolSpec]:
-    """Build the synthesis tool list. Tavily inclusion depends on config, so it can't be a constant."""
+    """Build the synthesis tool list.
+
+    Tavily inclusion depends on config, so it can't be a constant.
+    """
     # Lazy import to break the cycle with corpus.tools_impl, which imports
     # ToolSpec from models via this module's transitive deps.
     from slopmortem.corpus import tools_impl  # noqa: PLC0415 - break import cycle
