@@ -208,11 +208,12 @@ class QdrantCorpus:
             strict_deaths=strict_deaths,
         )
 
-        # TODO(prod): the ``k_retrieve * 4`` chunk over-fetch assumes ~4 chunks
-        # per parent on average; long post-mortems can chunk into many more,
-        # silently under-filling the parent set after collapse. Measure
-        # ``len(best)`` vs ``k_retrieve`` against a real corpus and bump the
-        # multiplier (or switch to a parent-aware fetcher) before going live.
+        # TODO(prod): chunk over-fetch may under-fill long post-mortems (#25).
+        # The ``k_retrieve * 4`` multiplier assumes ~4 chunks per parent on
+        # average; long post-mortems can chunk into many more, silently
+        # under-filling the parent set after collapse. Measure ``len(best)``
+        # vs ``k_retrieve`` against a real corpus and bump the multiplier (or
+        # switch to a parent-aware fetcher) before going live.
         resp = await self._client.query_points(
             collection_name=self._collection,
             prefetch=inner,
@@ -239,9 +240,10 @@ class QdrantCorpus:
         # Build Candidates in descending score order. Bad payloads are
         # per-doc isolated (logged and dropped) so one malformed point can't
         # fail the whole query.
-        # TODO(perf): if profiling shows pydantic validation here is hot,
-        # cache validated payloads keyed on (canonical_id, chunk_idx) — they
-        # are immutable post-ingest. Skip until measurements justify it.
+        # TODO(perf): cache pydantic-validated payloads if hot (#26).
+        # Keyed on (canonical_id, chunk_idx); payloads are immutable
+        # post-ingest, so the cache is safe. Skip until measurements
+        # justify it.
         ordered = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)
         candidates: list[Candidate] = []
         for cid, (score, payload) in ordered:

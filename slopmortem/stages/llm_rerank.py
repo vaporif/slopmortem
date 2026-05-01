@@ -74,12 +74,12 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
             ],
         }
     )
-    # TODO(scaling): prompt size and cost are linear in K_retrieve. At K=30
-    # the rubric prompt cache absorbs most of the latency, but if K is bumped
-    # the candidate-list segment dominates. Decide later between (a) two-stage
-    # rerank (cheap model 30->10, expensive 10->5), (b) local cross-encoder
-    # rerank (e.g. bge-reranker) replacing the LLM call, or (c) tighter
-    # summary truncation. Pick when measurements justify it; not now.
+    # TODO(scaling): rerank cost grows linearly with K_retrieve (#27).
+    # At K=30 the rubric prompt cache absorbs most of the latency, but if K
+    # is bumped the candidate-list segment dominates. Decide later between
+    # (a) two-stage rerank (cheap model 30->10, expensive 10->5), (b) local
+    # cross-encoder rerank (e.g. bge-reranker) replacing the LLM call, or
+    # (c) tighter summary truncation. Pick when measurements justify it.
     prompt = render_prompt(
         "llm_rerank",
         pitch=pitch,

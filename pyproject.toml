@@ -74,6 +74,10 @@ ignore = [
   "D213",  # conflicts with D212
   # Practically unenforceable
   "CPY001",  # missing copyright header on every file
+  # Deferred-work policy: TODOs must carry a tracked issue link (TD003 still
+  # enforces that), but the meta "you have a TODO, resolve it" warning is
+  # noise for items we have intentionally postponed.
+  "FIX002",
   # `Any` is used deliberately for SDK passthroughs and Jinja contexts;
   # basedpyright's `reportAny` is the real gate (each site carries
   # `# pyright: ignore[reportAny]` with rationale).
