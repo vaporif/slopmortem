@@ -4,7 +4,7 @@
 
 You give it a pitch, it finds dead startups that tried something similar.
 
-`slopmortem` runs locally. LLM calls go through OpenRouter (Sonnet + Haiku by default). Qdrant runs in Docker.
+`slopmortem` runs locally. LLM calls go through OpenRouter (Sonnet + Haiku by default). Qdrant runs where you want (docker-compose is added for ease of use).
 
 Pipeline diagram, query/ingest flow, and source layout live in [`docs/architecture.md`](docs/architecture.md).
 
