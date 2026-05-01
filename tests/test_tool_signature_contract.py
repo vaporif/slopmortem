@@ -13,11 +13,15 @@ Two invariants:
 
 from __future__ import annotations
 
+import ast
 import inspect
 
 from slopmortem.corpus import tools_impl
 from slopmortem.corpus.tools_impl import get_post_mortem, search_corpus
 from slopmortem.llm.tools import to_openai_input_schema
+
+BANNED_MODULES = frozenset({"subprocess"})
+BANNED_ATTRS = frozenset({("os", "system"), ("shutil", "rmtree"), ("shutil", "copy")})
 
 
 def test_tool_signatures_round_trip():
@@ -39,6 +43,22 @@ def test_tool_signatures_round_trip():
 
 
 def test_no_subprocess_imports_in_tools():
-    src = inspect.getsource(tools_impl)
-    for banned in ("subprocess", "os.system", "shutil.rmtree", "shutil.copy"):
-        assert banned not in src, f"banned import: {banned}"
+    """AST-based: defeats `import subprocess as sp` and similar aliasing tricks."""
+    tree = ast.parse(inspect.getsource(tools_impl))
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".", 1)[0]
+                if root in BANNED_MODULES:
+                    violations.append(f"import {alias.name}")
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and node.module.split(".", 1)[0] in BANNED_MODULES:
+                violations.append(f"from {node.module} import ...")
+            for mod, attr in BANNED_ATTRS:
+                if node.module == mod and any(a.name == attr for a in node.names):
+                    violations.append(f"from {mod} import {attr}")
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            if (node.value.id, node.attr) in BANNED_ATTRS:
+                violations.append(f"{node.value.id}.{node.attr}")
+    assert not violations, f"banned references: {violations}"

@@ -1,28 +1,26 @@
 # ruff: noqa: FBT002 - typer signatures are bool flags with False defaults by convention.
-"""Top-level CLI entry point: ``slopmortem ingest``, ``query``, and ``replay``.
+"""Top-level CLI: ``slopmortem ingest``, ``query``, and ``replay``.
 
-The ``query`` command is the production entry point for the synthesis pipeline.
-It loads :class:`Config`, initializes Laminar tracing (gated on the endpoint
-guard in :mod:`slopmortem.tracing` and an env-var API key), constructs the
-real OpenRouter LLM client, the OpenAI embedding client, and the Qdrant corpus,
-then dispatches to :func:`slopmortem.pipeline.run_query`. Stage progress goes
-to stderr (TTY-gated); the rendered Markdown report goes to stdout.
+``query`` is the production entry point for the synthesis pipeline. Loads
+:class:`Config`, starts Laminar tracing (gated on the endpoint guard in
+:mod:`slopmortem.tracing` plus an env-var API key), builds the real OpenRouter
+LLM client, the OpenAI embedding client, and the Qdrant corpus, then dispatches
+to :func:`slopmortem.pipeline.run_query`. Stage progress goes to stderr
+(TTY-gated); the rendered Markdown report goes to stdout.
 
-The ``replay`` command iterates an evals dataset (Task 11 ships the dataset
-format and content). The missing-dataset path exits with code 2 so CI smoke
-tests can probe the wiring without a fixture corpus.
+``replay`` iterates an evals dataset (format + content shipped in Task 11). The
+missing-dataset path exits with code 2 so CI smoke tests can probe the wiring
+without a fixture corpus.
 
-The ``ingest`` command assembles real :class:`Source`, :class:`Enricher`,
+``ingest`` assembles real :class:`Source`, :class:`Enricher`,
 :class:`MergeJournal`, :class:`Corpus`, :class:`LLMClient`,
-:class:`EmbeddingClient`, and :class:`SlopClassifier` instances from
-:class:`Config` and env vars and dispatches to
-:func:`slopmortem.ingest.ingest`. ``--list-review`` is a read-only path that
-queries :class:`MergeJournal` for the pending entity-resolution review queue
-and prints it to stdout. ``--reconcile`` runs the six-drift-class scan with
-``repair=True`` and prints the report. ``--reclassify`` re-runs the slop
-classifier against every quarantine row and routes survivors back out of
-the quarantine tree; ``--tavily-enrich`` appends a :class:`TavilyEnricher`
-to the enrichers list.
+:class:`EmbeddingClient`, and :class:`SlopClassifier` from :class:`Config` and
+env vars, then dispatches to :func:`slopmortem.ingest.ingest`. Read-only modes:
+``--list-review`` queries :class:`MergeJournal` for the pending entity-resolution
+review queue. ``--reconcile`` runs the six-drift-class scan with ``repair=True``
+and prints the report. ``--reclassify`` re-runs the slop classifier on every
+quarantine row and routes survivors back out of the quarantine tree.
+``--tavily-enrich`` appends a :class:`TavilyEnricher` to the enrichers list.
 """
 
 from __future__ import annotations
@@ -39,12 +37,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self, cast, override
 
-# Silence gRPC C-Core's INFO-level log channel BEFORE the Laminar import below
-# transitively pulls in grpcio. Without this, the OTLP exporter's connection
-# pool prints ``ev_poll_posix.cc:593 FD from fork parent still in poll list``
-# on every poll-loop wake-up, which interleaves with the Rich progress redraws
-# and turns the terminal into a smear of glog noise. ``ERROR`` keeps real
-# failures visible while killing the chatty INFO/WARNING traffic.
+# Silence gRPC C-Core's INFO log channel BEFORE the Laminar import below pulls
+# in grpcio. Without this, the OTLP exporter's pool prints
+# ``ev_poll_posix.cc:593 FD from fork parent still in poll list`` on every
+# poll-loop wake-up, which interleaves with the Rich progress redraws and turns
+# the terminal into a glog smear. ``ERROR`` keeps real failures visible while
+# killing the chatty INFO/WARNING traffic.
 os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
 os.environ.setdefault("GRPC_TRACE", "")
 os.environ.setdefault("GLOG_minloglevel", "2")
@@ -184,7 +182,8 @@ def ingest_cmd(  # noqa: PLR0913 - every flag mirrors the spec; user types kwarg
 
     Wires user flags into :func:`slopmortem.ingest.ingest`. Config knobs
     (slop_threshold, ingest_concurrency, embed_model_id, taxonomy_version,
-    reliability_rank_version, etc.) come from :func:`slopmortem.config.load_config`.
+    reliability_rank_version, ...) come from
+    :func:`slopmortem.config.load_config`.
     """
     anyio.run(
         functools.partial(
@@ -206,9 +205,9 @@ def ingest_cmd(  # noqa: PLR0913 - every flag mirrors the spec; user types kwarg
 async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
     """Re-run the slop classifier across quarantined rows and print the summary."""
     journal = await _build_journal(config, post_mortems_root)
-    # reclassify is a live operation that hits the slop judge for real;
-    # construct only the LLM (no embedder/qdrant) and route it into the
-    # Haiku-backed classifier.
+    # reclassify is a live operation that hits the slop judge for real. Build
+    # only the LLM (no embedder, no qdrant) and feed it into the Haiku
+    # classifier.
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
     openrouter_sdk = AsyncOpenAI(
         api_key=config.openrouter_api_key.get_secret_value(),
@@ -265,8 +264,8 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
     config = load_config()
     _maybe_init_tracing(config)
 
-    # Read-only short-circuits are wired before the full LLM/embedder build so
-    # they don't require ``OPENROUTER_API_KEY`` / ``OPENAI_API_KEY``.
+    # Read-only short-circuits run before the full LLM/embedder build so they
+    # don't require ``OPENROUTER_API_KEY`` / ``OPENAI_API_KEY``.
     if list_review:
         journal = await _build_journal(config, post_mortems_root)
         rows = await journal.list_pending_review()
@@ -293,7 +292,7 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
         config, post_mortems_root, dry_run=dry_run
     )
     # The ingest-side Corpus Protocol is wider than the query-side one used by
-    # ``_set_corpus``; the underlying ``QdrantCorpus`` instance satisfies both.
+    # _set_corpus; the underlying QdrantCorpus instance satisfies both.
     _set_corpus(cast("Corpus", corpus))
 
     sources: list[Source] = [
@@ -309,15 +308,15 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
     if tavily_enrich:
         enrichers.append(TavilyEnricher())
 
-    # TTY-gated: only attach the Rich progress display when stderr is a real
-    # terminal. Piped invocations (CI, ``> file``) get a quiet run.
+    # TTY-gated: attach Rich progress only when stderr is a real terminal.
+    # Piped invocations (CI, ``> file``) get a quiet run.
     progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
         RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
     # Catch and print any exception that escapes the orchestrator BEFORE the
-    # Rich live render tears down. Without this, ``Progress.__exit__`` clears
-    # the screen and the traceback can interleave invisibly with bar redraws,
-    # exactly what happened with the Wesabe / "collection doesn't exist" run.
+    # Rich live render tears down. Without this, Progress.__exit__ clears the
+    # screen and the traceback interleaves invisibly with bar redraws — the
+    # exact failure mode from the Wesabe / "collection doesn't exist" run.
     err_console = Console(stderr=True)
     try:
         with progress_ctx as bar:
@@ -338,15 +337,15 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
                 progress=bar,
             )
     except KeyboardInterrupt:
-        # Ctrl-C is a ``BaseException``; without surfacing it explicitly the
-        # user just sees the prompt return with no signal that the run stopped.
+        # Ctrl-C is a BaseException; without surfacing it the user just sees
+        # the prompt return with no signal that the run stopped.
         err_console.rule("[bold yellow]ingest cancelled (Ctrl-C)", style="yellow")
         raise
     except BaseException:
-        # Catch ``BaseException`` (asyncio.CancelledError, SystemExit, etc.) too.
+        # Catch BaseException (asyncio.CancelledError, SystemExit, ...) too.
         # ``except Exception`` alone misses these and they exit silently when
-        # Rich's live render tears down. We print and re-raise so the caller
-        # still sees a non-zero exit; this is purely for visibility.
+        # Rich's live render tears down. Print and re-raise — the caller still
+        # gets a non-zero exit, this is just for visibility.
         err_console.rule("[bold red]ingest failed", style="red")
         err_console.print_exception(show_locals=False)
         raise
@@ -425,15 +424,14 @@ def query_cmd(
     """Run the synthesis pipeline against *description* and persist a Markdown report.
 
     By default the rendered :class:`Report` is written to
-    ``.slopmortem/runs/<utc-timestamp>-<slug>.md`` and only the path is
-    echoed to stdout. Pass ``--stdout`` to dump the report to stdout instead
-    (useful for shell pipelines). When no candidates clear the similarity
-    floor a short "not found" message goes to stdout and the command exits
-    with code ``1`` (no file is written). Stage progress streams to stderr
-    (TTY-gated). Tracing wiring (Laminar) is gated on
-    ``Config.enable_tracing`` and a present ``LMNR_PROJECT_API_KEY``. When
-    the API key is missing but tracing is enabled, a one-line warning goes
-    to stderr and the run continues without tracing.
+    ``.slopmortem/runs/<utc-timestamp>-<slug>.md`` and only the path is echoed
+    to stdout. Pass ``--stdout`` to dump the report to stdout instead (handy in
+    shell pipelines). When no candidates clear the similarity floor, a short
+    "not found" message goes to stdout and the command exits with code 1 (no
+    file is written). Stage progress streams to stderr (TTY-gated). Laminar
+    tracing is gated on ``Config.enable_tracing`` and a present
+    ``LMNR_PROJECT_API_KEY``; if the key is missing but tracing is enabled, a
+    one-line warning goes to stderr and the run continues untraced.
     """
     anyio.run(
         functools.partial(
@@ -614,9 +612,9 @@ def _build_deps(
 ) -> tuple[LLMClient, EmbeddingClient, Corpus, Budget]:
     """Construct production LLM, embedder, corpus, and budget from *config*.
 
-    Factored out as a helper so CLI smoke tests can monkeypatch a single symbol.
-    All credentials and connection settings come from :class:`Config`, which
-    pydantic-settings populates from env vars, ``.env``, and TOML.
+    A helper so CLI smoke tests can monkeypatch one symbol. All credentials and
+    connection settings come from :class:`Config`, which pydantic-settings
+    populates from env vars, ``.env``, and TOML.
     """
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 - heavy dep, lazy import
 
@@ -650,8 +648,8 @@ async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJourna
     """Construct and schema-initialize the merge journal.
 
     ``init()`` is idempotent (``CREATE TABLE IF NOT EXISTS``), so calling it
-    on every CLI invocation is cheap and ensures fresh dev databases work
-    without an explicit setup step.
+    every CLI invocation is cheap and means fresh dev databases work without
+    an explicit setup step.
     """
     from slopmortem.corpus.merge import MergeJournal  # noqa: PLC0415
 
@@ -668,10 +666,9 @@ def _build_slop_classifier(
 ) -> SlopClassifier:
     """Construct the slop classifier.
 
-    Dry-run uses :class:`FakeSlopClassifier` so the run requires no API key
-    and emits no LLM cost. Live ingest uses :class:`HaikuSlopClassifier`,
-    which sends one Haiku call per entry and quarantines anything that
-    isn't a specific dead-company narrative.
+    Dry-run uses :class:`FakeSlopClassifier` — no API key, no LLM cost. Live
+    ingest uses :class:`HaikuSlopClassifier`: one Haiku call per entry,
+    quarantines anything that isn't a specific dead-company narrative.
     """
     if dry_run:
         from slopmortem.ingest import FakeSlopClassifier  # noqa: PLC0415
@@ -685,9 +682,9 @@ def _build_slop_classifier(
 async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
     """Construct the Qdrant-backed ingest corpus and ensure its collection exists.
 
-    ``ensure_collection`` is idempotent (creates only when missing), so calling
-    it on every invocation is cheap and means a fresh dev box doesn't need a
-    separate setup step. Without this, ``upsert_chunk`` fails with
+    ``ensure_collection`` is idempotent (creates only when missing), so this is
+    cheap to call every invocation and means fresh dev boxes don't need a
+    separate setup step. Without it, ``upsert_chunk`` fails with
     ``Collection 'slopmortem' doesn't exist`` on the first write.
     """
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 - heavy dep, lazy import
@@ -709,10 +706,10 @@ async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> Inges
         facet_boost=config.facet_boost,
         rrf_k=config.rrf_k,
     )
-    # ``QdrantCorpus`` ships ``upsert_chunk`` but not yet ``has_chunks`` or
-    # ``delete_chunks_for_canonical`` (production gap tracked separately);
-    # cast at this boundary so the CLI surface compiles against the strict
-    # ingest-side ``Corpus`` Protocol declared in :mod:`slopmortem.ingest`.
+    # QdrantCorpus has upsert_chunk but not yet has_chunks or
+    # delete_chunks_for_canonical (production gap tracked separately). Cast at
+    # the boundary so the CLI surface compiles against the strict ingest-side
+    # Corpus Protocol in slopmortem.ingest.
     return cast("IngestCorpus", corpus)
 
 
@@ -724,10 +721,10 @@ async def _build_ingest_deps(
 ) -> tuple[LLMClient, EmbeddingClient, IngestCorpus, Budget, MergeJournal, SlopClassifier]:
     """Construct the full ingest-side wiring: LLM, embed, corpus, budget, journal, classifier.
 
-    Mirrors :func:`_build_deps` but uses ``max_cost_usd_per_ingest`` for the
-    budget cap and additionally constructs a :class:`MergeJournal` and the
-    slop classifier. ``dry_run=True`` swaps in :class:`FakeSlopClassifier`
-    so the run needs no real API key.
+    Mirrors :func:`_build_deps` but caps the budget at
+    ``max_cost_usd_per_ingest`` and additionally builds a
+    :class:`MergeJournal` plus the slop classifier. ``dry_run=True`` swaps in
+    :class:`FakeSlopClassifier` so the run needs no real API key.
     """
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
 
@@ -754,8 +751,8 @@ async def _build_ingest_deps(
     return llm, embedder, corpus, budget, journal, classifier
 
 
-# Phase labels keyed on the IngestPhase enum so any new phase added in
-# ``slopmortem.ingest`` flags here at type-check time as a missing label.
+# Phase labels keyed on the IngestPhase enum so any phase added in
+# slopmortem.ingest fails type-check here until it gets a label.
 _INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
     IngestPhase.GATHER: "Gathering entries from sources",
     IngestPhase.CLASSIFY: "Classifying / slop-filtering",
@@ -768,8 +765,8 @@ _INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 class _StackedBar:
     """Render *bar* ``height`` times on consecutive rows.
 
-    Rich's :class:`ProgressBar` yields segments without a trailing newline,
-    so ``Group`` of N bars renders inline; we drop explicit ``Segment.line``
+    Rich's :class:`ProgressBar` yields segments without a trailing newline, so
+    a ``Group`` of N bars renders inline. Drop explicit ``Segment.line``
     between copies to stack them vertically.
     """
 
