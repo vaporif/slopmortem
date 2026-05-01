@@ -170,17 +170,13 @@ async def _record(
         # the cleanup path. The suppress block below covers the never-created case.
         try:
             await ensure_collection(qclient, collection_name, dim=dim)
-            # QdrantCorpus implements upsert_chunk but not has_chunks /
-            # delete_chunks_for_canonical (see cli.py:432-436); cast at the
-            # boundary so the strict ingest-side Corpus Protocol holds.
-            qcorpus = QdrantCorpus(
+            corpus: IngestCorpus = QdrantCorpus(
                 client=qclient,
                 collection=collection_name,
                 post_mortems_root=post_mortems_root,
                 facet_boost=config.facet_boost,
                 rrf_k=config.rrf_k,
             )
-            corpus = cast("IngestCorpus", qcorpus)
 
             sources = [CuratedSource(yaml_path=translated_yaml)]
             enrichers: list[Enricher] = []

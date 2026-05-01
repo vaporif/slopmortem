@@ -697,18 +697,13 @@ async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> Inges
 
     qdrant_client = AsyncQdrantClient(host=config.qdrant_host, port=config.qdrant_port)
     await ensure_collection(qdrant_client, config.qdrant_collection, dim=dim)
-    corpus = QdrantCorpus(
+    return QdrantCorpus(
         client=qdrant_client,
         collection=config.qdrant_collection,
         post_mortems_root=post_mortems_root,
         facet_boost=config.facet_boost,
         rrf_k=config.rrf_k,
     )
-    # QdrantCorpus has upsert_chunk but not yet has_chunks or
-    # delete_chunks_for_canonical (production gap tracked separately). Cast at
-    # the boundary so the CLI surface compiles against the strict ingest-side
-    # Corpus Protocol in slopmortem.ingest.
-    return cast("IngestCorpus", corpus)
 
 
 async def _build_ingest_deps(

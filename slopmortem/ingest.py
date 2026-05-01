@@ -37,7 +37,6 @@ bounded fan-out limiter for the facet+summarize batch.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import logging
@@ -320,6 +319,7 @@ class IngestResult:
     quarantined: int = 0
     skipped: int = 0
     skipped_empty: int = 0
+    failed: int = 0
     errors: int = 0
     source_failures: int = 0
     would_process: int = 0  # populated when dry_run=True
@@ -682,9 +682,13 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     """Write raw + canonical + chunks for one resolved entry.
 
     Returns:
-        One of ``"processed"``, ``"skipped"``, or ``"skipped_empty"``.
-        ``"skipped_empty"`` means chunking yielded zero chunks, so
-        ``mark_complete`` was deliberately skipped to avoid silent corpus drift.
+        One of ``"processed"``, ``"skipped"``, ``"skipped_empty"``, or
+        ``"failed"``. ``"skipped_empty"`` means chunking yielded zero chunks,
+        so ``mark_complete`` was deliberately skipped to avoid silent corpus
+        drift. ``"failed"`` means an in-flight write (currently only
+        ``delete_chunks_for_canonical`` on a re-merge) raised; the entry was
+        aborted before any upsert to keep prior orphans from being shadowed
+        by a fresh upsert layer.
     """
     name = entry.source_id  # ingest's name extraction is best-effort in v1
     sector = fan.facets.sector
@@ -770,8 +774,26 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     # Delete then re-upsert all chunk points for this canonical_id so prior-run
     # orphans don't pile up.
     if existing:
-        with contextlib.suppress(Exception):
+        try:
             await corpus.delete_chunks_for_canonical(canonical_id)
+        except Exception as exc:  # noqa: BLE001 — qdrant-client raises a wide range of transport/auth/validation errors; recovery is the same for all.
+            # Failed delete on re-merge: re-upserting on top of orphans would
+            # leak higher-index chunks from a longer prior body. Abort entry,
+            # let reconcile catch the drift on a later pass.
+            Laminar.event(
+                name=SpanEvent.INGEST_ENTRY_FAILED.value,
+                attributes={
+                    "canonical_id": canonical_id,
+                    "stage": "delete_chunks",
+                    "error": str(exc),
+                },
+            )
+            logger.warning(
+                "ingest aborted entry: delete_chunks_for_canonical failed for %s: %s",
+                canonical_id,
+                exc,
+            )
+            return "failed"
     payload = _build_payload(
         facets=fan.facets,
         summary=fan.summary,
@@ -1106,6 +1128,8 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             result.skipped += 1
         elif outcome == "skipped_empty":
             result.skipped_empty += 1
+        elif outcome == "failed":
+            result.failed += 1
         progress.advance_phase(IngestPhase.WRITE)
     progress.end_phase(IngestPhase.WRITE)
 

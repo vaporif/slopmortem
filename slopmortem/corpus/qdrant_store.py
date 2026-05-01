@@ -313,6 +313,59 @@ class QdrantCorpus:
             out.append(payload)
         return out
 
+    async def has_chunks(self, canonical_id: str) -> bool:
+        """Return whether at least one chunk point exists for *canonical_id*."""
+        from qdrant_client.models import (  # noqa: PLC0415 — keep top-level imports lean
+            FieldCondition,
+            Filter,
+            MatchValue,
+        )
+
+        records, _ = await self._client.scroll(
+            collection_name=self._collection,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="canonical_id",
+                        match=MatchValue(value=canonical_id),
+                    )
+                ]
+            ),
+            limit=1,
+            with_payload=False,
+            with_vectors=False,
+        )
+        return bool(records)
+
+    async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
+        """Delete all chunk points whose ``payload.canonical_id`` matches.
+
+        Idempotent: deleting when no points exist does not raise. Raises on
+        transport/auth failures; the caller (``ingest._process_entry``) decides
+        whether to abort the entry or proceed.
+        """
+        from qdrant_client.http.models import (  # noqa: PLC0415 — keep top-level imports lean
+            FieldCondition,
+            Filter,
+            FilterSelector,
+            MatchValue,
+        )
+
+        selector = FilterSelector(
+            filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="canonical_id",
+                        match=MatchValue(value=canonical_id),
+                    )
+                ]
+            )
+        )
+        await self._client.delete(
+            collection_name=self._collection,
+            points_selector=selector,
+        )
+
     async def upsert_chunk(self, point: Any) -> None:  # pyright: ignore[reportExplicitAny]
         """Upsert a single chunk point into the collection (used by ingest).
 
