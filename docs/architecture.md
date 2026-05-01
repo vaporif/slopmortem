@@ -11,7 +11,7 @@ flowchart TD
         Q1[facet_extract · Haiku] --> Q2[embed dense + sparse]
         Q2 --> Q3[retrieve · Qdrant RRF]
         Q3 --> Q4[llm_rerank · Sonnet]
-        Q4 --> Q5[synthesize × N · Sonnet + tools]
+        Q4 --> Q5["synthesize × N · Sonnet + tools<br/>get_post_mortem · search_corpus"]
         Q5 --> Q6[consolidate_risks · Sonnet]
         Q6 --> Q7[render markdown]
     end

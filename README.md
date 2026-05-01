@@ -27,7 +27,7 @@ First-run sequence:
 ```
 direnv allow                         # or: nix develop
 just init-env                        # interactive — fill OPENROUTER_API_KEY, skip the rest (Tavily/OpenAI/Laminar are feature-gated)
-docker compose up -d qdrant          # Qdrant on :6333
+docker compose up -d qdrant          # Qdrant on :16333 (host port; container still 6333)
 slopmortem embed-prefetch            # one-time ~550 MB ONNX download
 just ingest                          # ~$0.75 for 50 entries with all enrichers; or `just ingest-all`
 just query "your pitch here"         # ~$0.10 warm / ~$0.30 cold cache; or `just query-debug` to skip rerank+synth
