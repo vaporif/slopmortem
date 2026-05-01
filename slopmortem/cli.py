@@ -32,7 +32,9 @@ import functools
 import json
 import logging
 import os
+import re
 import sys
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self, cast, override
@@ -53,6 +55,7 @@ from lmnr import Laminar, observe
 from openai import AsyncOpenAI
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -358,6 +361,29 @@ def _default_curated_yaml() -> Path:
     return Path(__file__).parent / "corpus" / "sources" / "curated" / "post_mortems_v0.yml"
 
 
+_RUNS_DIR = Path(".slopmortem/runs")
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+_SLUG_MAX = 40
+
+_NOT_FOUND_MARKDOWN = """# No matching post-mortems found
+
+The query returned no synthesized candidates above the similarity floor.
+Try broadening the description or removing the `--years` filter."""
+
+
+def _slugify(text: str) -> str:
+    """Lowercase, collapse non-alphanumerics to ``-``, truncate to 40 chars."""
+    s = _SLUG_RE.sub("-", text.lower()).strip("-")
+    return s[:_SLUG_MAX].rstrip("-") or "run"
+
+
+def _query_run_path(ctx: InputContext) -> Path:
+    """Return ``.slopmortem/runs/<utc-ts>-<slug>.md`` for this run."""
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base = ctx.name if ctx.name and ctx.name != "(unnamed)" else ctx.description
+    return _RUNS_DIR / f"{ts}-{_slugify(base)}.md"
+
+
 @app.command("query")
 def query_cmd(
     description: Annotated[
@@ -385,15 +411,29 @@ def query_cmd(
             ),
         ),
     ] = False,
+    to_stdout: Annotated[
+        bool,
+        typer.Option(
+            "--stdout",
+            help=(
+                "Print the rendered report to stdout instead of writing it under "
+                ".slopmortem/runs/. Use when piping the report into another tool."
+            ),
+        ),
+    ] = False,
 ) -> None:
-    """Run the synthesis pipeline against *description* and print a Markdown report.
+    """Run the synthesis pipeline against *description* and persist a Markdown report.
 
-    Streams stage progress to stderr (TTY-gated) while the pipeline runs;
-    emits the rendered :class:`Report` to stdout when done. Tracing wiring
-    (Laminar) is gated on ``Config.enable_tracing`` and a present
-    ``LMNR_PROJECT_API_KEY``. When the API key is missing but tracing is
-    enabled, a one-line warning goes to stderr and the run continues without
-    tracing.
+    By default the rendered :class:`Report` is written to
+    ``.slopmortem/runs/<utc-timestamp>-<slug>.md`` and only the path is
+    echoed to stdout. Pass ``--stdout`` to dump the report to stdout instead
+    (useful for shell pipelines). When no candidates clear the similarity
+    floor a short "not found" message goes to stdout and the command exits
+    with code ``1`` (no file is written). Stage progress streams to stderr
+    (TTY-gated). Tracing wiring (Laminar) is gated on
+    ``Config.enable_tracing`` and a present ``LMNR_PROJECT_API_KEY``. When
+    the API key is missing but tracing is enabled, a one-line warning goes
+    to stderr and the run continues without tracing.
     """
     anyio.run(
         functools.partial(
@@ -402,6 +442,7 @@ def query_cmd(
             name=name,
             years=years,
             debug_retrieve=debug_retrieve,
+            to_stdout=to_stdout,
         )
     )
 
@@ -413,6 +454,7 @@ async def _query(
     name: str | None,
     years: int | None,
     debug_retrieve: bool = False,
+    to_stdout: bool = False,
 ) -> None:
     """Async impl for ``slopmortem query``. Wires production deps and dispatches."""
     config = load_config()
@@ -449,7 +491,21 @@ async def _query(
 
     if bar is not None:
         _render_query_footer(bar.console, report, n_target=config.N_synthesize)
-    typer.echo(render(report))
+
+    if not report.candidates:
+        typer.echo(_NOT_FOUND_MARKDOWN)
+        raise typer.Exit(code=1)
+
+    rendered = render(report)
+    if to_stdout:
+        typer.echo(rendered)
+        return
+    out_path = _query_run_path(ctx)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = out_path.write_text(rendered, encoding="utf-8")
+    err_console.print(f"[bold green]Report saved to[/bold green] {out_path}")
+    if not sys.stdout.isatty():
+        typer.echo(str(out_path))
 
 
 _DEBUG_SUMMARY_MAX = 200
@@ -797,6 +853,7 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
         )
         self._tasks: dict[PhaseT, TaskID] = {}
         self._phase_errors: dict[PhaseT, int] = {}
+        self._phase_status: dict[PhaseT, str] = {}
 
     def __enter__(self) -> Self:
         """Start the live render."""
@@ -819,6 +876,9 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
 
     def _label(self, phase: PhaseT) -> str:
         styled = f"[bold cyan]{self._labels[phase]}[/bold cyan]"
+        status = self._phase_status.get(phase)
+        if status:
+            styled = f"{styled} [dim]({status})[/dim]"
         n = self._phase_errors.get(phase, 0)
         if not n:
             return styled
@@ -867,6 +927,16 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
         self._progress.update(
             tid, completed=task.total or task.completed, description=self._label(phase)
         )
+
+    def set_phase_status(self, phase: PhaseT, status: str | None) -> None:
+        """Set or clear a transient dim suffix on *phase*'s description."""
+        if status:
+            self._phase_status[phase] = status
+        else:
+            self._phase_status.pop(phase, None)
+        tid = self._tasks.get(phase)
+        if tid is not None:
+            self._progress.update(tid, description=self._label(phase))
 
     def log(self, message: str) -> None:
         """Write a one-off neutral status line above the progress display."""
@@ -927,7 +997,7 @@ class RichQueryProgress(_RichPhaseProgress[QueryPhase]):
 
 
 def _render_query_footer(console: Console, report: Report, n_target: int) -> None:
-    """Print a one-line summary footer to *console* after a query run."""
+    """Print a summary panel to *console* after a query run."""
     meta = report.pipeline_meta
     parts = [
         f"cost=${meta.cost_usd_total:.4f}",
@@ -938,7 +1008,15 @@ def _render_query_footer(console: Console, report: Report, n_target: int) -> Non
         parts.append(f"trace={meta.trace_id}")
     if meta.budget_exceeded:
         parts.append("[bold red]budget_exceeded[/bold red]")
-    console.print("[bold cyan]done[/bold cyan] • " + " • ".join(parts))
+    console.print(
+        Panel(
+            " • ".join(parts),
+            title="[bold cyan]done[/bold cyan]",
+            title_align="left",
+            border_style="cyan",
+            expand=False,
+        )
+    )
 
 
 @app.command("replay")

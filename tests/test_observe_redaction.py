@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 _FACET_MODEL = "test-facet"
 _RERANK_MODEL = "test-rerank"
 _SYNTH_MODEL = "test-synth"
+_CONSOLIDATE_MODEL = "test-consolidate"
 _EMBED_MODEL = "text-embedding-3-small"
 
 _BODY_SENTINEL = "ZZ-CANARY-CORPUS-BODY-DO-NOT-EXFILTRATE-ZZ"
@@ -187,6 +188,27 @@ def _build_canned(
             "synthesize", **synthesize_prompt_kwargs(cand, pitch=ctx.description)
         )
         canned[llm_canned_key("synthesize", model=_SYNTH_MODEL, prompt=synth_prompt)] = synth_resp
+
+    # Canned synthesis always emits ``candidate_id="acme"`` and lesson
+    # ``"target larger ACVs"``, so the consolidate prompt is deterministic.
+    consolidate_prompt = render_prompt(
+        "consolidate_risks",
+        pitch=ctx.description,
+        lessons=[
+            {
+                "candidate_id": "acme",
+                "candidate_name": "acme",
+                "lesson": "target larger ACVs",
+            }
+        ],
+        candidate_ids=["acme"] * len(top_n),
+    )
+    canned[
+        llm_canned_key("consolidate_risks", model=_CONSOLIDATE_MODEL, prompt=consolidate_prompt)
+    ] = FakeResponse(
+        text=json.dumps({"top_risks": [], "injection_detected": False}),
+        cost_usd=0.005,
+    )
     return canned
 
 
@@ -254,6 +276,7 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
             "model_facet": _FACET_MODEL,
             "model_rerank": _RERANK_MODEL,
             "model_synthesize": _SYNTH_MODEL,
+            "model_consolidate": _CONSOLIDATE_MODEL,
         }
     )
 

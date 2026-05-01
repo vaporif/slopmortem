@@ -1,0 +1,40 @@
+{
+  "vars": {
+    "pitch": "MedScribe is an AI medical scribing app for US dermatology clinics, billed monthly per provider.",
+    "lessons": [
+      {
+        "candidate_id": "scribetech.com",
+        "candidate_name": "ScribeTech",
+        "lesson": "Pick a specialty Epic and athena are slow to bundle into."
+      },
+      {
+        "candidate_id": "scribetech.com",
+        "candidate_name": "ScribeTech",
+        "lesson": "Sign multi-year contracts before incumbents copy."
+      },
+      {
+        "candidate_id": "ambient-ai.example",
+        "candidate_name": "AmbientAI",
+        "lesson": "Build an integration moat that survives a bundled-scribing release."
+      }
+    ],
+    "candidate_ids": ["scribetech.com", "ambient-ai.example"]
+  },
+  "expected_output": {
+    "top_risks": [
+      {
+        "summary": "Sign multi-year contracts before EHRs bundle scribing.",
+        "applies_because": "Pitch sells per-provider monthly scribing, the same shape Epic absorbed when ScribeTech died.",
+        "raised_by": ["scribetech.com"],
+        "severity": "high"
+      },
+      {
+        "summary": "Pick a specialty EHRs are slow to bundle into.",
+        "applies_because": "Pitch targets dermatology specifically — defensibility hinges on this choice.",
+        "raised_by": ["scribetech.com", "ambient-ai.example"],
+        "severity": "medium"
+      }
+    ],
+    "injection_detected": false
+  }
+}

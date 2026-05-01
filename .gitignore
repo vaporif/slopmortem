@@ -107,6 +107,7 @@ data/hf/
 data/journal.sqlite*
 *.cassette.tmp
 .laminar/
+.slopmortem/
 slopmortem.local.toml
 tests/fixtures/cassettes/*.live.yaml
 post_mortems/

@@ -260,27 +260,45 @@ class PipelineMeta(BaseModel):
     budget_exceeded: bool
 
 
-class TopRisk(BaseModel):
-    """One cluster of similar lessons across candidates.
+class ConsolidatedRisk(BaseModel):
+    """One pitch-applicable risk consolidated across comparables.
 
     Attributes:
-        summary: A short canonical statement of the lesson (the shortest member
-            of the cluster, in original casing).
-        candidate_ids: Which candidates raised this lesson (deduped, ordered as
-            encountered while iterating over syntheses).
-        frequency: ``len(candidate_ids)``; a denormalized convenience for
-            renderers so they don't have to recompute it.
+        summary: Imperative one-liner for the founder. Canonical wording
+            picked by the LLM when merging paraphrases.
+        applies_because: Why this risk hits THIS pitch — must reference a
+            concrete element of the pitch (asset class, scale, customer
+            type, product feature). Empty string is invalid.
+        raised_by: candidate_ids that emitted any lesson contributing to
+            this risk. Always non-empty for kept risks.
+        severity: "high" | "medium" | "low". At most 4 highs per report.
     """
 
     summary: str
-    candidate_ids: list[str]
-    frequency: int
+    applies_because: str
+    raised_by: list[str]
+    severity: Literal["high", "medium", "low"]
 
 
 class TopRisks(BaseModel):
-    """Cross-candidate dedup of lessons, ranked by frequency descending."""
+    """Pitch-applicable consolidated risks, sorted severity desc then raised_by-count desc."""
 
-    clusters: list[TopRisk] = Field(default_factory=list)
+    risks: list[ConsolidatedRisk] = Field(default_factory=list)
+    injection_detected: bool = False
+
+
+class _LLMConsolidatedRisk(BaseModel):
+    summary: str
+    applies_because: str
+    raised_by: list[str]
+    severity: Literal["high", "medium", "low"]
+
+
+class LLMTopRisksConsolidation(BaseModel):
+    """LLM-facing wrapper for the consolidate-risks stage's JSON output."""
+
+    top_risks: list[_LLMConsolidatedRisk] = Field(default_factory=list)
+    injection_detected: bool = False
 
 
 class Report(BaseModel):

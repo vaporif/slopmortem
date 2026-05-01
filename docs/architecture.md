@@ -12,7 +12,8 @@ flowchart TD
         Q2 --> Q3[retrieve · Qdrant RRF]
         Q3 --> Q4[llm_rerank · Sonnet]
         Q4 --> Q5[synthesize × N · Sonnet + tools]
-        Q5 --> Q6[render markdown]
+        Q5 --> Q6[consolidate_risks · Sonnet]
+        Q6 --> Q7[render markdown]
     end
 
     subgraph I["Ingest pipeline"]
@@ -76,10 +77,11 @@ You type `slopmortem query "we're building a marketplace for industrial scrap me
 2. **Embeddings.** Dense via fastembed `nomic-ai/nomic-embed-text-v1.5` (local ONNX, 768d). Sparse via fastembed BM25. Two vectors per query, both free.
 3. **Retrieve.** Qdrant runs three prefetches in parallel (dense, sparse, and one filtered by your facets), then fuses them server-side with Reciprocal Rank Fusion. Top 30 come back. No HyDE, no query rewriting. We skipped HyDE because Haiku has a known habit of rewriting pitches as post-mortem openings stuffed with its favorite failure tropes ("ran out of runway", "scaled too fast"), and that would bias retrieval toward generic-failure clusters. Rerank at K=30 → N=5 should absorb the modality gap. Revisit in v2 if real-pitch recall measures poorly.
 4. **Rerank.** One Sonnet call scores all 30 against a multi-perspective rubric. Output is JSON via OpenRouter's `response_format=json_schema`, which routes to Anthropic's grammar-constrained sampling on the backend. No tools, no corpus reads, nothing to parse out of prose. Top 5 survive.
-5. **Synthesize.** The first call runs alone, on purpose. It writes the prompt cache so the other four don't race to write the same prefix. We assert `cache_creation_tokens > 0` on that warm response, because Anthropic's cache is eventually consistent across regions and a 200 OK doesn't actually mean the prefix replicated yet. One re-warm retry if it didn't. Then the rest fan out under `anyio.CapacityLimiter(N)` with `asyncio.gather(..., return_exceptions=True)`, so one flaky candidate drops one report instead of killing all five. The model can hit `get_post_mortem` or `search_corpus` mid-generation if it wants more context. Final text parses straight into the `Synthesis` Pydantic model.
-6. **Render.** Markdown to stdout. The footer carries cost, latency, and the trace ID, so when something looks weird you paste a Laminar link straight from the terminal.
+5. **Synthesize.** The first call runs alone, on purpose. It writes the prompt cache so the other four don't race to write the same prefix. We assert `cache_creation_tokens > 0` on that warm response, because Anthropic's cache is eventually consistent across regions and a 200 OK doesn't actually mean the prefix replicated yet. One re-warm retry if it didn't. Then the rest fan out under `anyio.CapacityLimiter(N)` with `asyncio.gather(..., return_exceptions=True)`, so one flaky candidate drops one report instead of killing all five. The model can hit `get_post_mortem` or `search_corpus` mid-generation if it wants more context. The LLM emits an `LLMSynthesis`; the pipeline composes the user-visible `Synthesis` from it plus `failure_date` and `lifespan_months` derived from the candidate's typed `CandidatePayload`, so those two fields can't be fabricated from prose.
+6. **Consolidate risks.** One Sonnet call reads the pitch and every per-candidate lesson, merges paraphrases, and drops anything that doesn't latch onto something concrete in the pitch. The Jaccard pass it replaced was happily emitting "don't use MLM" on pitches with no referral mechanic. Output is up to 10 risks, each with a severity bucket and an `applies_because` line that has to name a specific bit of the pitch. The stage caps highs at 4 and drops any fabricated `candidate_id` the model invents. Skipped on `BudgetExceededError`.
+7. **Render.** Markdown to stdout. Top-risks section first when present, then per-candidate sections, then a footer with cost, latency, and the trace ID. Paste the Laminar link from the terminal when something looks off.
 
-A default query runs around $0.005 and 21–43 seconds — semi-free, run whenever. Tavily synthesis enrichment bumps both a bit (still well under a cent) and pushes latency to 31–63 seconds. Cap is $2.00. The budget tracker raises if you blow past it.
+A default 5-comparable query runs around $0.30 and 90–130 seconds; the sample in [`docs/examples/crypto-savings-yield/`](examples/crypto-savings-yield/) recorded `cost=$0.328`, `latency=126.7s`. Tavily synthesis enrichment bumps both. Cap is $2.00; the budget tracker raises if you blow past it.
 
 ## Ingest flow
 
@@ -108,7 +110,7 @@ slopmortem/
   http.py                # shared httpx client + SSRF guard
   errors.py              # typed error hierarchy
   _time.py               # monotonic / wall-clock helpers (tests patch one symbol)
-  stages/                # facet_extract, retrieve, llm_rerank, synthesize
+  stages/                # facet_extract, retrieve, llm_rerank, synthesize, consolidate_risks
   llm/
     client.py            # LLMClient Protocol
     openrouter.py        # OpenRouterClient (openai SDK pointed at openrouter.ai/api/v1)

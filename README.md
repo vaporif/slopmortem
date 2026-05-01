@@ -6,6 +6,8 @@ You give it a pitch, it finds dead startups that tried something similar.
 
 Pipeline diagram, query/ingest flow, and source layout live in [`docs/architecture.md`](docs/architecture.md).
 
+Reports lead with a "Top risks across all comparables" section — pure-Python clustering of the per-candidate `lessons_for_input` lists by token-set similarity, sorted by how many comparables raised each one — followed by the per-candidate post-mortems and a cost/latency/trace footer.
+
 ## Running it
 
 Dev shell is a Nix flake. With direnv: `direnv allow` and the shell loads on `cd`. Without: `nix develop`. The shellHook calls `uv venv` + `uv sync --frozen`, so Python is ready by the time the prompt returns. Then `just` for the rest.

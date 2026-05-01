@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 _FACET_MODEL = "test-facet"
 _RERANK_MODEL = "test-rerank"
 _SYNTH_MODEL = "test-synth"
+_CONSOLIDATE_MODEL = "test-consolidate"
 _EMBED_MODEL = "text-embedding-3-small"
 
 
@@ -125,6 +126,27 @@ def _rerank_payload(canonical_ids: list[str]) -> str:
         for cid in canonical_ids
     ]
     return json.dumps({"ranked": ranked})
+
+
+def _consolidate_payload() -> str:
+    """Canned consolidate-risks JSON for the e2e test.
+
+    The synthesis fixture always emits ``candidate_id="acme"`` and lesson
+    ``"target larger ACVs"``, so the consolidate input is deterministic.
+    """
+    return json.dumps(
+        {
+            "top_risks": [
+                {
+                    "summary": "target larger ACVs",
+                    "applies_because": "pitch sells SMB invoicing — same shape as the comparable.",
+                    "raised_by": ["acme"],
+                    "severity": "medium",
+                }
+            ],
+            "injection_detected": False,
+        }
+    )
 
 
 def _synthesis_payload(canonical_id: str) -> str:
@@ -202,6 +224,25 @@ def _build_canned(
             "synthesize", **synthesize_prompt_kwargs(cand, pitch=ctx.description)
         )
         canned[llm_canned_key("synthesize", model=_SYNTH_MODEL, prompt=synth_prompt)] = synth_resp
+
+    # Consolidate sees N copies of the same Synthesis (canned synth always
+    # returns candidate_id="acme"); per-candidate dedup collapses to one
+    # lesson, candidate_ids list keeps duplicates.
+    consolidate_prompt = render_prompt(
+        "consolidate_risks",
+        pitch=ctx.description,
+        lessons=[
+            {
+                "candidate_id": "acme",
+                "candidate_name": "acme",
+                "lesson": "target larger ACVs",
+            }
+        ],
+        candidate_ids=["acme"] * len(top_n),
+    )
+    canned[
+        llm_canned_key("consolidate_risks", model=_CONSOLIDATE_MODEL, prompt=consolidate_prompt)
+    ] = FakeResponse(text=_consolidate_payload(), cost_usd=0.005)
     return canned
 
 
@@ -269,6 +310,7 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
             "model_facet": _FACET_MODEL,
             "model_rerank": _RERANK_MODEL,
             "model_synthesize": _SYNTH_MODEL,
+            "model_consolidate": _CONSOLIDATE_MODEL,
         }
     )
 
@@ -292,6 +334,9 @@ class _RecordingQueryProgress:
 
     def end_phase(self, phase: QueryPhase) -> None:
         self.events.append(("end", phase))
+
+    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
+        self.events.append(("status", phase, status))
 
     def log(self, message: str) -> None:
         self.events.append(("log", message))
@@ -335,12 +380,14 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     assert 0 < len(report.candidates) <= cfg.N_synthesize
     assert all(isinstance(s, Synthesis) for s in report.candidates)
 
-    # Top risks: clustered from the canned synthesis lessons. The fake payload
-    # always emits ``candidate_id="acme"`` and lesson ``"target larger ACVs"``,
-    # so per-candidate dedup collapses everything to a single 1-frequency
-    # cluster. Light-touch assertion: type + non-negative cluster count.
+    # Top risks: consolidated from the canned synthesis lessons. The fake
+    # payload always emits ``candidate_id="acme"`` and lesson
+    # ``"target larger ACVs"``, so per-candidate dedup collapses everything
+    # and the canned consolidate response returns a single risk.
     assert isinstance(report.top_risks, TopRisks)
-    assert len(report.top_risks.clusters) == 1
+    assert len(report.top_risks.risks) == 1
+    assert report.top_risks.risks[0].raised_by == ["acme"]
+    assert report.top_risks.risks[0].severity == "medium"
 
     # Pipeline meta.
     meta = report.pipeline_meta
@@ -666,7 +713,7 @@ async def test_run_query_zero_passes_threshold(monkeypatch: pytest.MonkeyPatch) 
     )
 
     assert report.candidates == []
-    assert report.top_risks.clusters == []
+    assert report.top_risks.risks == []
     assert report.pipeline_meta.budget_exceeded is False
     assert report.pipeline_meta.min_similarity_score == 9.5
 

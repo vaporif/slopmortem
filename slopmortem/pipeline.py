@@ -25,7 +25,7 @@ from lmnr import Laminar, observe
 
 from slopmortem.budget import BudgetExceededError
 from slopmortem.models import PipelineMeta, Report, Synthesis, TopRisks
-from slopmortem.stages.cluster_lessons import cluster_lessons
+from slopmortem.stages.consolidate_risks import consolidate_risks
 from slopmortem.stages.facet_extract import extract_facets
 from slopmortem.stages.llm_rerank import llm_rerank
 from slopmortem.stages.retrieve import retrieve
@@ -79,6 +79,9 @@ class QueryProgress(Protocol):
     def end_phase(self, phase: QueryPhase) -> None:
         """Mark *phase* complete."""
 
+    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
+        """Set or clear a transient status suffix on *phase*'s display label."""
+
     def log(self, message: str) -> None:
         """Emit a one-off status line."""
 
@@ -96,6 +99,9 @@ class NullQueryProgress:
         """No-op."""
 
     def end_phase(self, phase: QueryPhase) -> None:
+        """No-op."""
+
+    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
         """No-op."""
 
     def log(self, message: str) -> None:
@@ -284,8 +290,17 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         top_n = _join_to_candidates(retrieved, survivors)[: config.N_synthesize]
 
         progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
+        # The first synthesize call runs alone to warm Anthropic's prompt cache
+        # before the fan-out (see ``synthesize_all``). Surface that on the bar
+        # so users don't read the 0/N as "stuck".
+        progress.set_phase_status(QueryPhase.SYNTHESIZE, "warming prompt cache")
+        warmup_cleared = False
 
         def _on_candidate_done(exc: BaseException | None) -> None:
+            nonlocal warmup_cleared
+            if not warmup_cleared:
+                progress.set_phase_status(QueryPhase.SYNTHESIZE, None)
+                warmup_cleared = True
             if exc is not None:
                 progress.error(QueryPhase.SYNTHESIZE, f"{type(exc).__name__}: {exc}")
             progress.advance_phase(QueryPhase.SYNTHESIZE)
@@ -301,12 +316,17 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
         successes = _filter_synth_by_min_similarity(successes, config.min_similarity_score)
-        # Cluster lessons across candidates inside the try block so a successful
-        # run gets full top-risks. A budget-exceeded run skips this and returns
-        # the default-empty TopRisks initialized above (clustering only what
-        # ``successes`` had partially accumulated would be possible, but keeping
-        # the truncated-run shape minimal matches the existing failure model).
-        top_risks = cluster_lessons(successes)
+        # Consolidate runs inside the try block so a successful run gets full
+        # top-risks. A budget-exceeded run skips it and returns the default-empty
+        # TopRisks initialized above; the truncated-run shape stays minimal.
+        top_risks = await consolidate_risks(
+            successes,
+            pitch=input_ctx.description,
+            llm=llm,
+            config=config,
+            model=config.model_consolidate,
+            max_tokens=config.max_tokens_consolidate,
+        )
         progress.end_phase(QueryPhase.SYNTHESIZE)
     except BudgetExceededError:
         budget_exceeded = True
