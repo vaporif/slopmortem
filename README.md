@@ -1,6 +1,6 @@
 # slopmortem
 
-![demo](docs/examples/crypto-savings-yield/example.gif)
+[![asciicast](https://asciinema.org/a/NZLAo1QFR1gxq5vB.svg)](https://asciinema.org/a/NZLAo1QFR1gxq5vB)
 
 You give it a pitch, it finds dead startups that tried something similar.
 
