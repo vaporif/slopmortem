@@ -517,6 +517,7 @@ class _FailingDeleteCorpus(InMemoryCorpus):
 
     delete_calls: int = 0
 
+    @typing.override
     async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
         type(self).delete_calls += 1
         msg = f"simulated qdrant transport error deleting {canonical_id}"
