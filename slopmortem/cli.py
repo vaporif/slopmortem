@@ -32,7 +32,9 @@ import functools
 import json
 import logging
 import os
+import re
 import sys
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self, cast, override
@@ -358,6 +360,29 @@ def _default_curated_yaml() -> Path:
     return Path(__file__).parent / "corpus" / "sources" / "curated" / "post_mortems_v0.yml"
 
 
+_RUNS_DIR = Path(".slopmortem/runs")
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+_SLUG_MAX = 40
+
+_NOT_FOUND_MARKDOWN = """# No matching post-mortems found
+
+The query returned no synthesized candidates above the similarity floor.
+Try broadening the description or removing the `--years` filter."""
+
+
+def _slugify(text: str) -> str:
+    """Lowercase, collapse non-alphanumerics to ``-``, truncate to 40 chars."""
+    s = _SLUG_RE.sub("-", text.lower()).strip("-")
+    return s[:_SLUG_MAX].rstrip("-") or "run"
+
+
+def _query_run_path(ctx: InputContext) -> Path:
+    """Return ``.slopmortem/runs/<utc-ts>-<slug>.md`` for this run."""
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base = ctx.name if ctx.name and ctx.name != "(unnamed)" else ctx.description
+    return _RUNS_DIR / f"{ts}-{_slugify(base)}.md"
+
+
 @app.command("query")
 def query_cmd(
     description: Annotated[
@@ -385,15 +410,29 @@ def query_cmd(
             ),
         ),
     ] = False,
+    to_stdout: Annotated[
+        bool,
+        typer.Option(
+            "--stdout",
+            help=(
+                "Print the rendered report to stdout instead of writing it under "
+                ".slopmortem/runs/. Use when piping the report into another tool."
+            ),
+        ),
+    ] = False,
 ) -> None:
-    """Run the synthesis pipeline against *description* and print a Markdown report.
+    """Run the synthesis pipeline against *description* and persist a Markdown report.
 
-    Streams stage progress to stderr (TTY-gated) while the pipeline runs;
-    emits the rendered :class:`Report` to stdout when done. Tracing wiring
-    (Laminar) is gated on ``Config.enable_tracing`` and a present
-    ``LMNR_PROJECT_API_KEY``. When the API key is missing but tracing is
-    enabled, a one-line warning goes to stderr and the run continues without
-    tracing.
+    By default the rendered :class:`Report` is written to
+    ``.slopmortem/runs/<utc-timestamp>-<slug>.md`` and only the path is
+    echoed to stdout. Pass ``--stdout`` to dump the report to stdout instead
+    (useful for shell pipelines). When no candidates clear the similarity
+    floor a short "not found" message goes to stdout and the command exits
+    with code ``1`` (no file is written). Stage progress streams to stderr
+    (TTY-gated). Tracing wiring (Laminar) is gated on
+    ``Config.enable_tracing`` and a present ``LMNR_PROJECT_API_KEY``. When
+    the API key is missing but tracing is enabled, a one-line warning goes
+    to stderr and the run continues without tracing.
     """
     anyio.run(
         functools.partial(
@@ -402,6 +441,7 @@ def query_cmd(
             name=name,
             years=years,
             debug_retrieve=debug_retrieve,
+            to_stdout=to_stdout,
         )
     )
 
@@ -413,6 +453,7 @@ async def _query(
     name: str | None,
     years: int | None,
     debug_retrieve: bool = False,
+    to_stdout: bool = False,
 ) -> None:
     """Async impl for ``slopmortem query``. Wires production deps and dispatches."""
     config = load_config()
@@ -449,7 +490,20 @@ async def _query(
 
     if bar is not None:
         _render_query_footer(bar.console, report, n_target=config.N_synthesize)
-    typer.echo(render(report))
+
+    if not report.candidates:
+        typer.echo(_NOT_FOUND_MARKDOWN)
+        raise typer.Exit(code=1)
+
+    rendered = render(report)
+    if to_stdout:
+        typer.echo(rendered)
+        return
+    out_path = _query_run_path(ctx)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = out_path.write_text(rendered, encoding="utf-8")
+    err_console.print(f"[bold green]Report saved to[/bold green] {out_path}")
+    typer.echo(str(out_path))
 
 
 _DEBUG_SUMMARY_MAX = 200

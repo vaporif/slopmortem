@@ -12,6 +12,7 @@ don't need real Qdrant / OpenRouter / OpenAI credentials.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from typer.testing import CliRunner
@@ -84,10 +85,10 @@ def _noop_set_corpus(_corpus: object) -> None:
 
 
 def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``slopmortem query`` runs end-to-end with a fake ``run_query``.
+    """``slopmortem query --stdout`` runs end-to-end with a fake ``run_query``.
 
     Checks typer wiring: arg parsing, dispatch through ``_query``, render to
-    stdout, with ``_build_deps`` as the seam.
+    stdout via ``--stdout``, with ``_build_deps`` as the seam.
     """
 
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
@@ -99,7 +100,9 @@ def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
 
     runner = CliRunner()
-    result = runner.invoke(app, ["query", "Some pitch text", "--name", "MyStartup"])
+    result = runner.invoke(
+        app, ["query", "Some pitch text", "--name", "MyStartup", "--stdout"]
+    )
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
     # The rendered report's title should contain the input name.
     assert "MyStartup" in result.stdout
@@ -116,9 +119,56 @@ def test_query_smoke_default_unnamed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
 
     runner = CliRunner()
-    result = runner.invoke(app, ["query", "A pitch"])
+    result = runner.invoke(app, ["query", "A pitch", "--stdout"])
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
     assert "(unnamed)" in result.stdout
+
+
+def test_query_default_writes_to_runs_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Default (no --stdout) writes the report under .slopmortem/runs/ and echoes the path."""
+
+    async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
+        return _fixture_report(name=input_ctx.name)
+
+    monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["query", "A pitch", "--name", "MyStartup"])
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+
+    out_path = Path(result.stdout.strip())
+    assert out_path.parent == Path(".slopmortem/runs")
+    assert out_path.suffix == ".md"
+    assert "mystartup" in out_path.name  # slug from --name
+    full_path = tmp_path / out_path
+    assert full_path.exists()
+    assert "MyStartup" in full_path.read_text(encoding="utf-8")
+
+
+def test_query_empty_candidates_exits_nonzero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Empty candidate list prints a not-found markdown to stdout and exits with code 1."""
+
+    async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
+        return _fixture_report(name=input_ctx.name).model_copy(update={"candidates": []})
+
+    monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["query", "A pitch"])
+    assert result.exit_code == 1
+    assert "No matching post-mortems found" in result.stdout
+    # No file should have been written.
+    assert not (tmp_path / ".slopmortem" / "runs").exists()
 
 
 def test_replay_missing_dataset_exits_with_code_2() -> None:

@@ -121,12 +121,8 @@ def _render_top_risks(top_risks: TopRisks, candidates: list[Synthesis]) -> str:
     lines: list[str] = ["## Top risks across all comparables", ""]
     for idx, risk in enumerate(top_risks.risks, start=1):
         names = ", ".join(id_to_name.get(cid, cid) for cid in risk.raised_by)
-        lines.append(
-            f"{idx}. [{risk.severity.upper()}] {_strip_markdown_links(risk.summary)}"
-        )
-        lines.append(
-            f"   Applies because: {_strip_markdown_links(risk.applies_because)}"
-        )
+        lines.append(f"{idx}. [{risk.severity.upper()}] {_strip_markdown_links(risk.summary)}")
+        lines.append(f"   Applies because: {_strip_markdown_links(risk.applies_because)}")
         lines.append(f"   Raised by: {names} ({len(risk.raised_by)}/{total})")
         lines.append("")
     return "\n".join(lines)
