@@ -631,7 +631,7 @@ async def test_zero_chunk_body_skips_mark_complete(tmp_path, ...):
 
 **Steps:**
 
-- [ ] **Step 1: Implement `delete_chunks_for_canonical` on `QdrantCorpus`.**
+- [x] **Step 1: Implement `delete_chunks_for_canonical` on `QdrantCorpus`.**
 
 In `slopmortem/corpus/qdrant_store.py`, add a method to the `QdrantCorpus` class:
 
@@ -672,7 +672,7 @@ async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
 
 Mirror the inline-import style used by the existing `query()` method (`qdrant_store.py:153+`) — keeps top-level imports lean. Verify the exact import path for `FilterSelector` against the installed `qdrant-client` 1.17.1 (validators confirmed it lives under `qdrant_client.http.models`).
 
-- [ ] **Step 2: Replace `contextlib.suppress(Exception)` with narrow handling.**
+- [x] **Step 2: Replace `contextlib.suppress(Exception)` with narrow handling.**
 
 At `slopmortem/ingest.py:769-771`, replace:
 
@@ -714,11 +714,11 @@ Notes:
 - If `contextlib` is no longer referenced in `ingest.py` after this change, remove the import (validators confirmed the only use today is line 770 — safe to drop).
 - Catching bare `Exception` is intentional here: qdrant-client raises a wide range of transport/auth/validation errors, and the recovery action is the same for all of them. If a tighter base class is ever exported, narrow it then.
 
-- [ ] **Step 3: Remove the cast in CLI.**
+- [x] **Step 3: Remove the cast in CLI.**
 
 At `slopmortem/cli.py:707-711`, the file currently casts to `"IngestCorpus"` because `QdrantCorpus` lacked `delete_chunks_for_canonical`. Remove the cast (line 711); leave the surrounding instantiation alone. **Also remove the sibling cast at `slopmortem/evals/corpus_recorder.py:183`** (comment block at lines 173–175 explains the gap; the `cast("IngestCorpus", qcorpus)` itself is at line 183). Both casts are obsoleted by Step 1.
 
-- [ ] **Step 4: Tests.**
+- [x] **Step 4: Tests.**
 
 `QdrantCorpus` does **not** expose a `get_chunks(canonical_id)` accessor; the validator-suggested test API doesn't exist. Use `qdrant_client.scroll()` with the same filter to verify deletion. The fixture `qdrant_corpus` also doesn't exist yet — `tests/corpus/conftest.py:28-38` provides `qdrant_client` (an `AsyncQdrantClient`); build the `QdrantCorpus` from it inline or add a fixture in the same conftest.
 
@@ -774,7 +774,7 @@ async def test_delete_failure_aborts_entry_does_not_mark_complete(...):
 
 (Same `fetch_by_key` shape as Task 5 Step 4 — `MergeJournal` has no `is_complete` helper.)
 
-- [ ] **Step 5: Verify.** `just test -k "qdrant or ingest" && just typecheck && just lint`. The `requires_qdrant` tests need `localhost:16333` (per `Config.qdrant_port`, not 6333); skip locally if Qdrant isn't running — CI runs it via the service container.
+- [x] **Step 5: Verify.** `just test -k "qdrant or ingest" && just typecheck && just lint`. The `requires_qdrant` tests need `localhost:16333` (per `Config.qdrant_port`, not 6333); skip locally if Qdrant isn't running — CI runs it via the service container.
 
 ---
 
