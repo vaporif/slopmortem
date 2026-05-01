@@ -75,6 +75,12 @@ The eval harness lives in `slopmortem/evals/`. `just eval` runs the seed dataset
 
 </details>
 
+## Known limitations
+
+- **Alias-graph dedup is K-bounded.** `QdrantCorpus.query` fetches alias edges only for the canonicals that survived into the top-`K_retrieve` set. If `A↔B↔C` are aliased and `B` was pruned upstream (recency, facet boost, RRF), the chain is collapsed only on the hops touching retrieved nodes — `A` and `C` can surface as separate candidates instead of one component. Harmless when alias chains are ≤1 hop, which is the common case. Fix would be a transitive-closure pass over `fetch_aliases`; revisit if it shows up in real queries.
+- **Chunk-to-parent over-fetch ratio assumes ~4 chunks/doc.** Qdrant over-fetches `K_retrieve * 4` chunks expecting them to collapse to ≥`K_retrieve` parents. Long post-mortems chunk into many more pieces and can silently under-fill the parent set. Re-tune the multiplier (or move to a parent-aware fetcher) before relying on `K_retrieve` as a hard floor on a real corpus.
+- **LLM rerank cost is linear in `K_retrieve`.** Every candidate's summary goes into one prompt; doubling K doubles tokens. Fine at K=30; revisit (two-stage rerank, local cross-encoder, or tighter summaries) if K grows.
+
 ## Examples
 
 Sample runs with pitch, rendered report, and Laminar trace live under [`docs/examples/`](docs/examples/).

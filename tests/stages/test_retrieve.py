@@ -378,3 +378,74 @@ async def test_other_facet_does_not_boost(qdrant_client, fixture_corpus):
     score_by_id = {c.canonical_id: c.score for c in candidates}
     assert score_by_id["all_other"] < 5.0
     assert score_by_id["real_match"] < 5.0
+
+
+class _FakeHit:
+    def __init__(self, *, payload: dict[str, object], score: float) -> None:
+        self.payload = payload
+        self.score = score
+
+
+class _FakeResp:
+    def __init__(self, points: list[_FakeHit]) -> None:
+        self.points = points
+
+
+class _FakeClient:
+    """Stub that returns a canned ``query_points`` response.
+
+    Just enough surface for ``QdrantCorpus.query`` to reach the alias-fetch
+    block without a live Qdrant.
+    """
+
+    def __init__(self, points: list[_FakeHit]) -> None:
+        self._points = points
+
+    async def query_points(self, **_: object) -> _FakeResp:
+        return _FakeResp(self._points)
+
+
+async def test_query_alias_fetch_runs_concurrently(tmp_path):
+    """All alias fetches must dispatch before any completes (proves gather)."""
+    import asyncio  # noqa: PLC0415
+
+    from slopmortem.models import AliasEdge  # noqa: PLC0415
+
+    canonicals = [f"c{i}" for i in range(8)]
+    points = [
+        _FakeHit(
+            payload=_build_payload_dict(cid, _payload(name=cid)),
+            score=float(len(canonicals) - i),
+        )
+        for i, cid in enumerate(canonicals)
+    ]
+
+    call_log: list[str] = []
+
+    async def fake_fetch(cid: str) -> list[AliasEdge]:
+        call_log.append(f"start:{cid}")
+        await asyncio.sleep(0.02)
+        call_log.append(f"end:{cid}")
+        return []
+
+    corpus = QdrantCorpus(
+        client=_FakeClient(points),  # type: ignore[arg-type]
+        collection="x",
+        post_mortems_root=tmp_path,
+        fetch_aliases=fake_fetch,
+    )
+    result = await corpus.query(
+        dense=[0.0] * _DIM,
+        sparse={1: 1.0},
+        facets=_facets(),
+        cutoff_iso=None,
+        strict_deaths=False,
+        k_retrieve=len(canonicals),
+    )
+
+    # Every fetch must start before any fetch ends. A sequential loop would
+    # interleave start/end pairs (start:c0, end:c0, start:c1, end:c1, ...).
+    first_end = next(i for i, e in enumerate(call_log) if e.startswith("end:"))
+    starts_before_first_end = [e for e in call_log[:first_end] if e.startswith("start:")]
+    assert len(starts_before_first_end) == len(canonicals)
+    assert {c.canonical_id for c in result} == set(canonicals)
