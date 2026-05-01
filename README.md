@@ -30,7 +30,7 @@ just init-env                        # interactive — fill OPENROUTER_API_KEY, 
 docker compose up -d qdrant          # Qdrant on :6333
 slopmortem embed-prefetch            # one-time ~550 MB ONNX download
 just ingest                          # ~$0.75 for 50 entries with all enrichers; or `just ingest-all`
-just query "your pitch here"         # ~$0.10 per call, run whenever; or `just query-debug` to skip rerank+synth
+just query "your pitch here"         # ~$0.10 warm / ~$0.30 cold cache; or `just query-debug` to skip rerank+synth
 ```
 
 Ingest picks up curated + HN automatically. Useful flags:
