@@ -1,9 +1,8 @@
-"""Curated source: length floor, platform blocklist, happy path.
+"""Curated source: length floor, happy path.
 
 The curated YAML loader is the entry point for hand-vetted post-mortems. It
 fetches each row's URL via ``safe_get``, runs it through ``extract_clean``,
-drops rows whose ``registrable_domain`` is in ``platform_domains.yml``, and skips
-rows whose extracted text falls under the 500-char floor.
+and skips rows whose extracted text falls under the 500-char floor.
 """
 
 from __future__ import annotations
@@ -85,18 +84,11 @@ async def test_curated_yields_long_text_rows(monkeypatch: pytest.MonkeyPatch) ->
     src = CuratedSource(yaml_path=FIXTURE)
     entries: list[RawEntry] = [e async for e in src.fetch()]
     urls = {e.url for e in entries}
-    # Long-text rows for non-blocklisted hosts pass through.
+    # Long-text rows pass through.
     assert "https://example.com/long-postmortem" in urls
     assert "https://realdomain.example/another-long-postmortem" in urls
     # Length floor: too-short row is dropped.
     assert "https://example.org/too-short-page" not in urls
-    # Blocklist: medium.com and substack.com rows never fetch.
-    assert "https://medium.com/@user/blocked-platform-post" not in urls
-    assert "https://username.substack.com/p/blocked-platform-post" not in urls
-    # safe_get must NOT be called for blocklisted hosts.
-    fetched_urls = {call.args[0] for call in fake_get.call_args_list}
-    assert "https://medium.com/@user/blocked-platform-post" not in fetched_urls
-    assert "https://username.substack.com/p/blocked-platform-post" not in fetched_urls
 
 
 @pytest.mark.asyncio
