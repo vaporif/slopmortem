@@ -1,10 +1,10 @@
 """Consolidate-risks stage: LLM-driven applicability filter and paraphrase merge.
 
-Replaces the deterministic Jaccard cluster pass. One sonnet call sees the pitch
-plus every per-candidate lesson and returns up to 10 risks that genuinely apply
-to the pitch, each with a canonical summary, the comparables that raised it,
-an `applies_because` line that quotes a concrete pitch element, and a severity
-bucket.
+Replaces the deterministic Jaccard cluster pass. One Sonnet call sees the
+pitch plus every per-candidate lesson and returns up to 10 risks that
+genuinely apply to the pitch — each with a canonical summary, the comparables
+that raised it, an `applies_because` line quoting a concrete pitch element,
+and a severity bucket.
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ async def consolidate_risks(  # noqa: PLR0913 — every dep is required wiring a
             )
         )
 
-    # Defense-in-depth severity cap: prompt also says max 4 highs. If the LLM
+    # Defense-in-depth severity cap: prompt also caps highs at 4. If the LLM
     # over-emits, demote the lowest-`raised_by`-count highs to "medium".
     high_indices = sorted(
         (i for i, r in enumerate(risks) if r.severity == "high"),

@@ -1,10 +1,10 @@
 """HN Algolia source. Chronological obituary coverage via the Algolia REST API.
 
-Endpoint is pinned to ``/api/v1/search_by_date`` (chronological, newest-first)
-rather than ``/search`` (relevance-ranked); see spec line 242. Relevance
-ranking would re-surface the same long-tail popular threads on every ingest.
+Endpoint pinned to ``/api/v1/search_by_date`` (chronological, newest-first),
+not ``/search`` (relevance-ranked). Spec line 242. Relevance ranking would
+re-surface the same long-tail popular threads on every ingest.
 
-Query params per spec:
+Query params:
 * ``tags=story``
 * ``query=<term>``
 * ``numericFilters=created_at_i>=<since-epoch>`` for incremental ingest
@@ -16,12 +16,12 @@ robots.txt check from :mod:`._throttle`.
 
 Why not the official ``algoliasearch`` Python client?
 * HN's Algolia mirror is a public read-only REST endpoint (no ``app_id`` /
-  ``api_key`` pair); the official client is built around app-keyed indices
+  ``api_key`` pair). The official client is built around app-keyed indices
   and cluster discovery, so configuring it would just route back to the same
-  URL via more layers.
-* The official client ships its own httpx/aiohttp transport with retry +
-  failover. Using it would bypass :func:`safe_get`, which is the project's
-  single SSRF chokepoint for outbound HTTP from sources.
+  URL through more layers.
+* The official client ships its own httpx/aiohttp transport with retry and
+  failover. That would bypass :func:`safe_get`, which is the project's single
+  SSRF chokepoint for outbound HTTP from sources.
 * vcrpy cassettes record cleanly against direct ``safe_get`` calls; the
   client's connection pooling and retry logic make cassettes brittle.
 """

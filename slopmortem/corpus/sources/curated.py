@@ -1,12 +1,12 @@
 """Curated source. Loads YAML of hand-vetted post-mortem URLs and produces ``RawEntry``.
 
-Pipeline per spec line 244: read the YAML, drop rows whose registrable_domain is
-in :file:`platform_domains.yml`, fetch via :func:`safe_get`, run the response
-through :func:`extract_clean`, drop any row whose extracted text is below the
-length floor, yield a ``RawEntry``.
+Pipeline per spec line 244: read the YAML, drop rows whose registrable_domain
+is in :file:`platform_domains.yml`, fetch via :func:`safe_get`, run the
+response through :func:`extract_clean`, drop rows whose extracted text is
+below the length floor, yield a ``RawEntry``.
 
-All outbound HTTP goes through ``safe_get`` (SSRF-hardened) and is gated by the
-per-host token bucket plus ``robots.txt`` parser in
+All outbound HTTP goes through ``safe_get`` (SSRF-hardened), gated by the
+per-host token bucket plus the ``robots.txt`` parser in
 :mod:`slopmortem.corpus.sources._throttle`.
 """
 

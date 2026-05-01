@@ -25,16 +25,17 @@ async def extract_facets(
     """Extract a :class:`Facets` bundle from *text* via one strict-mode JSON call.
 
     Args:
-        text: Source description text the LLM extracts facets from.
+        text: Description text the LLM pulls facets from.
         llm: Async LLM client honoring the :class:`LLMClient` Protocol.
-        model: Optional model override; ``None`` lets the client pick its default.
+        model: Optional model override. ``None`` lets the client pick.
         max_tokens: Optional output cap forwarded to the LLM client.
 
     Returns:
-        The parsed :class:`Facets` instance, taxonomy-validated by the model's
-        ``model_validator``. Strict raise: any malformed/out-of-taxonomy output
-        surfaces as a Pydantic ``ValidationError`` to the caller. Per-entry
-        ingest isolation already absorbs this without aborting the run.
+        Parsed :class:`Facets`, taxonomy-validated by the model's
+        ``model_validator``. Strict raise: any malformed or out-of-taxonomy
+        output surfaces as a Pydantic ``ValidationError`` to the caller.
+        Per-entry ingest isolation already absorbs this without aborting
+        the run.
     """
     prompt = render_prompt("facet_extract", description=text)
     result = await llm.complete(

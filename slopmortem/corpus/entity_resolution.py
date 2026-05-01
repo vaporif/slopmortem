@@ -21,15 +21,15 @@ Atomicity contracts (spec line 538):
 
 - Resolver-flip precheck runs first. If ``(source, source_id)`` was
   previously bound to a different canonical_id, the journal row lands as
-  ``resolver_flipped`` in its terminal state. No transient ``pending`` row,
+  ``resolver_flipped`` in its terminal state — no transient ``pending`` row,
   no ingest of the new canonical (``--reconcile`` owns repair).
 - Alias precheck runs before any ingest write. With an alias hint,
   :meth:`MergeJournal.upsert_alias_blocked` writes the alias edge and the
   journal row in one SQLite transaction; on failure both roll back.
 
 Tier-3 decisions cache in a module-private ``tier3_decisions`` SQLite table
-that shares the merge journal's ``db_path``. The cache key is
-lex-sorted so ``(A, B)`` and ``(B, A)`` collapse to one row.
+sharing the merge journal's ``db_path``. The cache key is lex-sorted so
+``(A, B)`` and ``(B, A)`` collapse to one row.
 """
 
 from __future__ import annotations
@@ -88,8 +88,8 @@ _CORPORATE_SUFFIXES_RE = re.compile(rf"\s+({'|'.join(_CORPORATE_SUFFIXES)})\b\.?
 # Founding-year delta: more than this many years apart → demote (recycled domain).
 _RECYCLED_DOMAIN_YEAR_DELTA = 10
 
-# Tier-3 calibration band: similarity in this range invokes the Haiku tiebreaker.
-# Values outside the band auto-decide. See spec line 264.
+# Tier-3 calibration band: similarity in this range triggers the Haiku
+# tiebreaker. Values outside the band auto-decide. See spec line 264.
 _DEFAULT_TIER3_BAND: tuple[float, float] = (0.65, 0.85)
 
 _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"

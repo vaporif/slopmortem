@@ -2,31 +2,31 @@
 
 Six drift classes (spec line 604):
 
-(a) ``canonical/<text_id>.md`` exists, no Qdrant chunks -> re-embed and upsert.
-(b) Qdrant point with ``merge_state=pending`` -> redo merge.
+(a) ``canonical/<text_id>.md`` exists, no Qdrant chunks → re-embed and upsert.
+(b) Qdrant point with ``merge_state=pending`` → redo merge.
 (c) ``combined_hash`` in canonical front-matter != ``content_hash`` in journal
-    -> re-merge from raw.
+    → re-merge from raw.
 (d) ``raw/<source>/<text_id>.md`` with no journal row, or canonical missing
-    while raw is present -> re-merge.
-(e) Orphaned ``.tmp`` files in either tree -> delete.
-(f) Journal row with ``merge_state="resolver_flipped"`` -> strip the
+    while raw is present → re-merge.
+(e) Orphaned ``.tmp`` files in either tree → delete.
+(f) Journal row with ``merge_state="resolver_flipped"`` → strip the
     (source, source_id) from the prior canonical, re-route via the normal
     create/merge path under the current canonical_id.
 
-The default :func:`reconcile` call is scan-only and returns a
+Default :func:`reconcile` is scan-only and returns a
 :class:`ReconcileReport` whose ``rows`` list every drift finding.
 
 Pass ``repair=True`` to apply repairs:
 
-* class (e) is fixed inline: orphaned ``.tmp`` files get deleted.
-* classes (a), (b), (c), (d), (f) need an embedding client and the full
-  ingest pipeline, so the repair pass only records intent (e.g.
-  ``needs_reembed``, ``needs_remerge``, ``pending_redo``,
-  ``resolver_flipped_repair``) in the report's ``applied`` list. The next
-  ingest pass picks the work up from the now-annotated journal/disk state.
+* (e) is fixed inline — orphaned ``.tmp`` files get deleted.
+* (a), (b), (c), (d), (f) need an embedding client and the full ingest
+  pipeline, so the repair pass only records intent (``needs_reembed``,
+  ``needs_remerge``, ``pending_redo``, ``resolver_flipped_repair``) in the
+  report's ``applied`` list. The next ingest run picks the work up from the
+  now-annotated journal/disk state.
 
-Each applied repair emits a :class:`SpanEvent.RECONCILE_REPAIR_APPLIED`
-span event so operators can audit what changed across runs.
+Each applied repair emits :class:`SpanEvent.RECONCILE_REPAIR_APPLIED` so
+operators can audit what changed across runs.
 """
 
 from __future__ import annotations

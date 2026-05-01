@@ -1,9 +1,8 @@
 """Heading-aware token-window chunker for canonical post-mortem markdown.
 
 768-token windows, 128-token overlap, tokenized with ``tiktoken``'s
-``cl100k_base``. If a ``#`` heading falls within the next 96 tokens after
-the window start, the boundary jumps to it so chunks don't start
-mid-paragraph.
+``cl100k_base``. If a ``#`` heading falls within the next 96 tokens after the
+window start, the boundary jumps to it so chunks don't start mid-paragraph.
 """
 
 from __future__ import annotations
@@ -38,9 +37,8 @@ def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[in
     offsets: list[int] = []
     text = enc.decode(tokens)
     cur = 0
-    # tiktoken has no per-token char offset, so build a coarse
-    # char-offset to token-index lookup by re-encoding prefixes at a fixed
-    # stride.
+    # tiktoken has no per-token char offset, so build a coarse char-offset
+    # → token-index lookup by re-encoding prefixes at a fixed stride.
     stride = 32
     prefix_lens: list[tuple[int, int]] = [(0, 0)]
     for i in range(stride, len(tokens) + stride, stride):
@@ -107,7 +105,7 @@ def chunk_markdown(text: str, *, parent_canonical_id: str) -> list[Chunk]:
         end = min(start + WINDOW_TOKENS, len(tokens))
         # If a heading sits within HEADING_SEARCH_TOKENS after start, snap
         # forward so the chunk begins at the heading. Skip on the first chunk
-        # (start == 0); the doc's opening tokens always come first.
+        # (start == 0) — the doc's opening tokens always come first.
         if start > 0:
             for h in headings:
                 if start < h <= start + HEADING_SEARCH_TOKENS and h < end:

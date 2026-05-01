@@ -1,8 +1,8 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false
 """Async embedding client for OpenAI-compatible APIs that reserves and settles against the budget.
 
-Vendor SDK responses are loosely typed; this file silences `reportAny` and
-`reportUnknown*` at the boundary while keeping `reportExplicitAny` per-site.
+Vendor SDK responses are loosely typed. Silence `reportAny` and
+`reportUnknown*` at the boundary; keep `reportExplicitAny` per-site.
 """
 
 from __future__ import annotations
@@ -88,8 +88,8 @@ class OpenAIEmbeddingClient:
         if not texts:
             return EmbeddingResult(vectors=[], n_tokens=0, cost_usd=0.0)
         rate = _input_rate_per_million(eff_model)
-        # Reserve a conservative ceiling assuming ~1k tokens per text in the
-        # worst case. The real cost is settled from usage.total_tokens after.
+        # Reserve a conservative ceiling at ~1k tokens per text worst case.
+        # The real cost settles from usage.total_tokens afterward.
         ceiling = max(len(texts), 1) * 1000 / 1_000_000 * rate
         rid = await self._budget.reserve(ceiling)
         cost_usd = 0.0

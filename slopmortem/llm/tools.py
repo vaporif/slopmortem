@@ -1,9 +1,9 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
 """JSON-Schema helpers for tool definitions and OpenAI strict-mode response schemas.
 
-`jsonref` ships no stubs, so calls into it surface as `Unknown`. We assert
-the shape we know we produced (a dict from `model_json_schema()`) and
-silence the `reportUnknown*` family at the file boundary.
+`jsonref` ships no stubs, so calls into it surface as `Unknown`. Assert the
+shape we know we produced (a dict from `model_json_schema()`) and silence
+the `reportUnknown*` family at the file boundary.
 """
 
 from __future__ import annotations
@@ -58,13 +58,13 @@ def to_strict_response_schema(
 ) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Emit a ``response_format.json_schema.schema`` payload for OpenAI strict mode.
 
-    Pydantic v2 omits fields with defaults (including ``T | None = None``)
-    from ``required``, but OpenAI strict mode wants every property in
-    ``required``; nullability is expressed via ``anyOf:[T,null]`` instead.
-    This helper inlines ``$ref``/``$defs``, strips draft metadata, and adds
-    every top-level property (and every nested object's properties) to
-    ``required``. The ``anyOf:[T,null]`` shape is preserved as-is.
-    Idempotent: models without Optional defaults round-trip unchanged.
+    Pydantic v2 omits defaulted fields (including ``T | None = None``) from
+    ``required``. OpenAI strict mode wants every property in ``required``;
+    nullability gets expressed via ``anyOf:[T,null]`` instead. This helper
+    inlines ``$ref`` / ``$defs``, strips draft metadata, and adds every
+    top-level property (and every nested object's properties) to
+    ``required``. The ``anyOf:[T,null]`` shape is preserved as-is. Idempotent:
+    models without Optional defaults round-trip unchanged.
     """
     schema = model.model_json_schema()
     inlined = jsonref.replace_refs(schema, proxies=False, lazy_load=False)
@@ -78,7 +78,7 @@ def to_strict_response_schema(
 
 
 def synthesis_tools(config: Config) -> list[ToolSpec]:
-    """Build the synthesis tool list. Tavily inclusion depends on config, so it isn't a constant."""
+    """Build the synthesis tool list. Tavily inclusion depends on config, so it can't be a constant."""
     # Lazy import to break the cycle with corpus.tools_impl, which imports
     # ToolSpec from models via this module's transitive deps.
     from slopmortem.corpus import tools_impl  # noqa: PLC0415 - break import cycle

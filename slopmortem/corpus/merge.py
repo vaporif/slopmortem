@@ -1,7 +1,7 @@
 # pyright: reportAny=false
 """SQLite-backed merge journal, quarantine table, and alias graph.
 
-The async surface routes every sqlite call through
+Async surface routes every sqlite call through
 :func:`anyio.to_thread.run_sync`. One short-lived connection per call, no
 pool. Every connection uses WAL and ``busy_timeout=5000``.
 
@@ -11,14 +11,13 @@ Terminal-state writers (atomicity contract, spec line 538):
 - :meth:`MergeJournal.upsert_resolver_flipped`
 - :meth:`MergeJournal.upsert_alias_blocked`
 
-Each runs its inserts inside one ``BEGIN; ... COMMIT;`` so a crash either
-commits everything or nothing. ``mark_complete`` is the only path from
-``pending`` to ``complete``, and runs after the qdrant and disk writes
-succeed.
+Each runs its inserts inside one ``BEGIN; ... COMMIT;`` so a crash commits
+everything or nothing. ``mark_complete`` is the only path from ``pending``
+to ``complete``, and runs after the qdrant and disk writes succeed.
 
 Quarantine rows live in their own table keyed on
-``(content_sha256, source, source_id)``. They have no ``canonical_id`` or
-``merge_state`` column. Quarantined docs do not live in the main journal.
+``(content_sha256, source, source_id)``. No ``canonical_id`` or
+``merge_state`` column. Quarantined docs are not in the main journal.
 """
 
 from __future__ import annotations
@@ -163,9 +162,9 @@ class MergeJournal:
             try:
                 # Resolver flip: this (source, source_id) is now bound to a
                 # new canonical_id, and the UNIQUE reverse index would block
-                # the insert otherwise. Drop the prior row first when the
-                # new state is 'resolver_flipped'. Prior canonical's chunks,
-                # raw, and canonical files stay on disk; reconcile drift
+                # the insert otherwise. Drop the prior row first when the new
+                # state is 'resolver_flipped'. The prior canonical's chunks,
+                # raw, and canonical files stay on disk — reconcile drift
                 # class (f) handles repair.
                 if state == "resolver_flipped":
                     conn.execute(

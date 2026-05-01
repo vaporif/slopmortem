@@ -34,8 +34,8 @@ async def setup_ephemeral_qdrant(
     """Spin a uniquely-named collection, populate from JSONL, drop on exit.
 
     Collection name embeds ``pid + uuid4`` so a leak from ``kill -9`` is
-    identifiable and droppable manually. No startup sweep. See Risk 4 of
-    the spec for why a prefix-wide sweep is unsafe under pytest-xdist.
+    identifiable and droppable manually. No startup sweep — see spec Risk 4
+    for why a prefix-wide sweep is unsafe under pytest-xdist.
 
     Args:
         fixture_path: JSONL file produced by
@@ -43,9 +43,9 @@ async def setup_ephemeral_qdrant(
         qdrant_url: Base URL of a live Qdrant service.
         collection_prefix: Prefix for the ephemeral collection name.
         post_mortems_root: Optional on-disk root for the canonical markdown
-            tree. Defaults to ``/tmp/slopmortem_eval`` when ``None``. That
-            directory is only consulted by ``QdrantCorpus.get_post_mortem``,
-            which the recording path does not exercise.
+            tree. Defaults to ``/tmp/slopmortem_eval`` when ``None``. Only
+            consulted by ``QdrantCorpus.get_post_mortem``, which the recording
+            path doesn't exercise.
         dim: Dense vector dimensionality. Defaults to 768
             (``nomic-ai/nomic-embed-text-v1.5``); callers using a different
             embedder must pass the matching dim.

@@ -4,7 +4,7 @@
 Handles retries, the tool-call loop, and cache control.
 
 The vendor SDK is loosely typed (`object` / `Any` payloads with duck-typed
-attributes), so this file silences `reportAny`/`reportUnknown*` at the
+attributes), so this file silences `reportAny` / `reportUnknown*` at the
 boundary. Explicit `Any` in annotations is still gated per-site via
 `reportExplicitAny` ignores.
 """
@@ -36,7 +36,7 @@ _HTTP_TOO_MANY_REQUESTS = 429
 class MidStreamError(Exception):
     """Raised when an SSE chunk arrives at HTTP 200 with finish_reason='error'.
 
-    Carries the raw error payload so the retry layer can decide whether the
+    Carries the raw error payload so the retry layer can decide whether
     error.code is transient (e.g. ``overloaded_error``) or fatal.
     """
 
@@ -63,8 +63,8 @@ async def gather_with_limit[T](
     """Run *coros* concurrently with at most *limit* in flight.
 
     Wraps :func:`slopmortem.concurrency.gather_resilient` behind an
-    ``anyio.CapacityLimiter`` so callers can cap parallel OpenRouter calls
-    against ``config.ingest_concurrency`` without rewriting the bookkeeping.
+    ``anyio.CapacityLimiter`` so callers can cap parallel OpenRouter calls at
+    ``config.ingest_concurrency`` without rewriting the bookkeeping.
     """
     limiter = anyio.CapacityLimiter(limit)
 
@@ -191,11 +191,10 @@ class OpenRouterClient:
         finally:
             if cost > 0.0:
                 # Settle without a prior reserve: OpenRouter cost is unknown
-                # until usage lands, and the budget cap is not enforced here
-                # the way it is for embeddings. ``settle`` with an unknown id
-                # is a no-op for the reservation map and just credits
-                # ``spent_usd`` so ``Report.pipeline_meta.cost_usd_total``
-                # reflects real spend.
+                # until usage lands, and the budget cap isn't enforced here
+                # the way it is for embeddings. settle with an unknown id is
+                # a no-op for the reservation map and just credits spent_usd,
+                # so Report.pipeline_meta.cost_usd_total reflects real spend.
                 await self._budget.settle("openrouter:complete", cost)
 
     @staticmethod
@@ -207,17 +206,17 @@ class OpenRouterClient:
     async def _call_with_retry(self, **kw: Any) -> Any:  # pyright: ignore[reportExplicitAny]
         """Call SDK with retry/backoff on transient errors.
 
-        Treats a finish_reason='error' chunk with error.code='overloaded_error'
-        as transient by raising MidStreamError, catching it here, and retrying.
-        Auth (401/403), 402 (insufficient credits), 503 (no provider), and
-        non-overloaded mid-stream errors are fatal: re-raised immediately.
+        A finish_reason='error' chunk with error.code='overloaded_error' is
+        treated as transient: raise MidStreamError, catch here, retry. Auth
+        (401/403), 402 (insufficient credits), 503 (no provider), and
+        non-overloaded mid-stream errors are fatal — re-raised immediately.
         """
         sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
         for attempt in range(self._max_retries + 1):
             try:
                 resp = await sdk.chat.completions.create(**kw)
-                # Inspect for mid-stream error signal even on a non-streaming-shaped
-                # response; the SDK normalizes the final SSE chunk into the same
+                # Inspect for the mid-stream error signal even on a non-streaming
+                # response. The SDK normalizes the final SSE chunk into the same
                 # ChatCompletion object whose choices[0].finish_reason='error'
                 # carries the upstream error payload.
                 if resp.choices and resp.choices[0].finish_reason == "error":
@@ -284,12 +283,11 @@ class OpenRouterClient:
                 raise RuntimeError(msg)
 
     def _emit(self, _event: SpanEvent) -> None:
-        # Mirrors ``slopmortem.stages.synthesize._emit_event``: a no-op hook
-        # by default so tests can patch it to observe emissions. Production
-        # wiring (Laminar initialized in ``slopmortem.cli._query``) is opt-in;
-        # if a future change wants this client to also emit, call
-        # ``Laminar.event(name=str(_event))`` here gated on
-        # ``Laminar.is_initialized()``.
+        # Mirrors slopmortem.stages.synthesize._emit_event: a no-op hook by
+        # default so tests can patch it to observe emissions. Production wiring
+        # (Laminar initialized in slopmortem.cli._query) is opt-in. If a future
+        # change wants this client to also emit, call
+        # Laminar.event(name=str(_event)) here gated on Laminar.is_initialized().
         return
 
 
@@ -314,7 +312,7 @@ def _tc_id(tc: object) -> str:
 def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Render the assistant turn that requested tool calls.
 
-    Builds the payload the next API call can replay so the model sees its own
+    Builds the payload the next API call replays so the model sees its own
     prior tool-call request alongside the tool's response.
     """
     tcs = [
@@ -338,9 +336,9 @@ def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore
 def is_transient_http(exc: BaseException) -> bool:
     """Classify openai SDK exceptions as transient or fatal.
 
-    Duck-types the attributes so this works against the SDK's exception
-    hierarchy (RateLimitError, APIStatusError, APIConnectionError,
-    APITimeoutError, ...) without importing internals.
+    Duck-types attributes so this works against the SDK's exception hierarchy
+    (RateLimitError, APIStatusError, APIConnectionError, APITimeoutError, ...)
+    without importing internals.
     """
     name = type(exc).__name__
     if name in ("APIConnectionError", "APITimeoutError", "RateLimitError"):

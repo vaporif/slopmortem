@@ -5,16 +5,16 @@ Usage:
         [--live] [--record] [--write-baseline]
 
 Modes:
-    DEFAULT (cassettes): uses FakeLLMClient + FakeEmbeddingClient backed by
+    DEFAULT (cassettes): FakeLLMClient + FakeEmbeddingClient backed by
         committed cassettes under tests/fixtures/cassettes/evals/<row_id>/,
         plus an ephemeral Qdrant collection seeded from
         tests/fixtures/corpus_fixture.jsonl. No env vars beyond a running
-        Qdrant. This is what `just eval` and CI run.
-    --live: wires real production deps via slopmortem.cli._build_deps.
-        Operator-invoked, out of CI scope. Costs real money.
+        Qdrant. What `just eval` and CI run.
+    --live: real production deps via slopmortem.cli._build_deps. Operator-
+        invoked, out of CI scope. Costs real money.
     --record: re-record cassettes against the live API. Calls
         record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
-    --scope <row_id>: restrict record or replay to a single row.
+    --scope <row_id>: restrict record or replay to one row.
     --write-baseline: write the current run's results to --baseline (v2
         envelope, merging into any existing v2).
 
@@ -40,31 +40,31 @@ Baseline JSON shape (normative)::
 Regression semantics
 --------------------
 
-A run is a **regression** (exit 1) iff any of:
+A run is a **regression** (exit 1) iff:
 
-- An assertion that was ``true`` in the baseline is ``false`` in the current run.
-- A row present in the baseline produces zero candidates in the current run AND
-  the baseline had a non-zero ``candidates_count``.
+- An assertion that was ``true`` in the baseline is ``false`` now, OR
+- A row present in the baseline produces zero candidates now AND the baseline
+  had a non-zero ``candidates_count``.
 
-These are forward-compat warnings, not failures (exit 0):
+Forward-compat warnings (exit 0):
 
 - A row in the current run is missing from the baseline.
 - A candidate in the current row is missing from the baseline.
 - An assertion is missing from the baseline for a known candidate.
 
-A truncated row (``BudgetExceededError`` mid-run -> partial Report) is **not**
-a runner failure on its own; assertions apply only to whatever Synthesis
-values made it through. A row with ``candidates_count=0`` matched against a
+A truncated row (``BudgetExceededError`` mid-run → partial Report) is **not**
+a runner failure on its own. Assertions apply only to the Synthesis values
+that made it through. A row with ``candidates_count=0`` matched against a
 baseline that also has ``candidates_count=0`` passes.
 
 Live-mode limitation
 --------------------
 
 In ``--live`` mode, ``allowed_hosts`` for ``all_sources_in_allowed_domains``
-is reduced to ``_FIXED_HOST_ALLOWLIST`` only. The public Corpus Protocol
-does not expose payload sources, and we deliberately do not extend it.
-Deterministic mode tightens this by including each candidate's own payload
-sources via the private in-memory corpus.
+reduces to ``_FIXED_HOST_ALLOWLIST`` only. The public Corpus Protocol does
+not expose payload sources, and we deliberately don't extend it. Deterministic
+mode tightens this by including each candidate's own payload sources via the
+private in-memory corpus.
 """
 
 from __future__ import annotations

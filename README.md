@@ -8,6 +8,10 @@ You give it a pitch, it finds dead startups that tried something similar.
 
 Pipeline diagram, query/ingest flow, and source layout live in [`docs/architecture.md`](docs/architecture.md).
 
+<p align="center">
+  <img src="docs/architecture-flow.svg" alt="ingest and query data flow" width="100%">
+</p>
+
 Reports lead with a "Top risks across all comparables" section: pure-Python clustering of the per-candidate `lessons_for_input` lists by token-set similarity, sorted by how many comparables raised each one. Then the per-candidate post-mortems, then a cost/latency/trace footer.
 
 ## Running it
