@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 
+from slopmortem.budget import BudgetExceededError
 from slopmortem.concurrency import gather_resilient
 from slopmortem.llm.client import CompletionResult
 from slopmortem.tracing.events import SpanEvent
@@ -111,6 +112,12 @@ class OpenRouterClient:
         max_tokens: int | None = None,
     ) -> CompletionResult:
         """Run a chat completion, including the tool-call loop and transient-error retries."""
+        # Pre-call gate: cheap O(1) check so a runaway loop stops issuing calls
+        # once the budget is exhausted. Tail overshoot from concurrent in-flight
+        # calls is bounded by N_synthesize x per-call cost (see settle comment below).
+        if self._budget.remaining <= 0.0:
+            msg = f"budget exhausted: remaining {self._budget.remaining:.4f}"
+            raise BudgetExceededError(msg)
         messages = self._build_messages(system, prompt, cache=cache)
         tools_payload = self._build_tools(tools)
         registered = {t.name: t for t in (tools or [])}
@@ -190,11 +197,11 @@ class OpenRouterClient:
             raise RuntimeError(msg)
         finally:
             if cost > 0.0:
-                # Settle without a prior reserve: OpenRouter cost is unknown
-                # until usage lands, and the budget cap isn't enforced here
-                # the way it is for embeddings. settle with an unknown id is
-                # a no-op for the reservation map and just credits spent_usd,
-                # so Report.pipeline_meta.cost_usd_total reflects real spend.
+                # OpenRouter returns the cost on response.usage.cost; we settle that figure
+                # without a prior reserve (true cost is unknown until usage lands). Budget.settle
+                # now raises when spent_usd > cap_usd, and the pre-call gate above stops further
+                # calls. Tail overshoot from concurrent fan-out is bounded by
+                # N_synthesize x per-call cost.
                 await self._budget.settle("openrouter:complete", cost)
 
     @staticmethod

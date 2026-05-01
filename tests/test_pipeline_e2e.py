@@ -472,6 +472,88 @@ async def test_run_query_forwards_sparse_encoder(monkeypatch: pytest.MonkeyPatch
     assert ctx.description in seen_calls
 
 
+async def test_run_query_marks_budget_exceeded_on_llm_overspend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A settle-side BudgetExceededError (LLM overspend) truncates the run cleanly.
+
+    Mirrors the embedding/reserve path covered by ``test_run_query_records_budget_exceeded``
+    but exercises the post-settle raise added in
+    ``slopmortem.budget.Budget.settle``. The wrapper wires FakeLLMClient
+    completions through ``budget.settle`` so the first call's cost pushes
+    spent over cap and the pipeline's BudgetExceededError handler runs.
+    """
+    candidates = [_candidate(f"cand-{i}") for i in range(6)]
+    cfg = _build_config(k_retrieve=6, n_synthesize=3)
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
+    fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
+    fake_corpus = _FakeCorpus(candidates=candidates)
+    # Cap is positive but well under the canned facet cost (0.001), so the
+    # first settle pushes spent_usd over cap and raises.
+    budget = Budget(cap_usd=0.0001)
+
+    @dataclass
+    class _SettlingFakeLLMClient:
+        """FakeLLMClient wrapper that funnels each completion's cost through budget.settle."""
+
+        inner: FakeLLMClient
+        budget: Budget
+
+        async def complete(  # noqa: PLR0913 - mirrors LLMClient.complete signature
+            self,
+            prompt: str,
+            *,
+            system: str | None = None,
+            tools: list[Any] | None = None,
+            model: str | None = None,
+            cache: bool = False,
+            response_format: dict[str, Any] | None = None,
+            extra_body: dict[str, Any] | None = None,
+            max_tokens: int | None = None,
+        ) -> CompletionResult:
+            result = await self.inner.complete(
+                prompt,
+                system=system,
+                tools=tools,
+                model=model,
+                cache=cache,
+                response_format=response_format,
+                extra_body=extra_body,
+                max_tokens=max_tokens,
+            )
+            if result.cost_usd > 0.0:
+                await self.budget.settle("test:llm", result.cost_usd)
+            return result
+
+    settling_llm = _SettlingFakeLLMClient(
+        inner=FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL),
+        budget=budget,
+    )
+
+    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+
+    report = await run_query(
+        ctx,
+        llm=settling_llm,
+        embedding_client=fake_embed,
+        corpus=fake_corpus,
+        config=cfg,
+        budget=budget,
+    )
+
+    assert report.pipeline_meta.budget_exceeded is True
+    # Truncated-run shape: no synthesis candidates, empty top risks, no crash.
+    assert report.candidates == []
+    assert report.top_risks.risks == []
+    # The cost from the call that pushed us over still landed.
+    assert report.pipeline_meta.cost_usd_total > budget.cap_usd
+
+
 async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
     """BudgetExceededError mid-run sets ``budget_exceeded=True`` and returns cleanly."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]

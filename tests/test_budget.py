@@ -26,3 +26,18 @@ async def test_exceeded_raises():
     await b.reserve(0.05)
     with pytest.raises(BudgetExceededError):
         await b.reserve(0.10)
+
+
+async def test_settle_raises_when_spent_exceeds_cap():
+    b = Budget(cap_usd=1.0)
+    await b.settle("x", 0.5)
+    with pytest.raises(BudgetExceededError):
+        await b.settle("y", 0.6)
+    # Both settled before the raise — the credit happens, then the check fires.
+    assert b.spent_usd == pytest.approx(1.1)
+
+
+async def test_settle_does_not_raise_at_cap():
+    b = Budget(cap_usd=1.0)
+    await b.settle("x", 1.0)
+    assert b.spent_usd == pytest.approx(1.0)

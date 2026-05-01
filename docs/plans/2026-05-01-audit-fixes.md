@@ -281,7 +281,7 @@ Use `max_cost_usd_per_query` (real field at `config.py:35`); `cap_usd` does not 
 
 **Steps:**
 
-- [ ] **Step 1: Make `Budget.settle` raise on over-cap.**
+- [x] **Step 1: Make `Budget.settle` raise on over-cap.**
 
 In `slopmortem/budget.py:39-43`, change:
 
@@ -312,7 +312,7 @@ async def settle(self, reservation_id: str, actual_usd: float) -> None:
             raise BudgetExceededError(msg)
 ```
 
-- [ ] **Step 2: Add a pre-call gate in OpenRouter client.**
+- [x] **Step 2: Add a pre-call gate in OpenRouter client.**
 
 In `slopmortem/llm/openrouter.py`, locate the start of the `complete` method (the entry point — find with `grep -n "async def complete" slopmortem/llm/openrouter.py`). Before issuing the request, add:
 
@@ -324,7 +324,7 @@ if self._budget.remaining <= 0.0:
 
 This makes runaway loops stop. Cheap O(1) check.
 
-- [ ] **Step 3: Update the inline comment that documented the gap.**
+- [x] **Step 3: Update the inline comment that documented the gap.**
 
 At `slopmortem/llm/openrouter.py:192-198`, replace the multi-line comment about "budget cap isn't enforced here" with a tighter note. Cost is read from `response.usage.cost` (line 143) — there is no `_compute_cost` helper. Suggested wording:
 
@@ -336,7 +336,7 @@ At `slopmortem/llm/openrouter.py:192-198`, replace the multi-line comment about 
 # N_synthesize × per-call cost.
 ```
 
-- [ ] **Step 4: Tests.**
+- [x] **Step 4: Tests.**
 
 `BudgetExceededError` is exported from `slopmortem.budget`, not `slopmortem.errors` — match existing import sites: `from slopmortem.budget import Budget, BudgetExceededError`.
 
@@ -369,7 +369,7 @@ async def test_openrouter_pre_call_gate_raises_when_exhausted(...):
     # Assert no SDK call was issued (gate fires before the network).
 ```
 
-- [ ] **Step 5: End-to-end pipeline test.**
+- [x] **Step 5: End-to-end pipeline test.**
 
 Confirm `pipeline.py:331`'s `BudgetExceededError` handler still catches both reserve-failed (embedding) and settle-failed (LLM) paths. Add a test:
 
@@ -382,7 +382,7 @@ async def test_pipeline_marks_budget_exceeded_on_llm_overspend(...):
 
 Use existing pipeline test scaffolding in `tests/test_pipeline_e2e.py` (note: there is no `tests/test_pipeline.py`).
 
-- [ ] **Step 6: Verify.** `just test -k budget && just test -k pipeline && just typecheck && just lint`.
+- [x] **Step 6: Verify.** `just test -k budget && just test -k pipeline && just typecheck && just lint`.
 
 ---
 
