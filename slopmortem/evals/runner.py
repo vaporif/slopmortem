@@ -8,15 +8,15 @@ Modes:
     DEFAULT (cassettes): FakeLLMClient + FakeEmbeddingClient backed by
         committed cassettes under tests/fixtures/cassettes/evals/<row_id>/,
         plus an ephemeral Qdrant collection seeded from
-        tests/fixtures/corpus_fixture.jsonl. No env vars beyond a running
-        Qdrant. What `just eval` and CI run.
+        tests/fixtures/corpus_fixture.jsonl. Requires a running Qdrant
+        instance on localhost:6333. This is what `just eval` and CI run.
     --live: real production deps via slopmortem.cli._build_deps. Operator-
         invoked, out of CI scope. Costs real money.
     --record: re-record cassettes against the live API. Calls
         record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
-    --scope <row_id>: restrict record or replay to one row.
-    --write-baseline: write the current run's results to --baseline (v2
-        envelope, merging into any existing v2).
+    --scope <row_id>: restrict record or replay to one row. Unknown scopes
+        exit 2 with a usage error before any pipeline call.
+    --write-baseline: write the current run's results to --baseline.
 
 Baseline JSON shape (normative)::
 
@@ -56,15 +56,6 @@ A truncated row (``BudgetExceededError`` mid-run → partial Report) is **not**
 a runner failure on its own. Assertions apply only to the Synthesis values
 that made it through. A row with ``candidates_count=0`` matched against a
 baseline that also has ``candidates_count=0`` passes.
-
-Live-mode limitation
---------------------
-
-In ``--live`` mode, ``allowed_hosts`` for ``all_sources_in_allowed_domains``
-reduces to ``_FIXED_HOST_ALLOWLIST`` only. The public Corpus Protocol does
-not expose payload sources, and we deliberately don't extend it. Deterministic
-mode tightens this by including each candidate's own payload sources via the
-private in-memory corpus.
 """
 
 from __future__ import annotations
@@ -74,29 +65,29 @@ import asyncio
 import hashlib
 import json
 import sys
-from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlparse
 
 import anyio
 
 from slopmortem.budget import Budget
-from slopmortem.config import Config
+from slopmortem.config import load_config
 from slopmortem.evals.assertions import (
     all_sources_in_allowed_domains,
     claims_grounded_in_body,
     lifespan_months_positive,
     where_diverged_nonempty,
 )
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.evals.cassettes import (
+    CassetteFormatError,
+    NoCannedEmbeddingError,
+    load_row_fakes,
+)
+from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant
+from slopmortem.llm.fake import NoCannedResponseError
+from slopmortem.llm.openai_embeddings import EMBED_DIMS
 from slopmortem.models import (
-    Candidate,
-    CandidatePayload,
-    Facets,
     InputContext,
     Synthesis,
 )
@@ -113,13 +104,11 @@ _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from slopmortem.llm.client import CompletionResult
     from slopmortem.models import Report
 
-_DETERMINISTIC_FACET_MODEL = "test-facet"
-_DETERMINISTIC_RERANK_MODEL = "test-rerank"
-_DETERMINISTIC_SYNTH_MODEL = "test-synth"
-_DETERMINISTIC_EMBED_MODEL = "text-embedding-3-small"
+# Module-level so tests can monkeypatch it to point at a tmp tree without
+# touching the committed fixtures.
+_CASSETTE_ROOT: Path = Path("tests/fixtures/cassettes/evals")
 
 _BASELINE_VERSION = 1
 _ROW_ID_HASH_PREFIX = 8
@@ -130,222 +119,6 @@ _ASSERTION_NAMES: tuple[str, ...] = (
     "lifespan_months_positive",
     "claims_grounded_in_body",
 )
-
-
-# Deterministic-mode canned data — duplicated from tests/test_pipeline_e2e.py
-# rather than extracted into a shared fixture module.
-def _facets() -> Facets:
-    return Facets(
-        sector="fintech",
-        business_model="b2b_saas",
-        customer_type="smb",
-        geography="us",
-        monetization="subscription_recurring",
-    )
-
-
-def _payload(*, name: str, canonical_id: str) -> CandidatePayload:
-    return CandidatePayload(
-        name=name,
-        summary=f"{name} was a B2B fintech.",
-        body=f"{name} was a B2B fintech that ran out of runway.",
-        facets=_facets(),
-        founding_date=date(2018, 1, 1),
-        failure_date=date(2023, 1, 1),
-        founding_date_unknown=False,
-        failure_date_unknown=False,
-        provenance="curated_real",
-        slop_score=0.0,
-        sources=["https://news.ycombinator.com/item?id=" + canonical_id],
-        text_id=canonical_id.replace("-", "") + "0123456789",
-    )
-
-
-def _candidate(canonical_id: str, *, score: float = 0.9) -> Candidate:
-    return Candidate(
-        canonical_id=canonical_id,
-        score=score,
-        payload=_payload(name=canonical_id, canonical_id=canonical_id),
-    )
-
-
-def _facet_extract_payload() -> str:
-    return json.dumps(
-        {
-            "sector": "fintech",
-            "business_model": "b2b_saas",
-            "customer_type": "smb",
-            "geography": "us",
-            "monetization": "subscription_recurring",
-            "sub_sector": "smb invoicing",
-            "product_type": "saas",
-            "price_point": "tiered",
-            "founding_year": 2024,
-            "failure_year": None,
-        }
-    )
-
-
-def _rerank_payload(canonical_ids: list[str]) -> str:
-    ranked = [
-        {
-            "candidate_id": cid,
-            "perspective_scores": {
-                "business_model": {"score": 7.0, "rationale": "match"},
-                "market": {"score": 6.0, "rationale": "match"},
-                "gtm": {"score": 5.0, "rationale": "match"},
-                "stage_scale": {"score": 4.0, "rationale": "match"},
-            },
-            "rationale": "ranked",
-        }
-        for cid in canonical_ids
-    ]
-    return json.dumps({"ranked": ranked})
-
-
-def _synthesis_payload(canonical_id: str) -> str:
-    """Canned LLMSynthesis JSON.
-
-    failure_date, lifespan_months, and sources are derived/passed-through by
-    the pipeline from CandidatePayload, so the LLM no longer emits them.
-    """
-    return json.dumps(
-        {
-            "candidate_id": canonical_id,
-            "name": canonical_id,
-            "one_liner": "B2B fintech for SMB invoicing.",
-            "similarity": {
-                "business_model": {"score": 7.0, "rationale": "both B2B SaaS"},
-                "market": {"score": 6.0, "rationale": "SMB overlap"},
-                "gtm": {"score": 5.0, "rationale": "outbound sales"},
-                "stage_scale": {"score": 4.0, "rationale": "seed stage"},
-            },
-            "why_similar": "Both target SMB invoicing.",
-            "where_diverged": "Pitch is web-first; analogue was mobile-only.",
-            "failure_causes": ["CAC > LTV"],
-            "lessons_for_input": ["target larger ACVs"],
-        }
-    )
-
-
-def _build_canned(
-    *, candidate_ids: list[str]
-) -> Mapping[tuple[str, str, str], FakeResponse | CompletionResult]:
-    """Build the FakeLLMClient canned-response map for the deterministic run.
-
-    Note: Task 6 of the eval-cassettes plan deletes this helper and replaces
-    the deterministic runner with cassette-backed replay. This function still
-    keys on a placeholder ``prompt_hash`` so the type matches
-    ``FakeLLMClient.canned`` (now 3-tuple) and the codebase compiles in
-    lock-step with Task 1. The live eval runner is exercised end-to-end
-    through Task 6, not from this stub.
-    """
-    placeholder_hash = "0" * 16
-    canned: dict[tuple[str, str, str], FakeResponse | CompletionResult] = {
-        (
-            prompt_template_sha("facet_extract"),
-            _DETERMINISTIC_FACET_MODEL,
-            placeholder_hash,
-        ): FakeResponse(text=_facet_extract_payload(), cost_usd=0.0),
-        (
-            prompt_template_sha("llm_rerank"),
-            _DETERMINISTIC_RERANK_MODEL,
-            placeholder_hash,
-        ): FakeResponse(text=_rerank_payload(candidate_ids), cost_usd=0.0),
-        (
-            prompt_template_sha("synthesize"),
-            _DETERMINISTIC_SYNTH_MODEL,
-            placeholder_hash,
-        ): FakeResponse(text=_synthesis_payload("acme"), cost_usd=0.0, cache_creation_tokens=10),
-    }
-    return canned
-
-
-@dataclass
-class _EvalCorpus:
-    """In-memory :class:`Corpus` for the deterministic eval runner.
-
-    Mirrors the ``_FakeCorpus`` from ``tests/test_pipeline_e2e.py``. Adds
-    :meth:`lookup_payload` so the runner can extract per-candidate source
-    hosts for the ``all_sources_in_allowed_domains`` assertion. The Corpus
-    Protocol intentionally does not expose payload-by-id.
-    """
-
-    candidates: list[Candidate]
-    queries: list[dict[str, object]] = field(default_factory=list)
-
-    async def query(  # noqa: PLR0913 — Protocol contract dictates the signature
-        self,
-        *,
-        dense: list[float],
-        sparse: dict[int, float],
-        facets: Facets,
-        cutoff_iso: str | None,
-        strict_deaths: bool,
-        k_retrieve: int,
-    ) -> list[Candidate]:
-        self.queries.append(
-            {
-                "dense_dim": len(dense),
-                "sparse_keys": list(sparse),
-                "facets": facets.model_dump(),
-                "cutoff_iso": cutoff_iso,
-                "strict_deaths": strict_deaths,
-                "k_retrieve": k_retrieve,
-            }
-        )
-        return list(self.candidates[:k_retrieve])
-
-    async def get_post_mortem(self, canonical_id: str) -> str:
-        for c in self.candidates:
-            if c.canonical_id == canonical_id:
-                return c.payload.body
-        msg = f"unknown canonical_id {canonical_id!r}"
-        raise KeyError(msg)
-
-    async def search_corpus(
-        self, q: str, facets: dict[str, str] | None = None
-    ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]  # Corpus Protocol — values vary
-        del q, facets
-        return [
-            {
-                "canonical_id": c.canonical_id,
-                "name": c.payload.name,
-                "summary": c.payload.summary,
-                "score": c.score,
-            }
-            for c in self.candidates
-        ]
-
-    def lookup_payload(self, canonical_id: str) -> CandidatePayload | None:
-        """Return the persisted payload for *canonical_id*, or None if unknown.
-
-        Private to the runner. The public :class:`Corpus` Protocol intentionally
-        does not expose payloads. We use this only in deterministic mode to
-        compute per-candidate ``allowed_hosts`` before calling
-        :func:`all_sources_in_allowed_domains`.
-        """
-        for c in self.candidates:
-            if c.canonical_id == canonical_id:
-                return c.payload
-        return None
-
-
-def _no_op_sparse_encoder(_t: str) -> dict[int, float]:
-    return {1: 1.0}
-
-
-def _build_deterministic_config() -> Config:
-    cfg = Config()
-    return cfg.model_copy(
-        update={
-            "K_retrieve": 6,
-            "N_synthesize": 3,
-            "model_facet": _DETERMINISTIC_FACET_MODEL,
-            "model_rerank": _DETERMINISTIC_RERANK_MODEL,
-            "model_synthesize": _DETERMINISTIC_SYNTH_MODEL,
-        }
-    )
 
 
 def _load_dataset(path: Path) -> list[InputContext]:
@@ -396,52 +169,41 @@ def _verify_unique_row_ids(rows: list[InputContext]) -> list[str]:
     return ids
 
 
-def _allowed_hosts_for_candidate(
-    candidate_id: str,
-    eval_corpus: _EvalCorpus | None,
-) -> set[str]:
-    """Compute the host allowlist used by ``all_sources_in_allowed_domains``.
+def _validate_scope(scope: str | None, row_ids: list[str]) -> None:
+    """Exit 2 if *scope* is set and not in *row_ids*. No-op when scope is None."""
+    if scope is None or scope in row_ids:
+        return
+    print(  # noqa: T201 — CLI surface
+        f"--scope {scope!r} not in dataset; valid scopes: {sorted(row_ids)}",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
-    In deterministic mode (``eval_corpus is not None``), unions the
-    fixed allowlist with the candidate's own payload sources. In
-    ``--live`` mode (``eval_corpus is None``), reduces to the fixed
-    allowlist only. See the module docstring's "Live-mode limitation".
+
+def _allowed_hosts_for_candidate(s: Synthesis) -> set[str]:
+    """Compute the host allowlist for ``all_sources_in_allowed_domains``.
+
+    Unions the fixed allowlist with the candidate's own ``Synthesis.sources``
+    (already populated from ``CandidatePayload.sources`` in
+    ``Synthesis.from_llm``). Rebuilds the set fresh per call so it can't leak
+    across candidates.
     """
     hosts: set[str] = set(_FIXED_HOST_ALLOWLIST)
-    if eval_corpus is None:
-        return hosts
-    payload = eval_corpus.lookup_payload(candidate_id)
-    if payload is None:
-        return hosts
-    for url in payload.sources:
+    for url in s.sources:
         host = urlparse(url).hostname
         if host is not None:
             hosts.add(host)
     return hosts
 
 
-def _body_for_candidate(candidate_id: str, eval_corpus: _EvalCorpus | None) -> str | None:
-    """Return the candidate body for ``claims_grounded_in_body``, or None in live mode.
-
-    In deterministic mode, looks up the persisted payload via the private
-    ``_EvalCorpus.lookup_payload``. In ``--live`` mode (``eval_corpus is None``),
-    returns None — the public Corpus Protocol does not expose payload bodies
-    (same constraint that ``_allowed_hosts_for_candidate`` lives with). The
-    runner treats a None body as vacuously-grounded so live mode does not
-    spuriously fail.
-    """
-    if eval_corpus is None:
-        return None
-    payload = eval_corpus.lookup_payload(candidate_id)
-    if payload is None:
-        return None
-    return payload.body
-
-
-def _score_synthesis(s: Synthesis, *, eval_corpus: _EvalCorpus | None) -> dict[str, bool]:
-    """Apply every assertion in :data:`_ASSERTION_NAMES` to *s* and return the result dict."""
-    allowed = _allowed_hosts_for_candidate(s.candidate_id, eval_corpus)
-    body = _body_for_candidate(s.candidate_id, eval_corpus)
+def _score_synthesis(
+    s: Synthesis,
+    *,
+    bodies_map: Mapping[str, str | None],
+) -> dict[str, bool]:
+    """Apply every assertion in :data:`_ASSERTION_NAMES` to *s*."""
+    allowed = _allowed_hosts_for_candidate(s)
+    body = bodies_map.get(s.candidate_id)
     return {
         "where_diverged_nonempty": where_diverged_nonempty(s),
         "all_sources_in_allowed_domains": all_sources_in_allowed_domains(s, allowed),
@@ -450,60 +212,109 @@ def _score_synthesis(s: Synthesis, *, eval_corpus: _EvalCorpus | None) -> dict[s
     }
 
 
-def _score_report(report: Report, *, eval_corpus: _EvalCorpus | None) -> dict[str, object]:
-    """Return the per-row results-dict in the baseline shape (without the row key)."""
+def _score_report(
+    report: Report,
+    *,
+    bodies_map: Mapping[str, str | None],
+) -> dict[str, object]:
+    """Return the per-row results-dict in the baseline shape."""
     assertions: dict[str, dict[str, bool]] = {}
     for s in report.candidates:
-        assertions[s.candidate_id] = _score_synthesis(s, eval_corpus=eval_corpus)
+        assertions[s.candidate_id] = _score_synthesis(s, bodies_map=bodies_map)
     return {
         "candidates_count": len(report.candidates),
         "assertions": assertions,
     }
 
 
-async def _run_deterministic(
-    rows: list[InputContext], row_ids: list[str]
+async def _run_cassettes(
+    rows: list[InputContext],
+    row_ids: list[str],
+    scope_filter: str | None,
 ) -> dict[str, dict[str, object]]:
-    """Run every row in deterministic mode and return per-row scored results."""
-    cfg = _build_deterministic_config()
-    candidates = [_candidate(f"cand-{i}") for i in range(cfg.K_retrieve)]
-    canned = _build_canned(candidate_ids=[c.canonical_id for c in candidates[: cfg.N_synthesize]])
-    fake_llm = FakeLLMClient(canned=canned, default_model=_DETERMINISTIC_SYNTH_MODEL)
-    fake_embed = FakeEmbeddingClient(model=_DETERMINISTIC_EMBED_MODEL)
-    eval_corpus = _EvalCorpus(candidates=candidates)
+    """Run every row in cassette mode and return per-row scored results.
+
+    Opens an ephemeral Qdrant collection seeded from
+    ``tests/fixtures/corpus_fixture.jsonl``. For each row, loads the
+    committed cassette dir under ``_CASSETTE_ROOT/<row_id>/``, runs
+    ``pipeline.run_query`` with fakes pinned to that cassette, and pre-fetches
+    the per-candidate body via ``corpus.get_post_mortem`` before scoring. The
+    host allowlist is computed directly from ``Synthesis.sources``.
+
+    Per-row failures (missing cassette dir, ``NoCannedResponseError``,
+    ``NoCannedEmbeddingError``) log ``FAIL <row_id>: …`` and write
+    ``candidates_count=0`` for that row. Run-level failures (missing fixture,
+    ``CassetteFormatError``) print to stderr and exit 2.
+    """
+    cfg = load_config()
+    fixture_path = Path("tests/fixtures/corpus_fixture.jsonl")
+    # ASYNC240: this is a one-shot pre-flight check at run start; the cost of
+    # spinning up anyio.Path for one stat() isn't worth it.
+    if not fixture_path.exists():  # noqa: ASYNC240
+        print(  # noqa: T201 — CLI surface
+            f"missing {fixture_path}; run `just eval-record-corpus` first",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    dim = EMBED_DIMS[cfg.embed_model_id]
+
     budget = Budget(cap_usd=2.0)
-
-    # Stub the sparse encoder so fastembed isn't loaded (mirrors test_pipeline_e2e).
-    import slopmortem.corpus.embed_sparse as _es  # noqa: PLC0415
-
-    original_encode = _es.encode
-    _es.encode = _no_op_sparse_encoder
+    results: dict[str, dict[str, object]] = {}
     try:
-        results: dict[str, dict[str, object]] = {}
-        for ctx, rid in zip(rows, row_ids, strict=True):
-            report = await run_query(
-                ctx,
-                llm=fake_llm,
-                embedding_client=fake_embed,
-                corpus=eval_corpus,
-                config=cfg,
-                budget=budget,
-            )
-            results[rid] = _score_report(report, eval_corpus=eval_corpus)
-        return results
-    finally:
-        _es.encode = original_encode
+        async with setup_ephemeral_qdrant(fixture_path, dim=dim) as corpus:
+            for ctx, rid in zip(rows, row_ids, strict=True):
+                if scope_filter is not None and rid != scope_filter:
+                    continue
+                scope_dir = _CASSETTE_ROOT / rid
+                if not scope_dir.exists() or not any(scope_dir.iterdir()):
+                    print(f"FAIL {rid}: no cassettes")  # noqa: T201 — CLI surface
+                    results[rid] = {"candidates_count": 0, "assertions": {}}
+                    continue
+
+                fake_llm, fake_embed, cassette_sparse = load_row_fakes(scope_dir, cfg)
+
+                try:
+                    report = await run_query(
+                        ctx,
+                        llm=fake_llm,
+                        embedding_client=fake_embed,
+                        corpus=corpus,
+                        config=cfg,
+                        budget=budget,
+                        sparse_encoder=cassette_sparse,
+                    )
+                except (NoCannedResponseError, NoCannedEmbeddingError) as exc:
+                    print(f"FAIL {rid}: cassette miss — {exc}")  # noqa: T201 — CLI surface
+                    results[rid] = {"candidates_count": 0, "assertions": {}}
+                    continue
+
+                bodies_map: dict[str, str | None] = {}
+                for s in report.candidates:
+                    try:
+                        bodies_map[s.candidate_id] = await corpus.get_post_mortem(s.candidate_id)
+                    except (KeyError, FileNotFoundError):
+                        bodies_map[s.candidate_id] = None
+                results[rid] = _score_report(report, bodies_map=bodies_map)
+    except CassetteFormatError as exc:
+        print(f"cassette format error: {exc}", file=sys.stderr)  # noqa: T201 — CLI surface
+        sys.exit(2)
+    return results
 
 
 async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, dict[str, object]]:
-    """Run every row through real production deps. May spend real money."""
-    # Lazy-imported so deterministic mode doesn't drag CLI deps in.
-    # Both names are private; sanctioned reuse: the runner mirrors the CLI
-    # boot path exactly so live evals get the same prod wiring.
+    """Run every row through real production deps. May spend real money.
+
+    Behavior change vs. the old deterministic-only baseline:
+    ``claims_grounded_in_body`` now actually runs against the post-mortem
+    body. Previously it was vacuously True because ``_run_live`` passed no
+    corpus to the scorer.
+    """
+    # Lazy-imported so cassette mode doesn't drag CLI deps in. Both names are
+    # private; sanctioned reuse: the runner mirrors the CLI boot path exactly
+    # so live evals get the same prod wiring.
     from slopmortem.cli import (  # noqa: PLC0415
         _build_deps,  # pyright: ignore[reportPrivateUsage]
     )
-    from slopmortem.config import load_config  # noqa: PLC0415
     from slopmortem.corpus.tools_impl import _set_corpus  # noqa: PLC0415
 
     cfg = load_config()
@@ -520,9 +331,13 @@ async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, d
             config=cfg,
             budget=budget,
         )
-        # In --live we have no payload-lookup. Pass eval_corpus=None so
-        # allowed_hosts collapses to the fixed allowlist.
-        results[rid] = _score_report(report, eval_corpus=None)
+        bodies_map: dict[str, str | None] = {}
+        for s in report.candidates:
+            try:
+                bodies_map[s.candidate_id] = await corpus.get_post_mortem(s.candidate_id)
+            except (KeyError, FileNotFoundError):
+                bodies_map[s.candidate_id] = None
+        results[rid] = _score_report(report, bodies_map=bodies_map)
     return results
 
 
@@ -624,9 +439,9 @@ def _build_argparser() -> argparse.ArgumentParser:
         description=(
             "Run a JSONL eval dataset through the synthesis pipeline and "
             "compare per-row assertion results against a recorded baseline. "
-            "Default mode is deterministic (FakeLLMClient + FakeEmbeddingClient + "
-            "in-memory corpus); --live wires real production deps. CI runs "
-            "deterministic mode only."
+            "Default mode replays committed cassettes against an ephemeral Qdrant "
+            "collection (FakeLLMClient + FakeEmbeddingClient + setup_ephemeral_qdrant); "
+            "--live wires real production deps. CI runs cassette mode only."
         ),
     )
     _ = p.add_argument(
@@ -751,11 +566,12 @@ def main(argv: list[str] | None = None) -> None:
 
     rows = _load_dataset(dataset_path)
     row_ids = _verify_unique_row_ids(rows)
+    _validate_scope(scope, row_ids)
 
     if live:
         results = anyio.run(_run_live, rows, row_ids)
     else:
-        results = anyio.run(_run_deterministic, rows, row_ids)
+        results = anyio.run(_run_cassettes, rows, row_ids, scope)
 
     serialized = _serialize_results(results)
 
