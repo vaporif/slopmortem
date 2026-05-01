@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from slopmortem.llm.prompts import prompt_template_sha, render_blocks, render_prompt
-from slopmortem.models import Facets, LlmRerankResult, Synthesis
+from slopmortem.models import Facets, LlmRerankResult, LLMTopRisksConsolidation, Synthesis
 
 FIXTURES = Path(__file__).parent / "fixtures" / "prompts"
 
@@ -59,6 +59,37 @@ def test_synthesize_renders_inlined_body():
     assert "customer_type: smb" in out
     schema = Synthesis.model_json_schema()
     assert "where_diverged" in schema["properties"]
+
+
+def test_consolidate_risks_renders():
+    out = render_prompt(
+        "consolidate_risks",
+        pitch="MedScribe is an AI medical scribing app for US dermatology clinics.",
+        lessons=[
+            {
+                "candidate_id": "scribetech.com",
+                "candidate_name": "ScribeTech",
+                "lesson": "Pick a specialty Epic and athena are slow to bundle into.",
+            },
+        ],
+        candidate_ids=["scribetech.com", "ambient-ai.example"],
+    )
+    assert "MedScribe is an AI medical scribing" in out
+    assert "candidate_id=scribetech.com" in out
+    assert "Pick a specialty" in out
+    assert "scribetech.com, ambient-ai.example" in out
+    schema = LLMTopRisksConsolidation.model_json_schema()
+    assert "top_risks" in schema["properties"]
+    assert "injection_detected" in schema["properties"]
+
+
+def test_consolidate_risks_fixture_matches_schema():
+    fx = json.loads((FIXTURES / "consolidate_risks.json").read_text())
+    LLMTopRisksConsolidation.model_validate(fx["expected_output"])
+    out = render_prompt("consolidate_risks", **fx["vars"])
+    assert fx["vars"]["pitch"] in out
+    for item in fx["vars"]["lessons"]:
+        assert item["lesson"] in out
 
 
 def test_summarize_renders_with_source_id():

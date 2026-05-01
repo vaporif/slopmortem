@@ -148,7 +148,7 @@ nuke:
     read -r -p "Proceed? [y/N] " confirm
     case "$confirm" in
         y|Y|yes|YES) ;;
-        *) echo "aborted"; exit 1 ;;
+        *) echo "aborted"; exit 2 ;;
     esac
     docker compose down qdrant 2>/dev/null || true
     rm -rf data/qdrant journal.sqlite post_mortems

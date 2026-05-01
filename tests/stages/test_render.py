@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from slopmortem.models import (
+    ConsolidatedRisk,
     InputContext,
     PerspectiveScore,
     PipelineMeta,
     Report,
     SimilarityScores,
     Synthesis,
-    TopRisk,
     TopRisks,
 )
 from slopmortem.render import render
@@ -91,13 +91,19 @@ def _report() -> Report:
             budget_exceeded=False,
         ),
         top_risks=TopRisks(
-            clusters=[
-                TopRisk(
+            risks=[
+                ConsolidatedRisk(
                     summary="target larger ACVs",
-                    candidate_ids=["acme-corp"],
-                    frequency=1,
+                    applies_because="pitch sells the same SMB invoicing motion as Acme.",
+                    raised_by=["acme-corp"],
+                    severity="high",
                 ),
-                TopRisk(summary="be honest", candidate_ids=["beta-co"], frequency=1),
+                ConsolidatedRisk(
+                    summary="be honest",
+                    applies_because="pitch claims a moat without naming one.",
+                    raised_by=["beta-co"],
+                    severity="medium",
+                ),
             ]
         ),
     )
@@ -148,7 +154,10 @@ def test_render_keeps_sources_as_plain_text() -> None:
 def test_render_emits_top_risks_section_when_present() -> None:
     md = render(_report())
     assert "## Top risks across all comparables" in md
-    # Numbered list items render with the "Raised by:" annotation.
+    # Numbered list items render with severity tag, applies_because, raised_by.
+    assert "[HIGH]" in md
+    assert "[MEDIUM]" in md
+    assert "Applies because:" in md
     assert "Raised by:" in md
     # The total denominator is the candidate count (2 in this fixture).
     assert "(1/2)" in md
@@ -156,14 +165,14 @@ def test_render_emits_top_risks_section_when_present() -> None:
 
 def test_render_omits_top_risks_when_empty() -> None:
     report = _report()
-    report_no_risks = report.model_copy(update={"top_risks": TopRisks(clusters=[])})
+    report_no_risks = report.model_copy(update={"top_risks": TopRisks(risks=[])})
     md = render(report_no_risks)
     assert "## Top risks across all comparables" not in md
 
 
 def test_render_emits_banner_when_no_candidates_pass_threshold() -> None:
     """Empty candidates list with a finished run renders the threshold banner."""
-    report = _report().model_copy(update={"candidates": [], "top_risks": TopRisks(clusters=[])})
+    report = _report().model_copy(update={"candidates": [], "top_risks": TopRisks(risks=[])})
     md = render(report)
     assert "No comparables passed similarity threshold 4.0" in md
     assert "min_similarity_score" in md
@@ -173,7 +182,7 @@ def test_render_emits_banner_when_no_candidates_pass_threshold() -> None:
 
 def test_render_skips_banner_on_budget_exceeded() -> None:
     """Budget-truncated runs skip the banner — the empty candidates have a different cause."""
-    report = _report().model_copy(update={"candidates": [], "top_risks": TopRisks(clusters=[])})
+    report = _report().model_copy(update={"candidates": [], "top_risks": TopRisks(risks=[])})
     report = report.model_copy(
         update={"pipeline_meta": report.pipeline_meta.model_copy(update={"budget_exceeded": True})}
     )

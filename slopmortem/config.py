@@ -40,6 +40,7 @@ class Config(BaseSettings):
     model_summarize: str = "anthropic/claude-haiku-4.5"
     model_rerank: str = "anthropic/claude-sonnet-4.6"
     model_synthesize: str = "anthropic/claude-sonnet-4.6"
+    model_consolidate: str = "anthropic/claude-sonnet-4.6"
 
     # Per-stage output caps. OpenRouter requires holding upfront credit for the
     # model's max output, so leaving these unset reserves the full 64K Anthropic
@@ -49,6 +50,7 @@ class Config(BaseSettings):
     max_tokens_summarize: int = 1500
     max_tokens_rerank: int = 4000
     max_tokens_synthesize: int = 16000
+    max_tokens_consolidate: int = 2048
     max_tokens_slop_judge: int = 64
     max_tokens_tiebreaker: int = 256
 

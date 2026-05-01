@@ -108,21 +108,26 @@ def _render_candidate(syn: Synthesis) -> str:
 
 
 def _render_top_risks(top_risks: TopRisks, candidates: list[Synthesis]) -> str:
-    """Render the cross-candidate top-risks section as a numbered markdown list.
+    """Render the consolidated top-risks section as a numbered markdown list.
 
-    Each item is the canonical lesson summary plus a "Raised by: <names> (k/N)"
-    line, where ``k`` is the cluster's frequency and ``N`` is the total number
-    of candidates in the report. Names are looked up by ``candidate_id``;
-    unknown ids fall back to the raw id string (defensive — should not occur
-    in practice since clustering only sees ids from the same syntheses list).
+    Each item is a severity-tagged canonical summary plus an
+    ``Applies because:`` line and a ``Raised by: <names> (k/N)`` line, where
+    ``k`` is ``len(raised_by)`` and ``N`` is the total candidate count.
+    Unknown ids fall back to the raw id string (defensive — the consolidator
+    only sees ids from the same syntheses list).
     """
     id_to_name = {c.candidate_id: c.name for c in candidates}
     total = len(candidates)
     lines: list[str] = ["## Top risks across all comparables", ""]
-    for idx, cluster in enumerate(top_risks.clusters, start=1):
-        names = ", ".join(id_to_name.get(cid, cid) for cid in cluster.candidate_ids)
-        lines.append(f"{idx}. {_strip_markdown_links(cluster.summary)}")
-        lines.append(f"   Raised by: {names} ({cluster.frequency}/{total})")
+    for idx, risk in enumerate(top_risks.risks, start=1):
+        names = ", ".join(id_to_name.get(cid, cid) for cid in risk.raised_by)
+        lines.append(
+            f"{idx}. [{risk.severity.upper()}] {_strip_markdown_links(risk.summary)}"
+        )
+        lines.append(
+            f"   Applies because: {_strip_markdown_links(risk.applies_because)}"
+        )
+        lines.append(f"   Raised by: {names} ({len(risk.raised_by)}/{total})")
         lines.append("")
     return "\n".join(lines)
 
@@ -182,7 +187,7 @@ def render(report: Report) -> str:
     if not report.candidates and not report.pipeline_meta.budget_exceeded:
         sections.append(_render_no_comparables_banner(report.pipeline_meta.min_similarity_score))
         sections.append("")
-    if report.top_risks.clusters:
+    if report.top_risks.risks:
         sections.append(_render_top_risks(report.top_risks, report.candidates))
     for syn in report.candidates:
         sections.append(_render_candidate(syn))
