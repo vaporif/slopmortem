@@ -174,3 +174,34 @@ async def test_llm_rerank_raises_on_length_mismatch() -> None:
 
     with pytest.raises(RerankLengthError, match="expected 5, got 3"):
         await llm_rerank(candidates, "pitch", _facets(), fake_llm, cfg)
+
+
+async def test_llm_rerank_accepts_short_when_candidates_below_n() -> None:
+    candidates = _make_candidates(3)
+    cfg = _config(n_synthesize=5)
+    payload = _scored_payload([c.canonical_id for c in candidates])
+    fake_llm = FakeLLMClient(
+        canned=_rerank_canned(
+            text=payload, pitch="pitch", candidates=candidates, top_n=cfg.N_synthesize
+        ),
+        default_model=_DEFAULT_MODEL,
+    )
+
+    result = await llm_rerank(candidates, "pitch", _facets(), fake_llm, cfg)
+
+    assert len(result.ranked) == 3
+
+
+async def test_llm_rerank_raises_when_llm_exceeds_top_n() -> None:
+    candidates = _make_candidates(30)
+    cfg = _config(n_synthesize=5)
+    payload = _scored_payload([c.canonical_id for c in candidates[:7]])
+    fake_llm = FakeLLMClient(
+        canned=_rerank_canned(
+            text=payload, pitch="pitch", candidates=candidates, top_n=cfg.N_synthesize
+        ),
+        default_model=_DEFAULT_MODEL,
+    )
+
+    with pytest.raises(RerankLengthError, match="expected 5, got 7"):
+        await llm_rerank(candidates, "pitch", _facets(), fake_llm, cfg)
