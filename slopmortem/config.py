@@ -25,6 +25,7 @@ class Config(BaseSettings):
 
     K_retrieve: int = 30
     N_synthesize: int = 5
+    min_similarity_score: float = 4.0
     ingest_concurrency: int = 20
     facet_boost: float = 0.01
     rrf_k: int = 60

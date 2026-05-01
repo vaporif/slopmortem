@@ -60,6 +60,7 @@ def _fixture_report(*, name: str = "Foo") -> Report:
         pipeline_meta=PipelineMeta(
             K_retrieve=30,
             N_synthesize=5,
+            min_similarity_score=4.0,
             models={"facet": "f", "rerank": "r", "synthesize": "s"},
             cost_usd_total=0.0,
             latency_ms_total=0,

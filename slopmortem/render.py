@@ -142,11 +142,20 @@ def _render_footer(meta: PipelineMeta) -> str:
             f"- budget_exceeded: {meta.budget_exceeded}",
             f"- K_retrieve: {meta.K_retrieve}",
             f"- N_synthesize: {meta.N_synthesize}",
+            f"- min_similarity_score: {meta.min_similarity_score:.1f}",
             "",
             "Models:",
             "",
             models_block,
         ]
+    )
+
+
+def _render_no_comparables_banner(threshold: float) -> str:
+    return (
+        f"No comparables passed similarity threshold {threshold:.1f}. "
+        "The pitch may be outside the corpus, or the threshold may be too strict "
+        "(min_similarity_score in slopmortem.toml)."
     )
 
 
@@ -170,6 +179,9 @@ def render(report: Report) -> str:
         f"Generated: {report.generated_at.isoformat()}",
         "",
     ]
+    if not report.candidates and not report.pipeline_meta.budget_exceeded:
+        sections.append(_render_no_comparables_banner(report.pipeline_meta.min_similarity_score))
+        sections.append("")
     if report.top_risks.clusters:
         sections.append(_render_top_risks(report.top_risks, report.candidates))
     for syn in report.candidates:

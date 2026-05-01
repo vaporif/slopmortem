@@ -26,8 +26,25 @@ from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
-from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext, Synthesis, TopRisks
-from slopmortem.pipeline import QueryPhase, _join_to_candidates, cutoff_iso, run_query
+from slopmortem.models import (
+    Candidate,
+    CandidatePayload,
+    Facets,
+    InputContext,
+    PerspectiveScore,
+    ScoredCandidate,
+    SimilarityScores,
+    Synthesis,
+    TopRisks,
+)
+from slopmortem.pipeline import (
+    QueryPhase,
+    _filter_by_min_similarity,
+    _filter_synth_by_min_similarity,
+    _join_to_candidates,
+    cutoff_iso,
+    run_query,
+)
 from slopmortem.stages.synthesize import synthesize_prompt_kwargs
 
 if TYPE_CHECKING:
@@ -574,3 +591,112 @@ def test_join_to_candidates_drops_unknown_ids() -> None:
         ),
     ]
     assert _join_to_candidates(retrieved, ranked) == []
+
+
+def _scored_with(cid: str, *, bm: float, mk: float, gtm: float, ss: float) -> ScoredCandidate:
+    return ScoredCandidate(
+        candidate_id=cid,
+        perspective_scores=SimilarityScores(
+            business_model=PerspectiveScore(score=bm, rationale="x"),
+            market=PerspectiveScore(score=mk, rationale="x"),
+            gtm=PerspectiveScore(score=gtm, rationale="x"),
+            stage_scale=PerspectiveScore(score=ss, rationale="x"),
+        ),
+        rationale="r",
+    )
+
+
+def test_filter_by_min_similarity_drops_below_threshold() -> None:
+    """Below-threshold means dropped; at-or-above means kept."""
+    ranked = [
+        _scored_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0),  # mean = 5.5
+        _scored_with("weak", bm=2.0, mk=2.0, gtm=2.0, ss=2.0),  # mean = 2.0
+        _scored_with("borderline", bm=4.0, mk=4.0, gtm=4.0, ss=4.0),  # mean = 4.0
+    ]
+    survivors = _filter_by_min_similarity(ranked, threshold=4.0)
+    assert [s.candidate_id for s in survivors] == ["strong", "borderline"]
+
+
+def test_filter_by_min_similarity_preserves_order() -> None:
+    """Filter preserves rerank order; it does not re-sort survivors."""
+    ranked = [
+        _scored_with("c", bm=5.0, mk=5.0, gtm=5.0, ss=5.0),
+        _scored_with("a", bm=8.0, mk=8.0, gtm=8.0, ss=8.0),
+        _scored_with("b", bm=6.0, mk=6.0, gtm=6.0, ss=6.0),
+    ]
+    survivors = _filter_by_min_similarity(ranked, threshold=4.0)
+    assert [s.candidate_id for s in survivors] == ["c", "a", "b"]
+
+
+def test_filter_by_min_similarity_empty_when_all_below() -> None:
+    """All weak candidates means an empty list — synthesis stage will skip."""
+    ranked = [
+        _scored_with("c1", bm=2.0, mk=2.0, gtm=2.0, ss=4.0),  # mean = 2.5
+        _scored_with("c2", bm=1.0, mk=1.0, gtm=1.0, ss=2.0),  # mean = 1.25
+    ]
+    assert _filter_by_min_similarity(ranked, threshold=4.0) == []
+
+
+async def test_run_query_zero_passes_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A threshold above every rerank score yields an empty Report.candidates."""
+    candidates = [_candidate(f"cand-{i}") for i in range(6)]
+    cfg = _build_config(k_retrieve=6, n_synthesize=3).model_copy(
+        update={"min_similarity_score": 9.5}  # rerank fixture caps at mean 5.5
+    )
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
+    fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
+    fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
+    fake_corpus = _FakeCorpus(candidates=candidates)
+    budget = Budget(cap_usd=2.0)
+
+    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+
+    report = await run_query(
+        ctx,
+        llm=fake_llm,
+        embedding_client=fake_embed,
+        corpus=fake_corpus,
+        config=cfg,
+        budget=budget,
+    )
+
+    assert report.candidates == []
+    assert report.top_risks.clusters == []
+    assert report.pipeline_meta.budget_exceeded is False
+    assert report.pipeline_meta.min_similarity_score == 9.5
+
+
+def _synth_with(cid: str, *, bm: float, mk: float, gtm: float, ss: float) -> Synthesis:
+    return Synthesis(
+        candidate_id=cid,
+        name=cid,
+        one_liner="x",
+        failure_date=None,
+        lifespan_months=None,
+        similarity=SimilarityScores(
+            business_model=PerspectiveScore(score=bm, rationale="x"),
+            market=PerspectiveScore(score=mk, rationale="x"),
+            gtm=PerspectiveScore(score=gtm, rationale="x"),
+            stage_scale=PerspectiveScore(score=ss, rationale="x"),
+        ),
+        why_similar="x",
+        where_diverged="x",
+        failure_causes=["x"],
+        lessons_for_input=["x"],
+        sources=[],
+    )
+
+
+def test_filter_synth_by_min_similarity_drops_below_threshold() -> None:
+    """Synth filter drops when synth's own mean falls below the bar."""
+    syntheses = [
+        _synth_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0),  # mean = 5.5
+        _synth_with("synth_disagreed", bm=2.0, mk=2.0, gtm=1.0, ss=3.0),  # mean = 2.0
+    ]
+    kept = _filter_synth_by_min_similarity(syntheses, threshold=4.0)
+    assert [s.candidate_id for s in kept] == ["strong"]

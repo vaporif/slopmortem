@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from slopmortem.corpus.store import Corpus
     from slopmortem.llm.client import LLMClient
     from slopmortem.llm.embedding_client import EmbeddingClient
-    from slopmortem.models import Candidate, InputContext, ScoredCandidate
+    from slopmortem.models import Candidate, InputContext, ScoredCandidate, SimilarityScores
     from slopmortem.stages.retrieve import SparseEncoder
 
 
@@ -114,6 +114,36 @@ def cutoff_iso(years_filter: int | None) -> str | None:
     if years_filter is None:
         return None
     return (datetime.now(UTC) - timedelta(days=_DAYS_PER_YEAR * years_filter)).date().isoformat()
+
+
+def _mean_similarity_score(scores: SimilarityScores) -> float:
+    """Mean of the four 0-10 perspective scores."""
+    perspectives = [
+        scores.business_model.score,
+        scores.market.score,
+        scores.gtm.score,
+        scores.stage_scale.score,
+    ]
+    return sum(perspectives) / len(perspectives)
+
+
+def _filter_by_min_similarity(
+    ranked: list[ScoredCandidate], threshold: float
+) -> list[ScoredCandidate]:
+    """Drop reranked candidates whose mean perspective score is below ``threshold``."""
+    return [s for s in ranked if _mean_similarity_score(s.perspective_scores) >= threshold]
+
+
+def _filter_synth_by_min_similarity(
+    syntheses: list[Synthesis], threshold: float
+) -> list[Synthesis]:
+    """Drop syntheses whose mean perspective score is below ``threshold``.
+
+    Synthesis sometimes re-scores a candidate lower than rerank did, so a row
+    that cleared the rerank-side filter can still come back below the bar.
+    This second pass keeps the rendered table consistent with the threshold.
+    """
+    return [s for s in syntheses if _mean_similarity_score(s.similarity) >= threshold]
 
 
 def _join_to_candidates(
@@ -202,6 +232,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
                 "config.taxonomy_version": config.taxonomy_version,
                 "config.K_retrieve": config.K_retrieve,
                 "config.N_synthesize": config.N_synthesize,
+                "config.min_similarity_score": config.min_similarity_score,
                 "config.strict_deaths": config.strict_deaths,
                 "config.model_facet": config.model_facet,
                 "config.model_rerank": config.model_rerank,
@@ -249,7 +280,8 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         progress.advance_phase(QueryPhase.RERANK)
         progress.end_phase(QueryPhase.RERANK)
 
-        top_n = _join_to_candidates(retrieved, reranked.ranked)[: config.N_synthesize]
+        survivors = _filter_by_min_similarity(reranked.ranked, config.min_similarity_score)
+        top_n = _join_to_candidates(retrieved, survivors)[: config.N_synthesize]
 
         progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
 
@@ -268,6 +300,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             on_candidate_done=_on_candidate_done,
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
+        successes = _filter_synth_by_min_similarity(successes, config.min_similarity_score)
         # Cluster lessons across candidates inside the try block so a successful
         # run gets full top-risks. A budget-exceeded run skips this and returns
         # the default-empty TopRisks initialized above (clustering only what
@@ -288,6 +321,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         pipeline_meta=PipelineMeta(
             K_retrieve=config.K_retrieve,
             N_synthesize=config.N_synthesize,
+            min_similarity_score=config.min_similarity_score,
             models={
                 "facet": config.model_facet,
                 "rerank": config.model_rerank,
