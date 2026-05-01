@@ -100,9 +100,7 @@ def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
 
     runner = CliRunner()
-    result = runner.invoke(
-        app, ["query", "Some pitch text", "--name", "MyStartup", "--stdout"]
-    )
+    result = runner.invoke(app, ["query", "Some pitch text", "--name", "MyStartup", "--stdout"])
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
     # The rendered report's title should contain the input name.
     assert "MyStartup" in result.stdout
@@ -124,9 +122,7 @@ def test_query_smoke_default_unnamed(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "(unnamed)" in result.stdout
 
 
-def test_query_default_writes_to_runs_dir(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_query_default_writes_to_runs_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Default (no --stdout) writes the report under .slopmortem/runs/ and echoes the path."""
 
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
