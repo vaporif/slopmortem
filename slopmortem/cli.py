@@ -278,12 +278,10 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
             typer.echo(f"{r.pair_key}\tscore={score}\tdecision={decision}\trationale={rationale}")
         return
 
-    # Spec: §Quarantine and reclassify line 252.
     if reclassify:
         await _run_reclassify(config, post_mortems_root)
         return
 
-    # Spec: §Atomicity / six drift classes (a-f).
     if reconcile_flag:
         await _run_reconcile(config, post_mortems_root)
         return

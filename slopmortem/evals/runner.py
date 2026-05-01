@@ -127,10 +127,8 @@ _ASSERTION_NAMES: tuple[str, ...] = (
 )
 
 
-# Deterministic-mode canned data: private duplication of tests/test_pipeline_e2e.py
-# helpers, kept private to runner.py to avoid a shared-fixture module.
-
-
+# Deterministic-mode canned data — duplicated from tests/test_pipeline_e2e.py
+# rather than extracted into a shared fixture module.
 def _facets() -> Facets:
     return Facets(
         sector="fintech",
