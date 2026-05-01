@@ -847,9 +847,11 @@ def test_cutoff_iso_none_passthrough():
 
 ## Verification — full sweep after all 7 tasks
 
-- [ ] **Final sweep.** Run the full suite: `just lint && just typecheck && just test && just coverage`.
-- [ ] **Cassette check.** None of the new tests use cassettes — they all use fakes/`InMemoryCorpus`/mocks per project convention. Existing cassettes are unaffected: adding a defaulted `injection_detected` to `Synthesis` doesn't change LLM request/response shape (which is what cassettes capture). `just eval` should pass unchanged. Skip `just eval-record`.
-- [ ] **Docs final pass.** Re-read CLAUDE.md's load-bearing section and confirm: (1) the injection contract now matches runtime (Task 1), (2) the precedence claim (Task 2) matches code, (3) nothing else has drifted.
+- [x] **Final sweep.** `just lint` clean, `just typecheck` clean (0 errors), `just test` 363 passed / 1 failed (pre-existing — see note), `just coverage` 82% total.
+- [x] **Cassette check.** No cassette files present (only `.gitkeep`). New tests use fakes/`InMemoryCorpus`/mocks per project convention. Skipped `just eval` and `just eval-record`.
+- [x] **Docs final pass.** CLAUDE.md `Injection marker` bullet (line 63) and precedence line (line 32) both match code post-Tasks 1-2.
+
+**Pre-existing flake (out of scope):** `tests/test_pipeline_e2e.py::test_full_pipeline_with_fake_clients` asserts `meta.trace_id is None`, but `tests/test_observe_redaction.py:304` calls `Laminar.initialize(...)` with no teardown — once the xdist worker process initializes Laminar, every later test on that worker sees `is_initialized()==True` and the pipeline emits a real `trace_id`. Reproduces at commit `38224be` before any Task 4-7 work. Fix is to either tear Laminar down in the redaction test's fixture, or relax the assertion in `test_full_pipeline_with_fake_clients` to accept either None-or-uuid. Not addressed here — separate ticket.
 
 ## Risks and notes
 
