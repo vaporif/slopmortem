@@ -173,7 +173,7 @@ def render(report: Report) -> str:
         reaches a markdown viewer.
     """
     sections: list[str] = [
-        f"# Premortem report for {report.input.name}",
+        f"# Slopmortem report for {report.input.name}",
         "",
         f"Pitch: {_strip_markdown_links(report.input.description)}",
         "",
