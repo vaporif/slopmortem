@@ -42,23 +42,39 @@ def test_tool_signatures_round_trip():
         }
 
 
+def _check_import(node: ast.Import) -> list[str]:
+    return [
+        f"import {alias.name}"
+        for alias in node.names
+        if alias.name.split(".", 1)[0] in BANNED_MODULES
+    ]
+
+
+def _check_import_from(node: ast.ImportFrom) -> list[str]:
+    found: list[str] = []
+    if node.module and node.module.split(".", 1)[0] in BANNED_MODULES:
+        found.append(f"from {node.module} import ...")
+    for mod, attr in BANNED_ATTRS:
+        if node.module == mod and any(a.name == attr for a in node.names):
+            found.append(f"from {mod} import {attr}")
+    return found
+
+
+def _check_attribute(node: ast.Attribute) -> list[str]:
+    if isinstance(node.value, ast.Name) and (node.value.id, node.attr) in BANNED_ATTRS:
+        return [f"{node.value.id}.{node.attr}"]
+    return []
+
+
 def test_no_subprocess_imports_in_tools():
     """AST-based: defeats `import subprocess as sp` and similar aliasing tricks."""
     tree = ast.parse(inspect.getsource(tools_impl))
     violations: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                root = alias.name.split(".", 1)[0]
-                if root in BANNED_MODULES:
-                    violations.append(f"import {alias.name}")
+            violations.extend(_check_import(node))
         elif isinstance(node, ast.ImportFrom):
-            if node.module and node.module.split(".", 1)[0] in BANNED_MODULES:
-                violations.append(f"from {node.module} import ...")
-            for mod, attr in BANNED_ATTRS:
-                if node.module == mod and any(a.name == attr for a in node.names):
-                    violations.append(f"from {mod} import {attr}")
-        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            if (node.value.id, node.attr) in BANNED_ATTRS:
-                violations.append(f"{node.value.id}.{node.attr}")
+            violations.extend(_check_import_from(node))
+        elif isinstance(node, ast.Attribute):
+            violations.extend(_check_attribute(node))
     assert not violations, f"banned references: {violations}"

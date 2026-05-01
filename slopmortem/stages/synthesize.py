@@ -2,13 +2,13 @@
 
 One candidate per ``synthesize`` call. ``synthesize_all`` runs the cache-warm
 pattern (first call alone, then :func:`gather_resilient` on the rest) so one
-candidate's failure does not cancel the others.
+candidate's failure can't cancel the others.
 
 The OpenRouter client (``slopmortem/llm/openrouter.py``) drives the tool-call
 loop, wraps tool results in ``<untrusted_document>`` tags, and enforces the
-5-turn bound; this stage is one ``llm.complete(...)`` call. ``Laminar.init``
-wiring lands in Task 10 (per plan line 713); the module-level ``_emit_event``
-hook is a no-op stub until that orchestration ships.
+5-turn bound. This stage is one ``llm.complete(...)`` call. ``Laminar.init``
+wiring lands in Task 10 (plan line 713); the module-level ``_emit_event``
+hook is a no-op stub until that ships.
 """
 
 from __future__ import annotations
@@ -56,14 +56,13 @@ def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, A
     }
 
 
-# Fixed host allowlist applied on top of the per-candidate
-# ``payload.sources`` hosts. ``web.archive.org`` is intentionally NOT
-# included: Wayback proxies arbitrary URLs and bypasses host-level
-# allowlist semantics; see spec §995-1006.
+# Fixed host allowlist applied on top of per-candidate payload.sources hosts.
+# web.archive.org is intentionally NOT here — Wayback proxies arbitrary URLs
+# and bypasses host-level allowlist semantics. See spec §995-1006.
 _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 
-# Literal contract written into ``synthesize.j2``: the LLM must put this
-# exact string in ``where_diverged`` when it detects an injection attempt.
+# Literal contract from synthesize.j2: the LLM must put this exact string in
+# ``where_diverged`` when it detects an injection attempt.
 _INJECTION_MARKER = "prompt_injection_attempted"
 
 

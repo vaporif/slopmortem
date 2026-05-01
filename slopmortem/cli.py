@@ -787,7 +787,7 @@ class _StackedBar:
 class _ThickBarColumn(BarColumn):
     """:class:`BarColumn` whose bar spans ``height`` terminal rows.
 
-    Rich bars are one row tall; a :class:`_StackedBar` wrapper repeats the
+    Rich bars are one row tall. The :class:`_StackedBar` wrapper repeats the
     bar so it reads as a chunkier marker without changing layout — adjacent
     columns auto-pad to the tallest cell in the row.
     """
@@ -803,9 +803,9 @@ class _ThickBarColumn(BarColumn):
 class _OptionalMofNCompleteColumn(MofNCompleteColumn):
     """:class:`MofNCompleteColumn` that hides for single-shot phases.
 
-    Tasks with ``total <= 1`` carry no useful count — the bar's pulse-then-
-    fill already conveys done/not-done. Returning empty text drops the
-    cell and avoids ``0/1 → 1/1`` noise.
+    Tasks with ``total <= 1`` carry no useful count — the bar's pulse-then-fill
+    already conveys done vs not-done. Returning empty text drops the cell and
+    avoids ``0/1 → 1/1`` noise.
     """
 
     @override
@@ -818,9 +818,9 @@ class _OptionalMofNCompleteColumn(MofNCompleteColumn):
 class _RichPhaseProgress[PhaseT: StrEnum]:
     """Rich-backed phase progress shared by ingest and query pipelines.
 
-    One :class:`rich.progress.Progress` with a task per phase, lazy task
-    creation so unreached phases don't render empty bars, and a red
-    error-count badge appended to the description on per-phase failures.
+    One :class:`rich.progress.Progress` with a task per phase. Tasks are
+    created lazily so unreached phases don't render empty bars, and a red
+    error-count badge gets appended to the description on per-phase failures.
     """
 
     def __init__(
@@ -886,8 +886,8 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
         """Create or reset the bar for *phase* with the expected ``total``.
 
         Phases with no granular progress (``total`` is ``None`` or ``<= 1``)
-        are pulsed instead of rendered as an instant 0→1 bar; ``end_phase``
-        snaps them to filled on completion.
+        pulse instead of flashing 0→1. ``end_phase`` snaps them to filled on
+        completion.
         """
         bar_total = total if total and total > 1 else None
         if phase in self._tasks:
@@ -905,8 +905,8 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
     def end_phase(self, phase: PhaseT) -> None:
         """Complete *phase*'s bar and stop its spinner.
 
-        For indeterminate phases (``total is None``), freeze the bar by
-        setting ``total = max(completed, 1)``; otherwise fill to ``total``.
+        For indeterminate phases (``total is None``), freeze the bar at
+        ``total = max(completed, 1)``. Otherwise fill to ``total``.
         """
         tid = self._tasks.get(phase)
         if tid is None:
@@ -1025,9 +1025,9 @@ def replay_cmd(
 ) -> None:
     """Replay a JSONL evals dataset through the synthesis pipeline.
 
-    Each line is parsed into an :class:`InputContext`; ``run_query`` is invoked
-    with the same dependency wiring as ``query``; the rendered :class:`Report`
-    for each row goes to stdout. The dataset format itself ships with Task 11.
+    Each line parses into an :class:`InputContext`; ``run_query`` runs with the
+    same dependency wiring as ``query``; the rendered :class:`Report` for each
+    row goes to stdout. Dataset format ships with Task 11.
     """
     anyio.run(_replay, dataset)
 

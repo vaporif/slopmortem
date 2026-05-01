@@ -2,12 +2,12 @@
 
 Defense-in-depth output filter: clickable autolinks (``[txt](url)`` and
 reference-style ``[txt][ref]``) and image markdown (``![alt](url)``) are
-stripped from prose fields so the rendered output cannot embed a one-click
-attacker URL or an exfil pixel. Sources render as plain text; the user must
-copy-paste.
+stripped from prose fields so the rendered output can't embed a one-click
+attacker URL or an exfil pixel. Sources render as plain text; the user has
+to copy-paste.
 
 The synthesize-stage URL allowlist already drops off-allowlist hosts before
-the data reaches here. This module is the second line of defense for
+data reaches here. This module is the second line of defense for
 markdown-rendered prose that didn't pass through that filter (e.g.
 ``where_diverged`` text).
 """
@@ -38,9 +38,9 @@ _IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 def _strip_markdown_links(text: str) -> str:
     """Strip inline links, reference-style links, and image markdown from *text*.
 
-    Replacement order matters: images use ``![alt](url)``, which would also
-    match the inline-link pattern after the leading ``!`` if we ran the
-    inline rule first. Strip images first, then inline links, then ref links.
+    Order matters: images use ``![alt](url)``, which the inline-link pattern
+    would match after the leading ``!`` if it ran first. So: images, then
+    inline links, then ref links.
     """
     text = _IMAGE.sub(r"\1", text)
     text = _INLINE_LINK.sub(r"\1", text)
@@ -110,11 +110,11 @@ def _render_candidate(syn: Synthesis) -> str:
 def _render_top_risks(top_risks: TopRisks, candidates: list[Synthesis]) -> str:
     """Render the consolidated top-risks section as a numbered markdown list.
 
-    Each item is a severity-tagged canonical summary plus an
-    ``Applies because:`` line and a ``Raised by: <names> (k/N)`` line, where
-    ``k`` is ``len(raised_by)`` and ``N`` is the total candidate count.
-    Unknown ids fall back to the raw id string (defensive — the consolidator
-    only sees ids from the same syntheses list).
+    Each item: a severity-tagged canonical summary, an ``Applies because:``
+    line, and a ``Raised by: <names> (k/N)`` line where ``k`` is
+    ``len(raised_by)`` and ``N`` is the total candidate count. Unknown ids
+    fall back to the raw id string — defensive, since the consolidator only
+    sees ids from the same syntheses list.
     """
     id_to_name = {c.candidate_id: c.name for c in candidates}
     total = len(candidates)
@@ -161,16 +161,16 @@ def _render_no_comparables_banner(threshold: float) -> str:
 
 
 def render(report: Report) -> str:
-    """Render *report* as a markdown string. Pure function; no I/O.
+    """Render *report* as a markdown string. Pure function, no I/O.
 
     Args:
         report: The :class:`Report` produced by the pipeline.
 
     Returns:
-        Markdown text suitable for stdout. Inline markdown links,
-        reference-style links, and image markdown are stripped from every
-        prose field. Sources are emitted as plain URLs (one per line) so no
-        clickable autolink reaches a markdown viewer.
+        Markdown text suitable for stdout. Inline links, reference-style
+        links, and image markdown are stripped from every prose field.
+        Sources go out as plain URLs, one per line, so no clickable autolink
+        reaches a markdown viewer.
     """
     sections: list[str] = [
         f"# Premortem report for {report.input.name}",

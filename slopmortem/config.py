@@ -42,10 +42,10 @@ class Config(BaseSettings):
     model_synthesize: str = "anthropic/claude-sonnet-4.6"
     model_consolidate: str = "anthropic/claude-sonnet-4.6"
 
-    # Per-stage output caps. OpenRouter requires holding upfront credit for the
-    # model's max output, so leaving these unset reserves the full 64K Anthropic
-    # ceiling and surfaces as HTTP 402 on low-balance keys. Values are sized to
-    # each stage's actual output shape with slack.
+    # Per-stage output caps. OpenRouter holds upfront credit for the model's
+    # max output, so leaving these unset reserves the full 64K Anthropic
+    # ceiling and surfaces as HTTP 402 on low-balance keys. Values sized to
+    # each stage's actual output shape plus slack.
     max_tokens_facet: int = 2000
     max_tokens_summarize: int = 1500
     max_tokens_rerank: int = 4000
@@ -74,17 +74,17 @@ class Config(BaseSettings):
     tavily_api_key: SecretStr = SecretStr("")
     laminar_api_key: SecretStr = SecretStr("")
 
-    # Infrastructure knobs populated from env (``LMNR_*``, ``QDRANT_*``,
-    # ``POST_MORTEMS_ROOT``, ``MERGE_JOURNAL_PATH``). Declared here so the
-    # CLI can read them off ``Config`` instead of ``os.environ`` and so
-    # ``extra="forbid"`` doesn't reject ``.env`` entries for them.
+    # Infrastructure knobs populated from env (LMNR_*, QDRANT_*,
+    # POST_MORTEMS_ROOT, MERGE_JOURNAL_PATH). Declared here so the CLI can read
+    # them off Config instead of os.environ, and so extra="forbid" doesn't
+    # reject .env entries for them.
     lmnr_project_api_key: SecretStr = SecretStr("")
     lmnr_base_url: str = ""
     lmnr_allow_remote: str = ""
     qdrant_host: str = "localhost"
-    # Non-standard 16333 so the project's docker-compose Qdrant doesn't collide
-    # with a pre-existing 6333 instance on the dev box. The container internally
-    # still serves 6333; only the host-side publish port is bumped.
+    # 16333 (not 6333) so the project's docker-compose Qdrant doesn't collide
+    # with any pre-existing 6333 instance on the dev box. The container still
+    # serves 6333 internally; only the host-side publish port is bumped.
     qdrant_port: int = 16333
     qdrant_collection: str = "slopmortem"
     post_mortems_root: str = "./post_mortems"
