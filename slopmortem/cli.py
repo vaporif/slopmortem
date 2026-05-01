@@ -503,7 +503,8 @@ async def _query(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     _ = out_path.write_text(rendered, encoding="utf-8")
     err_console.print(f"[bold green]Report saved to[/bold green] {out_path}")
-    typer.echo(str(out_path))
+    if not sys.stdout.isatty():
+        typer.echo(str(out_path))
 
 
 _DEBUG_SUMMARY_MAX = 200
