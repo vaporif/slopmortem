@@ -1,6 +1,6 @@
 # slopmortem
 
-[![asciicast](https://asciinema.org/a/NZLAo1QFR1gxq5vB.svg)](https://asciinema.org/a/NZLAo1QFR1gxq5vB?speed=6)
+[![asciicast](https://asciinema.org/a/NZLAo1QFR1gxq5vB.svg)](https://asciinema.org/a/NZLAo1QFR1gxq5vB?speed=5&autoplay=1)
 
 You give it a pitch, it finds dead startups that tried something similar.
 
