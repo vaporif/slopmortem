@@ -335,6 +335,9 @@ class _RecordingQueryProgress:
     def end_phase(self, phase: QueryPhase) -> None:
         self.events.append(("end", phase))
 
+    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
+        self.events.append(("status", phase, status))
+
     def log(self, message: str) -> None:
         self.events.append(("log", message))
 

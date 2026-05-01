@@ -55,6 +55,7 @@ from lmnr import Laminar, observe
 from openai import AsyncOpenAI
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -852,6 +853,7 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
         )
         self._tasks: dict[PhaseT, TaskID] = {}
         self._phase_errors: dict[PhaseT, int] = {}
+        self._phase_status: dict[PhaseT, str] = {}
 
     def __enter__(self) -> Self:
         """Start the live render."""
@@ -874,6 +876,9 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
 
     def _label(self, phase: PhaseT) -> str:
         styled = f"[bold cyan]{self._labels[phase]}[/bold cyan]"
+        status = self._phase_status.get(phase)
+        if status:
+            styled = f"{styled} [dim]({status})[/dim]"
         n = self._phase_errors.get(phase, 0)
         if not n:
             return styled
@@ -922,6 +927,16 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
         self._progress.update(
             tid, completed=task.total or task.completed, description=self._label(phase)
         )
+
+    def set_phase_status(self, phase: PhaseT, status: str | None) -> None:
+        """Set or clear a transient dim suffix on *phase*'s description."""
+        if status:
+            self._phase_status[phase] = status
+        else:
+            self._phase_status.pop(phase, None)
+        tid = self._tasks.get(phase)
+        if tid is not None:
+            self._progress.update(tid, description=self._label(phase))
 
     def log(self, message: str) -> None:
         """Write a one-off neutral status line above the progress display."""
@@ -982,7 +997,7 @@ class RichQueryProgress(_RichPhaseProgress[QueryPhase]):
 
 
 def _render_query_footer(console: Console, report: Report, n_target: int) -> None:
-    """Print a one-line summary footer to *console* after a query run."""
+    """Print a summary panel to *console* after a query run."""
     meta = report.pipeline_meta
     parts = [
         f"cost=${meta.cost_usd_total:.4f}",
@@ -993,7 +1008,15 @@ def _render_query_footer(console: Console, report: Report, n_target: int) -> Non
         parts.append(f"trace={meta.trace_id}")
     if meta.budget_exceeded:
         parts.append("[bold red]budget_exceeded[/bold red]")
-    console.print("[bold cyan]done[/bold cyan] • " + " • ".join(parts))
+    console.print(
+        Panel(
+            " • ".join(parts),
+            title="[bold cyan]done[/bold cyan]",
+            title_align="left",
+            border_style="cyan",
+            expand=False,
+        )
+    )
 
 
 @app.command("replay")
