@@ -18,7 +18,9 @@ flowchart TD
 
     subgraph I["Ingest pipeline"]
         direction TB
-        I1[fetch sources] --> I2["facet + summarize<br/>live fan-out · 1h prompt cache"]
+        I1[fetch sources] --> I_slop[slop classify · Haiku]
+        I_slop -.->|reject| IQ[(quarantine/)]
+        I_slop --> I2["facet + summarize<br/>live fan-out · 1h prompt cache"]
         I2 --> I3[embed]
         I3 --> I4[entity resolution]
         I4 --> I5["merge: journal → md → qdrant"]
@@ -88,10 +90,11 @@ A default 5-comparable query runs around $0.10 and 90–130 seconds; the sample 
 `slopmortem ingest` is the bulk path. Default sources are a curated YAML and HN's Algolia API; the Wayback Machine and a Crunchbase CSV are opt-in adapters. Tavily is an opt-in enricher (synthesis-time or ingest-time), not a source.
 
 1. **Fetch.** Plain HTTP. trafilatura strips nav and cookie banners. A length floor drops the obviously empty pages.
-2. **LLM fan-out.** Two calls per doc, one for facets and one for the rerank summary. All ~1000 run live under `anyio.CapacityLimiter(20)`. No Batches discount here because OpenRouter doesn't proxy that API. The shared system block sets `cache_control={"ttl":"1h"}`, and we fire one sync call right before the fan-out so workers hit a populated cache instead of racing to write it. The first five responses sample `cache_read_tokens / (cache_read + cache_creation)`. If the read ratio is under 80% we know before spending the rest of the budget. The 1-hour TTL recovers most of what Batches would have saved.
-3. **Embed.** Dense and sparse both on the local CPU. fastembed downloads a 550 MB ONNX model on first use and caches it under `~/.cache/fastembed`. CI runs `slopmortem embed-prefetch` once so the first ingest doesn't pay the download tax.
-4. **Entity resolution.** Three tiers. Domain match first, then embedding similarity, then a Haiku tiebreaker for the actually ambiguous pairs. The point of all this is to stop "Crunchbase obituary + founder's farewell blog post" from showing up as two separate dead startups.
-5. **Merge.** Journal flips the row to `pending`, markdown lands via `os.replace`, Qdrant gets upserted, then the journal flips to `complete`. If something dies in the middle (Ctrl-C, OOM, bad network, whatever), `slopmortem ingest --reconcile` walks the three stores and patches whatever drifted.
+2. **Slop classify.** Haiku scores each fetched body; anything above `slop_threshold` lands in `quarantine/` with no journal row and no embedding. `slopmortem ingest --reclassify` is the only way back.
+3. **LLM fan-out.** Two calls per doc, one for facets and one for the rerank summary. All ~1000 run live under `anyio.CapacityLimiter(20)`. No Batches discount here because OpenRouter doesn't proxy that API. The shared system block sets `cache_control={"ttl":"1h"}`, and we fire one sync call right before the fan-out so workers hit a populated cache instead of racing to write it. The first five responses sample `cache_read_tokens / (cache_read + cache_creation)`. If the read ratio is under 80% we know before spending the rest of the budget. The 1-hour TTL recovers most of what Batches would have saved.
+4. **Embed.** Dense and sparse both on the local CPU. fastembed downloads a 550 MB ONNX model on first use and caches it under `~/.cache/fastembed`. CI runs `slopmortem embed-prefetch` once so the first ingest doesn't pay the download tax.
+5. **Entity resolution.** Three tiers. Domain match first, then embedding similarity, then a Haiku tiebreaker for the actually ambiguous pairs. The point of all this is to stop "Crunchbase obituary + founder's farewell blog post" from showing up as two separate dead startups.
+6. **Merge.** Journal flips the row to `pending`, markdown lands via `os.replace`, Qdrant gets upserted, then the journal flips to `complete`. If something dies in the middle (Ctrl-C, OOM, bad network, whatever), `slopmortem ingest --reconcile` walks the three stores and patches whatever drifted.
 
 The initial 500-URL seed costs about $7.50. The cap is $15 because retries happen, the no-Batches path has less cushion, and I wanted slack. Steady-state on the HN feed is roughly $0.10/week, small enough that I stopped tracking it.
 
