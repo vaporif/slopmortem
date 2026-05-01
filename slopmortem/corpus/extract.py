@@ -1,15 +1,15 @@
 """HTML sanitize and extract pipeline for raw source documents.
 
-Pipeline (spec line 244): sanitize HTML → trafilatura → readability fallback
-→ length floor (<500 chars ⇒ empty). The sanitizer runs BEFORE trafilatura.
-Otherwise trafilatura treats HTML comments, JSON-LD, hidden nodes, and
-attribute text as visible — an indirect-injection surface.
+Pipeline: sanitize HTML → trafilatura → readability fallback → length floor
+(<500 chars ⇒ empty). The sanitizer runs BEFORE trafilatura. Otherwise
+trafilatura treats HTML comments, JSON-LD, hidden nodes, and attribute text
+as visible — an indirect-injection surface.
 
 The stripped surfaces are pinned by the hostile-fixture test in
-``tests/sources/test_extract_visible_text_only.py`` and must match spec line
-244: comments, ``<script>`` / ``<style>`` / ``<noscript>``, JSON-LD scripts,
-``display:none`` / ``visibility:hidden`` / ``hidden`` nodes, and
-``aria-label`` / ``alt`` / ``title`` attributes.
+``tests/sources/test_extract_visible_text_only.py``: comments, ``<script>``
+/ ``<style>`` / ``<noscript>``, JSON-LD scripts, ``display:none`` /
+``visibility:hidden`` / ``hidden`` nodes, and ``aria-label`` / ``alt`` /
+``title`` attributes.
 """
 
 from __future__ import annotations

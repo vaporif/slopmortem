@@ -1,8 +1,8 @@
 """Re-score quarantined docs; declassify survivors out of the quarantine tree.
 
-Spec ref: Quarantine and reclassify line 252. ``slopmortem ingest --reclassify``
-re-runs the classifier when the threshold or model changes; declassified docs
-flow back toward entity resolution on the next normal ``ingest`` run.
+``slopmortem ingest --reclassify`` re-runs the classifier when the threshold
+or model changes; declassified docs flow back toward entity resolution on the
+next normal ``ingest`` run.
 
 The quarantine row primary key is ``(content_sha256, source, source_id)``
 (see :mod:`slopmortem.corpus.merge` schema). Quarantine markdown lives at

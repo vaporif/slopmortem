@@ -1,6 +1,6 @@
 """``slopmortem ingest --reconcile`` walks Qdrant, disk, and journal.
 
-Six drift classes (spec line 604):
+Six drift classes:
 
 (a) ``canonical/<text_id>.md`` exists, no Qdrant chunks → re-embed and upsert.
 (b) Qdrant point with ``merge_state=pending`` → redo merge.
@@ -137,7 +137,6 @@ async def _scan_canonical_tree(
         canonical_id = fm.get("canonical_id")
         if not isinstance(canonical_id, str):
             continue
-        # (a) canonical on disk, no qdrant chunks.
         if not await corpus.has_chunks(canonical_id):
             rows.append(
                 ReconcileRow(
@@ -149,7 +148,6 @@ async def _scan_canonical_tree(
                     detail="canonical on disk has no qdrant chunks",
                 )
             )
-        # (c) combined_hash mismatch with journal content_hash.
         combined_hash = fm.get("combined_hash")
         journal_rows = journal_by_canonical.get(canonical_id, [])
         if combined_hash and journal_rows:
@@ -312,8 +310,6 @@ async def reconcile(
     all_rows = await journal.fetch_all()
     by_canonical: dict[str, list[dict[str, object]]] = {}
     for r in all_rows:
-        # r is dict[str, Any] from sqlite; coerce to dict[str, object] for
-        # downstream scanners that only call .get() on it.
         coerced: dict[str, object] = dict(r)
         canonical_id = str(coerced["canonical_id"])
         by_canonical.setdefault(canonical_id, []).append(coerced)
@@ -359,7 +355,6 @@ async def _apply_repairs(
             case "c" | "d":
                 applied.append("needs_remerge")
             case "f":
-                # Strip stale chunks for the prior canonical_id (best-effort).
                 if delete_fn is not None and row.canonical_id is not None:
                     with contextlib.suppress(Exception):
                         await delete_fn(row.canonical_id)

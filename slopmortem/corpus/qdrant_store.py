@@ -114,7 +114,7 @@ class QdrantCorpus:
         self._rrf_k = rrf_k
         self._fetch_aliases = fetch_aliases
 
-    async def query(  # noqa: PLR0913 — Protocol method signature is the public contract; orchestration density mirrors spec lines 605-689
+    async def query(  # noqa: PLR0913 — Protocol method signature is the public contract
         self,
         *,
         dense: list[float],
@@ -126,11 +126,10 @@ class QdrantCorpus:
     ) -> list[Candidate]:
         """Hybrid retrieve top-K candidates with FormulaQuery facet boost.
 
-        Spec lines 605-689: inner :class:`Prefetch` with dense+sparse RRF
-        fusion, outer :class:`FormulaQuery` adding a per-facet boost
-        (skipping ``"other"``) on top of ``$score``, and a recency
-        :class:`Filter` with three branches (or one under
-        ``--strict-deaths``).
+        Inner :class:`Prefetch` with dense+sparse RRF fusion, outer
+        :class:`FormulaQuery` adding a per-facet boost (skipping ``"other"``)
+        on top of ``$score``, and a recency :class:`Filter` with three branches
+        (or one under ``--strict-deaths``).
 
         Over-fetches chunks at ``k_retrieve * 4`` so the in-Python collapse
         to parents has room. After collapse,
@@ -183,8 +182,7 @@ class QdrantCorpus:
 
         # Build the facet-boost FilterCondition. Skip "other" deliberately.
         # Free-form fields (sub_sector, product_type, ...) and year integers
-        # stay out of the soft-boost set. The closed taxonomy fields are the
-        # contract surface (spec line 605-648).
+        # stay out of the soft-boost set. Only closed taxonomy fields participate.
         boost_must: list[Any] = []  # pyright: ignore[reportExplicitAny]
         for fname in ("sector", "business_model", "customer_type", "geography", "monetization"):
             val = getattr(facets, fname)
@@ -352,10 +350,9 @@ def canonical_path_for(post_mortems_root: Path, canonical_id: str) -> Path:
 def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any:  # pyright: ignore[reportExplicitAny]
     """Compose the three-branch recency :class:`Filter` (single-branch in strict mode).
 
-    Branches A/B/C (spec lines 661-689) use derived
-    ``failure_date_unknown`` / ``founding_date_unknown`` boolean payloads
-    instead of ``IsNullCondition`` (qdrant#5148, documented slow under
-    indexed payloads).
+    Branches A/B/C use derived ``failure_date_unknown`` /
+    ``founding_date_unknown`` boolean payloads instead of ``IsNullCondition``
+    (qdrant#5148, documented slow under indexed payloads).
     """
     if cutoff_iso is None:
         return None

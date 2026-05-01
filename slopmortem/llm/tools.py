@@ -94,8 +94,8 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
 
     tools = [get_post_mortem, search_corpus]
     if config.enable_tavily_synthesis:
-        # Each synthesize() call gets its own quota (spec line 1005:
-        # <=2 Tavily calls per synthesis), shared across both tools.
+        # Each synthesize() call gets its own quota (default ≤2 Tavily calls
+        # per synthesis), shared across both tools.
         used = 0
         cap = config.tavily_calls_per_synthesis
 

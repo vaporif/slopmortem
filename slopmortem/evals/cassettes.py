@@ -285,7 +285,7 @@ def _read_json_object(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         msg = f"cassette {path} top-level must be an object"
         raise CassetteFormatError(msg)
-    # JSON object keys are always strings by spec. Cast keeps the static type honest.
+    # JSON object keys are always strings. Cast keeps the static type honest.
     return cast("dict[str, object]", raw)
 
 

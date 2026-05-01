@@ -1,9 +1,9 @@
-"""Source and Enricher Protocols, verbatim from spec lines 354-356.
+"""Source and Enricher Protocols.
 
 * ``Source`` is a primary producer: ``fetch()`` -> ``AsyncIterable[RawEntry]``.
 * ``Enricher`` is a secondary that fills fields on an existing ``RawEntry``.
 
-These are interface declarations consumed by concrete adapters (``curated.py``,
+Interface declarations consumed by concrete adapters (``curated.py``,
 ``hn_algolia.py``, ``crunchbase_csv.py``, ``wayback.py``). Tests exercise the
 adapters directly; the Protocols themselves carry no behavior.
 """

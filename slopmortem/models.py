@@ -343,7 +343,7 @@ class AliasEdge(BaseModel):
 
 
 class PendingReviewRow(BaseModel):
-    """A row in the entity-resolution ``pending_review`` queue (spec line 264)."""
+    """A row in the entity-resolution ``pending_review`` queue."""
 
     pair_key: str
     similarity_score: float | None
@@ -353,7 +353,7 @@ class PendingReviewRow(BaseModel):
 
 
 class ReclassifyReport(BaseModel):
-    """Result of a ``slopmortem ingest --reclassify`` pass (spec line 252)."""
+    """Result of a ``slopmortem ingest --reclassify`` pass."""
 
     total: int
     declassified: int

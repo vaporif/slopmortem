@@ -5,7 +5,7 @@ side-effecting capability is injected (LLM client, embedding client, Corpus,
 Budget, optional progress callback). The CLI in ``slopmortem.cli`` builds those
 deps and calls ``run_query``.
 
-Failure model (spec §770-775):
+Failure model:
 - A :class:`BudgetExceededError` from any stage truncates the run. Whatever
   Synthesis values had accumulated up to that point come back in the final
   :class:`Report` with ``budget_exceeded=True``.

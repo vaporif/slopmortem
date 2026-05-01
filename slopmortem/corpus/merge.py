@@ -5,7 +5,7 @@ Async surface routes every sqlite call through
 :func:`anyio.to_thread.run_sync`. One short-lived connection per call, no
 pool. Every connection uses WAL and ``busy_timeout=5000``.
 
-Terminal-state writers (atomicity contract, spec line 538):
+Terminal-state writers (atomicity contract):
 
 - :meth:`MergeJournal.upsert_pending`
 - :meth:`MergeJournal.upsert_resolver_flipped`
@@ -146,7 +146,7 @@ class MergeJournal:
     ) -> None:
         """Write the alias_blocked journal row and alias graph edge atomically.
 
-        Both inserts run inside one ``BEGIN; ... COMMIT;`` (spec line 538).
+        Both inserts run inside one ``BEGIN; ... COMMIT;``.
         """
         await to_thread.run_sync(
             self._upsert_alias_blocked_sync,
@@ -427,10 +427,10 @@ class MergeJournal:
             )
 
     async def list_pending_review(self) -> list[PendingReviewRow]:
-        """Read all rows from the ``pending_review`` table (spec line 264).
+        """Read all rows from the ``pending_review`` table.
 
-        Returns rows in INSERT order (no explicit ``ORDER BY``); ``--list-review``
-        is exploratory and the caller can sort if it cares about ordering.
+        Returns rows in INSERT order (no explicit ``ORDER BY``). ``--list-review``
+        is exploratory; callers can sort if they care.
         """
         return await to_thread.run_sync(self._list_pending_review_sync)
 

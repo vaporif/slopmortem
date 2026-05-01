@@ -34,8 +34,9 @@ async def setup_ephemeral_qdrant(
     """Spin a uniquely-named collection, populate from JSONL, drop on exit.
 
     Collection name embeds ``pid + uuid4`` so a leak from ``kill -9`` is
-    identifiable and droppable manually. No startup sweep — see spec Risk 4
-    for why a prefix-wide sweep is unsafe under pytest-xdist.
+    identifiable and droppable manually. No startup sweep — a prefix-wide
+    sweep is unsafe under pytest-xdist (a sibling worker's still-active
+    collection would get dropped).
 
     Args:
         fixture_path: JSONL file produced by

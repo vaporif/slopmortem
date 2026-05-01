@@ -1,7 +1,7 @@
 """Wayback enricher. Recovers content for curated rows whose live URL is dead.
 
-Spec line 359, narrow v1 role: take a ``RawEntry`` whose ``raw_html`` is
-empty, hit the Wayback availability API
+Narrow v1 role: take a ``RawEntry`` whose ``raw_html`` is empty, hit the
+Wayback availability API
 (``https://archive.org/wayback/available?url=<url>``), and if there's a
 snapshot, fetch it and stash the response in ``raw_html`` + ``markdown_text``.
 No-op when ``raw_html`` is already populated.

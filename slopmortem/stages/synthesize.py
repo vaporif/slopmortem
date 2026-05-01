@@ -58,7 +58,7 @@ def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, A
 
 # Fixed host allowlist applied on top of per-candidate payload.sources hosts.
 # web.archive.org is intentionally NOT here — Wayback proxies arbitrary URLs
-# and bypasses host-level allowlist semantics. See spec §995-1006.
+# and would bypass host-level allowlist semantics.
 _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 
 # Literal contract from synthesize.j2: the LLM must put this exact string in

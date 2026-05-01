@@ -48,8 +48,8 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
 
     Args:
         description: User's pitch text. Both dense and sparse query inputs
-            come from this verbatim. No HyDE expansion (spec line 213; rerank
-            slack absorbs the modality gap).
+            come from this verbatim. No HyDE expansion — rerank slack absorbs
+            the modality gap.
         facets: Soft-boost facets from the facet-extract stage. ``"other"``
             values are skipped inside :meth:`Corpus.query`.
         corpus: Read-side :class:`Corpus` impl. Production is

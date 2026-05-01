@@ -1,8 +1,8 @@
 """HN Algolia source. Chronological obituary coverage via the Algolia REST API.
 
 Endpoint pinned to ``/api/v1/search_by_date`` (chronological, newest-first),
-not ``/search`` (relevance-ranked). Spec line 242. Relevance ranking would
-re-surface the same long-tail popular threads on every ingest.
+not ``/search`` (relevance-ranked). Relevance ranking would re-surface the
+same long-tail popular threads on every ingest.
 
 Query params:
 * ``tags=story``

@@ -1,10 +1,10 @@
 # pyright: reportAny=false
 """Ingest orchestration: sources -> enrichers -> slop -> facets -> summarize -> chunks -> qdrant.
 
-Pipeline (spec lines 478-606):
+Pipeline:
 
 1. Per source, iterate ``Source.fetch()`` async. Per-source failures log and
-   the run continues (spec line 606).
+   the run continues.
 2. Per entry, apply enrichers in declared order. trafilatura sanitizes and
    extracts the canonical body when HTML is present; entries below the length
    floor get dropped.
@@ -24,11 +24,11 @@ Pipeline (spec lines 478-606):
    sections for this canonical_id, atomic canonical write, chunk + embed,
    delete + re-upsert all chunk points, ``mark_complete`` with skip_key LAST.
 
-Idempotency: skip_key is the spec-line-579 tuple ``(content_hash,
-facet_prompt_hash, summarize_prompt_hash, haiku_model_id, embed_model_id,
-chunk_strategy_version, taxonomy_version, reliability_rank_version)``. A later
-ingest with a journal row already at ``complete`` and a matching skip_key
-short-circuits with no LLM, embed, or qdrant work. ``--force`` bypasses it.
+Idempotency: skip_key is ``(content_hash, facet_prompt_hash,
+summarize_prompt_hash, haiku_model_id, embed_model_id, chunk_strategy_version,
+taxonomy_version, reliability_rank_version)``. A later ingest with a journal
+row already at ``complete`` and a matching skip_key short-circuits with no
+LLM, embed, or qdrant work. ``--force`` bypasses it.
 
 Concurrency contract: every LLM and embedding call routes through the same
 :class:`~slopmortem.budget.Budget` (reserve before, settle after) and the
@@ -84,7 +84,7 @@ type SparseEncoder = Callable[[str], dict[int, float]]
 
 logger = logging.getLogger(__name__)
 
-# Spec line 205: read-ratio threshold over the first N fan-out responses.
+# Read-ratio threshold over the first N fan-out responses.
 _CACHE_READ_RATIO_THRESHOLD: Final[float] = 0.80
 _CACHE_READ_RATIO_PROBE_N: Final[int] = 5
 
@@ -340,7 +340,7 @@ def _reliability_for(source: str) -> int:
     return _RELIABILITY_RANK.get(source, 9)
 
 
-def _skip_key(  # noqa: PLR0913 - the spec-defined tuple is wide
+def _skip_key(  # noqa: PLR0913 - the contract tuple is wide
     *,
     content_hash: str,
     facet_sha: str,
@@ -462,7 +462,7 @@ async def _gather_entries(
                 bar.advance_phase(IngestPhase.GATHER)
                 if limit is not None and len(out) >= limit:
                     break
-        except Exception as exc:  # noqa: BLE001 - spec line 606: never abort the run.
+        except Exception as exc:  # noqa: BLE001 - never abort the run on a per-source failure.
             logger.warning(
                 "ingest: source %r failed: %s",
                 type(src).__name__,
@@ -840,7 +840,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
 
     Args:
         sources: :class:`Source` adapters to fetch from. Per-source failures
-            log and the run continues (spec line 606).
+            log and the run continues.
         enrichers: Optional pre-classifier enrichers (e.g. wayback fallback).
         journal: SQLite merge journal — pending/complete writers and quarantine.
         corpus: :class:`Corpus` write surface. Production is :class:`QdrantCorpus`.
@@ -1058,7 +1058,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
                 span_events=result.span_events,
                 sparse_encoder=sparse_encoder,
             )
-        except Exception as exc:  # noqa: BLE001 - spec line 606: run continues.
+        except Exception as exc:  # noqa: BLE001 - per-entry isolation; run continues.
             logger.warning(
                 "ingest: write phase failed for %s:%s: %s",
                 entry.source,
