@@ -319,6 +319,7 @@ class IngestResult:
     processed: int = 0
     quarantined: int = 0
     skipped: int = 0
+    skipped_empty: int = 0
     errors: int = 0
     source_failures: int = 0
     would_process: int = 0  # populated when dry_run=True
@@ -681,7 +682,9 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     """Write raw + canonical + chunks for one resolved entry.
 
     Returns:
-        Either ``"processed"`` or ``"skipped"``.
+        One of ``"processed"``, ``"skipped"``, or ``"skipped_empty"``.
+        ``"skipped_empty"`` means chunking yielded zero chunks, so
+        ``mark_complete`` was deliberately skipped to avoid silent corpus drift.
     """
     name = entry.source_id  # ingest's name extraction is best-effort in v1
     sector = fan.facets.sector
@@ -780,7 +783,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         name=name,
         provenance=entry.source,
     )
-    _ = await _embed_and_upsert(
+    chunks_written = await _embed_and_upsert(
         canonical_id=canonical_id,
         body=merged,
         payload=payload,
@@ -789,6 +792,19 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         embed_model_id=config.embed_model_id,
         sparse_encoder=sparse_encoder,
     )
+    if chunks_written == 0:
+        # Don't mark_complete: a "complete" journal row with no Qdrant points
+        # is silent corpus drift. Reconcile drift class (a) catches this
+        # retroactively; surface it now so the operator sees it.
+        Laminar.event(
+            name=SpanEvent.INGEST_ENTRY_EMPTY_CHUNKS.value,
+            attributes={"canonical_id": canonical_id},
+        )
+        logger.warning(
+            "ingest skipped mark_complete: zero chunks for canonical_id=%s",
+            canonical_id,
+        )
+        return "skipped_empty"
 
     # mark_complete must run LAST: skip_key being set is the only signal a
     # later ingest uses to short-circuit this entry.
@@ -1088,6 +1104,8 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             result.processed += 1
         elif outcome == "skipped":
             result.skipped += 1
+        elif outcome == "skipped_empty":
+            result.skipped_empty += 1
         progress.advance_phase(IngestPhase.WRITE)
     progress.end_phase(IngestPhase.WRITE)
 

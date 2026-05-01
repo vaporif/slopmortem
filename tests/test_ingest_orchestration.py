@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from conftest import llm_canned_key
+from slopmortem import ingest as ingest_module
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.corpus.merge import MergeJournal
@@ -28,6 +29,8 @@ from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    from slopmortem.corpus.chunk import Chunk
 
 _HAIKU = "anthropic/claude-haiku-4.5"
 _ENTRY_BODY = "Acme was a startup that sold widgets and ran out of money in 2021. " * 30
@@ -461,3 +464,45 @@ async def test_ingest_payload_sources_empty_when_url_missing(tmp_path, cfg):
     payload = corpus.points[0].payload
     assert payload["sources"] == []
     assert payload["provenance_id"] == "curated:Celsius Network"
+
+
+async def test_ingest_zero_chunks_skips_mark_complete(tmp_path, cfg, monkeypatch):
+    # When chunking yields zero chunks, mark_complete must NOT run: a "complete"
+    # journal row with no Qdrant points is silent corpus drift.
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+    sources = [_ListSource(entries=[_entry()])]
+
+    # Force the chunker to return [] without altering tokenizer behavior; the
+    # production guard is what's under test here.
+    def _no_chunks(_text: str, *, parent_canonical_id: str) -> list[Chunk]:
+        del parent_canonical_id
+        return []
+
+    monkeypatch.setattr(ingest_module, "chunk_markdown", _no_chunks)
+
+    result = await ingest(
+        sources=sources,
+        enrichers=[],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+
+    assert result.processed == 0
+    assert result.skipped_empty == 1
+    assert corpus.points == []
+    rows = await journal.fetch_all()
+    assert rows, "expected a pending journal row to exist"
+    assert all(r["merge_state"] != "complete" for r in rows)

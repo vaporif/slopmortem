@@ -517,7 +517,7 @@ async def test_pipeline_logs_drops_at_info(caplog, ...):
 
 **Steps:**
 
-- [ ] **Step 1: Capture chunk count and guard.**
+- [x] **Step 1: Capture chunk count and guard.**
 
 At `slopmortem/ingest.py:783-791` (inside `_process_entry`), replace:
 
@@ -565,7 +565,7 @@ Notes:
 - `Laminar` is already imported at `ingest.py:52` and used elsewhere in the file (e.g. `ingest.py:878-879`). There is **no** `_emit_event` helper in ingest.py — use `Laminar.event(name=..., attributes=...)` directly. (Confirm the `attributes` kwarg name matches existing call sites when editing.)
 - `logger` is already in scope at `ingest.py:85`.
 
-- [ ] **Step 2: Add a counter to `IngestResult` and route the new outcome.**
+- [x] **Step 2: Add a counter to `IngestResult` and route the new outcome.**
 
 `IngestResult` is the dataclass aggregator for `ingest()`'s outcomes (defined around `ingest.py:315`). Add a field:
 
@@ -582,7 +582,7 @@ elif outcome == "skipped_empty":
 
 (Reusing the existing `"skipped"` return is **not** safe — `"skipped"` today means "alias_blocked / resolver_flipped / idempotent skip-key match", which are entirely different journal states; mixing zero-chunk drift into that bucket would hide it from CLI output.)
 
-- [ ] **Step 3: Add the span event.**
+- [x] **Step 3: Add the span event.**
 
 In `slopmortem/tracing/events.py`, add to the `SpanEvent` enum (existing members live around lines 8-25):
 
@@ -592,7 +592,7 @@ INGEST_ENTRY_EMPTY_CHUNKS = "ingest_entry_empty_chunks"
 
 Match the existing snake_case convention (`INGEST_ENTRY_FAILED = "ingest_entry_failed"`), not dotted notation.
 
-- [ ] **Step 4: Test.**
+- [x] **Step 4: Test.**
 
 ```python
 async def test_zero_chunk_body_skips_mark_complete(tmp_path, ...):
@@ -617,7 +617,7 @@ async def test_zero_chunk_body_skips_mark_complete(tmp_path, ...):
 
 (`MergeJournal.fetch_by_key(canonical_id, source, source_id) -> list[dict]` at `slopmortem/corpus/merge.py:287` returns at most one row; rows carry a `merge_state` field whose `"complete"` value is the terminal state — see `merge.py:269`. There is no `is_complete` accessor.)
 
-- [ ] **Step 5: Verify.** `just test -k ingest && just typecheck && just lint`.
+- [x] **Step 5: Verify.** `just test -k ingest && just typecheck && just lint`.
 
 ---
 
