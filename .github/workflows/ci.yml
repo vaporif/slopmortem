@@ -38,6 +38,19 @@ jobs:
       - uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - uses: extractions/setup-just@v3
+      - name: Wait for Qdrant readiness
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:6333/readyz > /dev/null; then
+              echo "Qdrant ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Qdrant did not become ready in 30s"
+          curl -v http://localhost:6333/readyz || true
+          exit 1
       - run: uv sync
       - run: uv run pytest -n auto
 
