@@ -506,3 +506,80 @@ async def test_ingest_zero_chunks_skips_mark_complete(tmp_path, cfg, monkeypatch
     rows = await journal.fetch_all()
     assert rows, "expected a pending journal row to exist"
     assert all(r["merge_state"] != "complete" for r in rows)
+
+
+class _FailingDeleteCorpus(InMemoryCorpus):
+    """Re-merge variant whose ``delete_chunks_for_canonical`` always raises.
+
+    Other corpus methods stay inherited so the first ingest pass (which never
+    deletes) succeeds normally and seeds the journal for the second pass.
+    """
+
+    delete_calls: int = 0
+
+    async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
+        type(self).delete_calls += 1
+        msg = f"simulated qdrant transport error deleting {canonical_id}"
+        raise RuntimeError(msg)
+
+
+async def test_delete_failure_aborts_entry_marked_failed(tmp_path, cfg):
+    # Re-merge path: ingest pass 1 lands a complete row for the entry; pass 2
+    # forces re-processing; delete_chunks raises. Contract: the entry is
+    # tallied under ``result.failed`` and no new upsert lands (no orphan
+    # shadowing). The pre-existing complete row from pass 1 is unchanged.
+    entry = _entry()
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+
+    # Pass 1: normal ingest, populates the journal as ``complete``.
+    await ingest(
+        sources=[_ListSource(entries=[entry])],
+        enrichers=[],
+        journal=journal,
+        corpus=InMemoryCorpus(),
+        llm=FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU),
+        embed_client=FakeEmbeddingClient(model=cfg.embed_model_id),
+        budget=Budget(cap_usd=cfg.max_cost_usd_per_ingest),
+        slop_classifier=FakeSlopClassifier(default_score=0.0),
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+    seeded = await journal.fetch_all()
+    assert seeded, "pass 1 should have seeded the journal"
+    canonical_id = seeded[0]["canonical_id"]
+
+    # Pass 2: force re-processing into the failing corpus. _FailingDeleteCorpus
+    # has zero stored points, so even after the delete blows up there are no
+    # orphans to inspect — the assertion is that the entry never reaches
+    # upsert (corpus.points stays empty) and the run reports failed=1.
+    failing = _FailingDeleteCorpus()
+    _FailingDeleteCorpus.delete_calls = 0
+    result = await ingest(
+        sources=[_ListSource(entries=[entry])],
+        enrichers=[],
+        journal=journal,
+        corpus=failing,
+        llm=FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU),
+        embed_client=FakeEmbeddingClient(model=cfg.embed_model_id),
+        budget=Budget(cap_usd=cfg.max_cost_usd_per_ingest),
+        slop_classifier=FakeSlopClassifier(default_score=0.0),
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+        force=True,
+    )
+
+    assert _FailingDeleteCorpus.delete_calls == 1
+    assert result.failed == 1
+    assert result.processed == 0
+    assert failing.points == []  # never reached the upsert layer
+
+    # ``upsert_pending`` demotes the row to ``pending`` before the delete
+    # attempt; the failing delete then aborts before ``mark_complete``. Net
+    # result: the row exists but is not in ``complete`` state — exactly the
+    # signal reconcile uses to retry on a later pass.
+    rows = await journal.fetch_by_key(canonical_id, entry.source, entry.source_id)
+    assert rows, "the journal row must still exist"
+    assert all(r["merge_state"] != "complete" for r in rows)
