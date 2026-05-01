@@ -115,7 +115,7 @@ class QdrantCorpus:
         self._rrf_k = rrf_k
         self._fetch_aliases = fetch_aliases
 
-    async def query(  # noqa: PLR0913, C901 — Protocol method signature is the public contract; orchestration density mirrors spec lines 605-689
+    async def query(  # noqa: PLR0913 — Protocol method signature is the public contract; orchestration density mirrors spec lines 605-689
         self,
         *,
         dense: list[float],
@@ -208,6 +208,11 @@ class QdrantCorpus:
             strict_deaths=strict_deaths,
         )
 
+        # TODO(prod): the ``k_retrieve * 4`` chunk over-fetch assumes ~4 chunks
+        # per parent on average; long post-mortems can chunk into many more,
+        # silently under-filling the parent set after collapse. Measure
+        # ``len(best)`` vs ``k_retrieve`` against a real corpus and bump the
+        # multiplier (or switch to a parent-aware fetcher) before going live.
         resp = await self._client.query_points(
             collection_name=self._collection,
             prefetch=inner,
@@ -234,6 +239,9 @@ class QdrantCorpus:
         # Build Candidates in descending score order. Bad payloads are
         # per-doc isolated (logged and dropped) so one malformed point can't
         # fail the whole query.
+        # TODO(perf): if profiling shows pydantic validation here is hot,
+        # cache validated payloads keyed on (canonical_id, chunk_idx) — they
+        # are immutable post-ingest. Skip until measurements justify it.
         ordered = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)
         candidates: list[Candidate] = []
         for cid, (score, payload) in ordered:
@@ -246,10 +254,17 @@ class QdrantCorpus:
 
         # Alias-graph dedup. The fetcher is per-canonical_id; gather every
         # edge referencing any retrieved canonical.
+        # Known limitation: only fetches edges for canonicals in the top-K.
+        # Alias chains longer than 1 hop where a mid-chain node was pruned
+        # upstream stay un-collapsed. See README "Known Limitations". Might
+        # revisit with a transitive-closure pass if it shows up in practice.
         if self._fetch_aliases is not None and candidates:
-            edges: list[AliasEdge] = []
-            for c in candidates:
-                edges.extend(await self._fetch_aliases(c.canonical_id))
+            import asyncio  # noqa: PLC0415 — local to keep top-level imports lean
+
+            edge_lists = await asyncio.gather(
+                *(self._fetch_aliases(c.canonical_id) for c in candidates)
+            )
+            edges: list[AliasEdge] = [e for sub in edge_lists for e in sub]
             candidates = collapse_alias_components(candidates, edges)
 
         return candidates[:k_retrieve]
