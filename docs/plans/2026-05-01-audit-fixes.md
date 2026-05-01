@@ -202,31 +202,31 @@ The intended (and implemented) precedence is **env > `slopmortem.local.toml` > `
 
 **Steps:**
 
-- [ ] **Step 1: Fix `Config` class docstring at `config.py:18`.**
+- [x] **Step 1: Fix `Config` class docstring at `config.py:18`.**
 
 Currently: `"""All knobs slopmortem reads at startup. TOML overrides env, env overrides defaults."""`
 
 Change to: `"""All knobs slopmortem reads at startup. Env overrides TOML; within TOML, local.toml overrides slopmortem.toml; built-in defaults are lowest."""`
 
-- [ ] **Step 2: Fix `settings_customise_sources` docstring at `config.py:110`.**
+- [x] **Step 2: Fix `settings_customise_sources` docstring at `config.py:110`.**
 
 Currently: `"""Wire TOML sources after env and before secrets so TOML wins over env at runtime."""`
 
 Change to: `"""Wire TOML below env+dotenv so env wins (12-factor). Within toml_file=("slopmortem.toml", "slopmortem.local.toml"), pydantic-settings applies the second file last, so local.toml wins over the tracked defaults."""`
 
-- [ ] **Step 3: Fix `CLAUDE.md` line 32.**
+- [x] **Step 3: Fix `CLAUDE.md` line 32.**
 
 Currently: `Precedence (highest wins): slopmortem.local.toml → env vars → .env → slopmortem.toml (tracked defaults).`
 
 Change to: `Precedence (highest wins): env vars → .env → slopmortem.local.toml → slopmortem.toml (tracked defaults).` Add a clarifying sentence: "Env always wins. Personal overrides go in `slopmortem.local.toml`; if you also set the same key in env, env beats it."
 
-- [ ] **Step 4: Fix `README.md` line 62.**
+- [x] **Step 4: Fix `README.md` line 62.**
 
 Currently: `... the loader reads both from the current working directory and .local.toml wins. .local.toml is gitignored. Env vars (and .env) also override the tracked defaults, but .local.toml wins over env too, so it's the one knob to reach for.`
 
 The "but `.local.toml` wins over env too" half is wrong. Change to reflect the actual behavior: `slopmortem.local.toml` overrides `slopmortem.toml` (tracked defaults), and env vars (and `.env`) override both. Use `.local.toml` for personal config; export an env var when you want a one-off override on top.
 
-- [ ] **Step 5: Lock precedence with tests.**
+- [x] **Step 5: Lock precedence with tests.**
 
 Add to `tests/test_config.py` (verify the file exists; create if not):
 
@@ -261,7 +261,7 @@ def test_dotenv_overrides_local_toml(monkeypatch, tmp_path):
 
 Use `max_cost_usd_per_query` (real field at `config.py:35`); `cap_usd` does not exist on `Config`.
 
-- [ ] **Step 6: Verify.** `just test -k config && just typecheck && just lint`.
+- [x] **Step 6: Verify.** `just test -k config && just typecheck && just lint`.
 
 ---
 
