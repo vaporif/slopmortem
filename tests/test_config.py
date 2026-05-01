@@ -50,3 +50,33 @@ def test_k_retrieve_must_gte_n_synthesize(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "x")
     with pytest.raises(ValidationError, match="K_retrieve"):
         load_config()
+
+
+def test_env_overrides_local_toml(tmp_path, monkeypatch):
+    """Env vars beat slopmortem.local.toml -- standard 12-factor."""
+    (tmp_path / "slopmortem.toml").write_text("max_cost_usd_per_query = 1.0\n")
+    (tmp_path / "slopmortem.local.toml").write_text("max_cost_usd_per_query = 2.0\n")
+    monkeypatch.setenv("MAX_COST_USD_PER_QUERY", "5.0")
+    monkeypatch.chdir(tmp_path)
+    cfg = load_config()
+    assert cfg.max_cost_usd_per_query == 5.0
+
+
+def test_local_toml_overrides_main_toml(tmp_path, monkeypatch):
+    """slopmortem.local.toml beats slopmortem.toml when env is unset."""
+    (tmp_path / "slopmortem.toml").write_text("max_cost_usd_per_query = 1.0\n")
+    (tmp_path / "slopmortem.local.toml").write_text("max_cost_usd_per_query = 2.0\n")
+    monkeypatch.delenv("MAX_COST_USD_PER_QUERY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    cfg = load_config()
+    assert cfg.max_cost_usd_per_query == 2.0
+
+
+def test_dotenv_overrides_local_toml(tmp_path, monkeypatch):
+    """`.env` beats slopmortem.local.toml (env tier > toml tier)."""
+    (tmp_path / "slopmortem.local.toml").write_text("max_cost_usd_per_query = 2.0\n")
+    (tmp_path / ".env").write_text("MAX_COST_USD_PER_QUERY=7.0\n")
+    monkeypatch.delenv("MAX_COST_USD_PER_QUERY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    cfg = load_config()
+    assert cfg.max_cost_usd_per_query == 7.0

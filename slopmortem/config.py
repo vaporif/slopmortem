@@ -15,7 +15,11 @@ from pydantic_settings import (
 
 
 class Config(BaseSettings):
-    """All knobs slopmortem reads at startup. TOML overrides env, env overrides defaults."""
+    """All knobs slopmortem reads at startup.
+
+    Precedence (highest wins): env > .env > slopmortem.local.toml >
+    slopmortem.toml (tracked defaults) > built-in defaults.
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -107,7 +111,12 @@ class Config(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Wire TOML sources after env and before secrets so TOML wins over env at runtime."""
+        """Wire TOML below env+dotenv so env wins (12-factor).
+
+        Within ``toml_file=("slopmortem.toml", "slopmortem.local.toml")``
+        pydantic-settings applies the second file last, so ``local.toml``
+        overrides the tracked defaults.
+        """
         toml_files: list[Path] = [
             p
             for name in ("slopmortem.toml", "slopmortem.local.toml")

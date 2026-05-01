@@ -59,7 +59,7 @@ Storage defaults to `./post_mortems/{raw,canonical,quarantine}/` with the merge 
 <details>
 <summary><b>Configuration</b></summary>
 
-`slopmortem.toml` (tracked) holds the documented defaults; every field has a comment. Don't edit it for personal tweaks. Drop a `slopmortem.local.toml` next to it with only the keys you want to override — the loader reads both from the current working directory and `.local.toml` wins. `.local.toml` is gitignored. Env vars (and `.env`) also override the tracked defaults, but `.local.toml` wins over env too, so it's the one knob to reach for.
+`slopmortem.toml` (tracked) holds the documented defaults; every field has a comment. Don't edit it for personal tweaks. Drop a `slopmortem.local.toml` next to it with only the keys you want to override — the loader reads both from the current working directory and `.local.toml` wins over `slopmortem.toml`. `.local.toml` is gitignored. Env vars (and `.env`) override both TOML files (standard 12-factor), so use `.local.toml` for your durable personal config and export an env var when you want a one-off override on top.
 
 </details>
 
