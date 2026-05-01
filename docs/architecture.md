@@ -81,7 +81,7 @@ You type `slopmortem query "we're building a marketplace for industrial scrap me
 6. **Consolidate risks.** One Sonnet call reads the pitch and every per-candidate lesson, merges paraphrases, and drops anything that doesn't latch onto something concrete in the pitch. The Jaccard pass it replaced was happily emitting "don't use MLM" on pitches with no referral mechanic. Output is up to 10 risks, each with a severity bucket and an `applies_because` line that has to name a specific bit of the pitch. The stage caps highs at 4 and drops any fabricated `candidate_id` the model invents. Skipped on `BudgetExceededError`.
 7. **Render.** Markdown to stdout. Top-risks section first when present, then per-candidate sections, then a footer with cost, latency, and the trace ID. Paste the Laminar link from the terminal when something looks off.
 
-A default 5-comparable query runs around $0.30 and 90–130 seconds; the sample in [`docs/examples/crypto-savings-yield/`](examples/crypto-savings-yield/) recorded `cost=$0.328`, `latency=126.7s`. Tavily synthesis enrichment bumps both. Cap is $2.00; the budget tracker raises if you blow past it.
+A default 5-comparable query runs around $0.10 and 90–130 seconds; the sample in [`docs/examples/crypto-savings-yield/`](examples/crypto-savings-yield/) recorded `cost=$0.14`, `latency=126.7s`. Tavily synthesis enrichment bumps both. Cap is $2.00; the budget tracker raises if you blow past it.
 
 ## Ingest flow
 
