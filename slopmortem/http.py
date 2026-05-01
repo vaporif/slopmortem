@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-USER_AGENT: Final[str] = "slopmortem/0.1.0 (+https://github.com/vaporif/premortem)"
+USER_AGENT: Final[str] = "slopmortem/0.1.0 (+https://github.com/vaporif/slopmortem)"
 
 _BLOCKED_IMDS_HOSTS = frozenset(
     {

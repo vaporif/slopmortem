@@ -1,7 +1,7 @@
 # serializer version: 1
 # name: test_render_strips_autolinks_and_images
   list([
-    '# Premortem report for newco',
+    '# Slopmortem report for newco',
     '## Top risks across all comparables',
     '## Acme',
     'Similarity:',
