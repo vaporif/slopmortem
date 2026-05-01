@@ -396,7 +396,7 @@ Use existing pipeline test scaffolding in `tests/test_pipeline_e2e.py` (note: th
 
 **Steps:**
 
-- [ ] **Step 1: Add `filtered_post_synth` field.**
+- [x] **Step 1: Add `filtered_post_synth` field.**
 
 In `slopmortem/models.py:264`, after `filtered_pre_synth: int = 0`, add:
 
@@ -404,7 +404,7 @@ In `slopmortem/models.py:264`, after `filtered_pre_synth: int = 0`, add:
 filtered_post_synth: int = 0
 ```
 
-- [ ] **Step 2: Capture and log drops in pipeline.**
+- [x] **Step 2: Capture and log drops in pipeline.**
 
 At the top of `slopmortem/pipeline.py`, add:
 
@@ -446,7 +446,7 @@ if filtered_post_synth > 0:
 
 Pass `filtered_post_synth` into `PipelineMeta` at the Report-construction site (find with `grep -n "PipelineMeta(" slopmortem/pipeline.py`).
 
-- [ ] **Step 3: Update render banner.**
+- [x] **Step 3: Update render banner.**
 
 The dispatch site is `render.py:184` (inside `render(report)`) — `if not report.candidates and not report.pipeline_meta.budget_exceeded:` calls `_render_no_comparables_banner(report.pipeline_meta.min_similarity_score)`. The helper is defined at `render.py:155` and currently takes only `threshold: float`. The existing banner reads:
 
@@ -484,7 +484,7 @@ sections.append(_render_no_comparables_banner(report.pipeline_meta, report.pipel
 
 The "filtered out" phrasing is **load-bearing** for the Step 4 banner test — keep that exact substring.
 
-- [ ] **Step 4: Tests.**
+- [x] **Step 4: Tests.**
 
 ```python
 async def test_post_synth_filter_records_drop_on_pipeline_meta(...):
@@ -504,7 +504,7 @@ async def test_pipeline_logs_drops_at_info(caplog, ...):
     assert any("min_similarity dropped" in r.message for r in caplog.records)
 ```
 
-- [ ] **Step 5: Verify.** `just test -k "pipeline or render" && just typecheck && just lint`.
+- [x] **Step 5: Verify.** `just test -k "pipeline or render" && just typecheck && just lint`.
 
 ---
 

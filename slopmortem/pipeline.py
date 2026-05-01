@@ -16,6 +16,7 @@ Failure model:
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -41,6 +42,9 @@ if TYPE_CHECKING:
     from slopmortem.llm.embedding_client import EmbeddingClient
     from slopmortem.models import Candidate, InputContext, ScoredCandidate, SimilarityScores
     from slopmortem.stages.retrieve import SparseEncoder
+
+
+logger = logging.getLogger(__name__)
 
 
 _DAYS_PER_YEAR = 365
@@ -150,6 +154,43 @@ def _filter_synth_by_min_similarity(
     return [s for s in syntheses if _mean_similarity_score(s.similarity) >= threshold]
 
 
+def _log_min_similarity_drop(*, dropped: int, total: int, stage: str, threshold: float) -> None:
+    """Emit one INFO line when ``dropped > 0``; no-op otherwise."""
+    if dropped <= 0:
+        return
+    logger.info(
+        "min_similarity dropped %d/%d candidates %s (threshold=%.2f)",
+        dropped,
+        total,
+        stage,
+        threshold,
+    )
+
+
+def _select_top_n(
+    *,
+    retrieved: list[Candidate],
+    ranked: list[ScoredCandidate],
+    threshold: float,
+    n_synthesize: int,
+) -> tuple[list[Candidate], int]:
+    """Apply min-similarity, join to candidates, cap at N. Returns (top_n, dropped_count).
+
+    Reranker is contracted to return exactly ``n_synthesize`` ranked rows
+    (see llm_rerank), so any shortfall in the returned list is the
+    min_similarity filter dropping rows.
+    """
+    survivors = _filter_by_min_similarity(ranked, threshold)
+    _log_min_similarity_drop(
+        dropped=len(ranked) - len(survivors),
+        total=len(ranked),
+        stage="post-rerank",
+        threshold=threshold,
+    )
+    top_n = _join_to_candidates(retrieved, survivors)[:n_synthesize]
+    return top_n, max(0, n_synthesize - len(top_n))
+
+
 def _join_to_candidates(
     retrieved: list[Candidate], ranked: list[ScoredCandidate]
 ) -> list[Candidate]:
@@ -225,6 +266,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     top_risks = TopRisks()
     budget_exceeded = False
     filtered_pre_synth = 0
+    filtered_post_synth = 0
 
     if Laminar.is_initialized():
         Laminar.set_span_attributes(
@@ -283,11 +325,12 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         progress.advance_phase(QueryPhase.RERANK)
         progress.end_phase(QueryPhase.RERANK)
 
-        survivors = _filter_by_min_similarity(reranked.ranked, config.min_similarity_score)
-        top_n = _join_to_candidates(retrieved, survivors)[: config.N_synthesize]
-        # Reranker is contracted to return exactly N_synthesize ranked rows
-        # (see llm_rerank), so any shortfall here is the min_similarity filter.
-        filtered_pre_synth = max(0, config.N_synthesize - len(top_n))
+        top_n, filtered_pre_synth = _select_top_n(
+            retrieved=retrieved,
+            ranked=reranked.ranked,
+            threshold=config.min_similarity_score,
+            n_synthesize=config.N_synthesize,
+        )
 
         progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
         # First synthesize call runs alone to warm Anthropic's prompt cache before
@@ -315,7 +358,15 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             on_candidate_done=_on_candidate_done,
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
+        synth_in = len(successes)
         successes = _filter_synth_by_min_similarity(successes, config.min_similarity_score)
+        filtered_post_synth = synth_in - len(successes)
+        _log_min_similarity_drop(
+            dropped=filtered_post_synth,
+            total=synth_in,
+            stage="post-synth",
+            threshold=config.min_similarity_score,
+        )
         # Consolidate runs inside the try so successful runs get full top-risks.
         # A budget-exceeded run skips it and falls through to the default-empty
         # TopRisks above, keeping the truncated-run shape minimal.
@@ -353,5 +404,6 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             budget_remaining_usd=budget.remaining,
             budget_exceeded=budget_exceeded,
             filtered_pre_synth=filtered_pre_synth,
+            filtered_post_synth=filtered_post_synth,
         ),
     )

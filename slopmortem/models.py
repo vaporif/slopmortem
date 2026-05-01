@@ -265,6 +265,7 @@ class PipelineMeta(BaseModel):
     budget_remaining_usd: float
     budget_exceeded: bool
     filtered_pre_synth: int = 0
+    filtered_post_synth: int = 0
 
 
 class ConsolidatedRisk(BaseModel):
