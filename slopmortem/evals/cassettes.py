@@ -5,9 +5,9 @@ recording wrappers and the replay loaders both import from here so record
 and replay can't disagree on disk shape.
 
 Forward-compat policy (P12): `schema_version` is `"<major>.<minor>"`. The
-reader hard-fails on a major mismatch (renamed or removed fields, semantic
-shifts) and accepts any minor at the same major (minor bumps are purely
-additive). Pydantic models use `extra="ignore"` so unknown fields a future
+reader hard-fails on a major mismatch (renamed/removed fields, semantic
+shifts) and accepts any minor at the same major — minor bumps are purely
+additive. Pydantic models use `extra="ignore"` so unknown fields a future
 writer adds deserialize cleanly under older readers.
 """
 
@@ -63,9 +63,9 @@ def _slugify_model(model: str) -> str:
 
 
 def _check_schema_version(version: object, *, path: Path) -> None:
-    """Enforce the `major == reader_major` policy. Minor is always accepted at same major.
+    """Enforce the `major == reader_major` policy. Same-major minor always accepted.
 
-    Raises `CassetteSchemaError` on any mismatch; unknown extra fields in the
+    Raises `CassetteSchemaError` on any mismatch. Unknown extra fields in the
     envelope are tolerated by the loaders (Pydantic models use `extra="ignore"`).
     """
     if not isinstance(version, str) or "." not in version:
@@ -285,7 +285,7 @@ def _read_json_object(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         msg = f"cassette {path} top-level must be an object"
         raise CassetteFormatError(msg)
-    # JSON object keys are always strings by spec. Cast keeps the static type honest.
+    # JSON object keys are always strings. Cast keeps the static type honest.
     return cast("dict[str, object]", raw)
 
 

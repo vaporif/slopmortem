@@ -1,38 +1,38 @@
 # pyright: reportAny=false
 """Ingest orchestration: sources -> enrichers -> slop -> facets -> summarize -> chunks -> qdrant.
 
-Pipeline (per spec lines 478-606):
+Pipeline:
 
-1. Per source, iterate ``Source.fetch()`` async; per-source failures are logged
-   and the run continues (spec line 606).
-2. Per entry, apply enrichers in declared order; trafilatura sanitizes and
-   extracts the canonical body if HTML is present; entries below the length
-   floor are dropped.
-3. Slop classify; ``slop_score > config.slop_threshold`` quarantines the doc
-   (no qdrant point, no merge journal row, separate ``quarantine_journal``
-   table; body under ``post_mortems_root/quarantine/<content_sha256>.md``).
-4. Cache-warm one serial LLM call so the prompt cache is hot before fan-out.
-5. Fan-out facet_extract + summarize_for_rerank under a
+1. Per source, iterate ``Source.fetch()`` async. Per-source failures log and
+   the run continues.
+2. Per entry, apply enrichers in declared order. trafilatura sanitizes and
+   extracts the canonical body when HTML is present; entries below the length
+   floor get dropped.
+3. Slop classify. ``slop_score > config.slop_threshold`` quarantines the doc:
+   no qdrant point, no merge journal row, separate ``quarantine_journal``
+   table, body under ``post_mortems_root/quarantine/<content_sha256>.md``.
+4. Cache-warm one serial LLM call so the prompt cache is hot for fan-out.
+5. Fan-out facet_extract + summarize_for_rerank under
    ``anyio.CapacityLimiter(config.ingest_concurrency)``.
-6. Read-ratio probe on the first 5 fan-out responses; if
+6. Read-ratio probe on the first 5 fan-out responses. If
    ``cache_read / (cache_read + cache_creation) < 0.80`` emit
    :attr:`SpanEvent.CACHE_READ_RATIO_LOW`.
-7. Resolve canonical id via :func:`slopmortem.corpus.entity_resolution.resolve_entity`;
+7. Resolve canonical id via
+   :func:`slopmortem.corpus.entity_resolution.resolve_entity`. The
    ``resolver_flipped`` and ``alias_blocked`` actions short-circuit.
 8. ``upsert_pending`` row, atomic raw write, deterministic merge of all raw
    sections for this canonical_id, atomic canonical write, chunk + embed,
    delete + re-upsert all chunk points, ``mark_complete`` with skip_key LAST.
 
-Idempotency: skip_key is the spec-line-579 tuple
-``(content_hash, facet_prompt_hash, summarize_prompt_hash, haiku_model_id,
-embed_model_id, chunk_strategy_version, taxonomy_version,
-reliability_rank_version)``. A later ingest with a journal row already at
-``complete`` and matching skip_key short-circuits without LLM, embed, or
-qdrant work. ``--force`` bypasses the short-circuit.
+Idempotency: skip_key is ``(content_hash, facet_prompt_hash,
+summarize_prompt_hash, haiku_model_id, embed_model_id, chunk_strategy_version,
+taxonomy_version, reliability_rank_version)``. A later ingest with a journal
+row already at ``complete`` and a matching skip_key short-circuits with no
+LLM, embed, or qdrant work. ``--force`` bypasses it.
 
-Concurrency contract: every LLM/embedding call routes through the same
-:class:`~slopmortem.budget.Budget` (reserve before, settle after) and
-through the bounded fan-out limiter for the facet+summarize batch.
+Concurrency contract: every LLM and embedding call routes through the same
+:class:`~slopmortem.budget.Budget` (reserve before, settle after) and the
+bounded fan-out limiter for the facet+summarize batch.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ type SparseEncoder = Callable[[str], dict[int, float]]
 
 logger = logging.getLogger(__name__)
 
-# Spec line 205: read-ratio threshold over the first N fan-out responses.
+# Read-ratio threshold over the first N fan-out responses.
 _CACHE_READ_RATIO_THRESHOLD: Final[float] = 0.80
 _CACHE_READ_RATIO_PROBE_N: Final[int] = 5
 
@@ -102,12 +102,12 @@ _RELIABILITY_RANK: Final[dict[str, int]] = {
     "crunchbase": 3,
 }
 
-# Sources whose entries are pre-filtered to "confirmed dead company" upstream
-# of slopmortem itself: curated YAML is human-reviewed, crunchbase_csv is
-# filtered to status=closed. Running the LLM dead-company classifier on these
-# is wasted spend AND systematically misclassifies; Wayback'd Crunchbase
-# homepages are pre-death marketing copy, not death narratives. Skip slop for
-# them entirely; HN and any future open-corpus sources still go through it.
+# Sources pre-filtered to "confirmed dead company" upstream of slopmortem:
+# curated YAML is human-reviewed, crunchbase_csv is filtered to status=closed.
+# Running the LLM dead-company classifier on these wastes spend AND
+# misclassifies — Wayback'd Crunchbase homepages are pre-death marketing copy,
+# not death narratives. Skip slop entirely for these; HN and any future
+# open-corpus sources still go through it.
 _PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_csv"})
 
 
@@ -129,11 +129,11 @@ class Corpus(Protocol):
 
 
 class IngestPhase(StrEnum):
-    """Closed set of phase keys used by :class:`IngestProgress`.
+    """Phase keys used by :class:`IngestProgress`.
 
-    StrEnum (rather than bare strings) gives us closed-set typing, IDE
-    autocomplete, and exhaustiveness checks: typos like ``"fanout"`` for
-    ``"fan_out"`` fail at parse time instead of silently no-op'ing.
+    StrEnum over bare strings: closed-set typing, IDE autocomplete, and
+    exhaustiveness checks. Typos like ``"fanout"`` for ``"fan_out"`` fail at
+    parse time instead of silently no-op'ing.
     """
 
     GATHER = "gather"
@@ -147,20 +147,20 @@ class IngestPhase(StrEnum):
 class IngestProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem ingest``.
 
-    Methods are no-op-safe: a default :class:`NullProgress` keeps the
-    orchestrator decoupled from any specific UI library, while the CLI
-    wires a Rich-based implementation. ``log`` is for neutral status lines
-    (cache-warm result, classification summary); ``error`` is reserved for
-    actual failures and the implementation paints those red.
+    Methods are no-op-safe. :class:`NullProgress` is the default so the
+    orchestrator stays decoupled from any UI library; the CLI wires a Rich
+    impl. ``log`` is for neutral status lines (cache-warm result,
+    classification summary); ``error`` is for failures and the impl paints
+    those red.
     """
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None:
         """Announce *phase* with an expected ``total`` of advances.
 
-        ``total=None`` marks the phase as indeterminate, used when the
+        ``total=None`` marks the phase indeterminate, for cases where the
         producer can't know the size up front (e.g. ``GATHER`` without
-        ``--limit``). The Rich impl renders a pulsing bar instead of a
-        fake-totaled one so the ETA column stays blank.
+        ``--limit``). Rich renders a pulsing bar instead of a fake-totaled
+        one so the ETA column stays blank.
         """
 
     def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
@@ -255,21 +255,20 @@ class FakeSlopClassifier:
 
 @dataclass
 class HaikuSlopClassifier:
-    """Slop classifier that asks Haiku to judge dead-company relevance.
+    """Asks Haiku whether a text describes a dead company.
 
     Only runs on open-corpus sources (HN). Pre-vetted sources (curated YAML,
-    Crunchbase CSV) bypass slop in :func:`ingest` because their bodies are
-    either human-reviewed obituaries or Wayback'd live-era marketing pages,
-    neither of which benefits from a death-narrative LLM check.
+    Crunchbase CSV) bypass slop in :func:`ingest` — their bodies are either
+    human-reviewed obituaries or Wayback'd live-era marketing pages, neither
+    of which benefits from the death-narrative check.
 
-    One LLM call per text. Returns 0.0 when Haiku says the text describes a
-    specific dead company, else 1.0 (which exceeds ``slop_threshold=0.7``
-    and quarantines the entry).
+    One LLM call per text. Returns 0.0 when Haiku says yes, else 1.0
+    (above ``slop_threshold=0.7``, so the entry quarantines).
 
-    ``char_limit=6000`` is sized so the demise narrative (which can sit deep
-    in the body for older companies like Sun Microsystems or WeWork) falls
-    inside the window. ~$6 extra per full HN pass vs a tighter 1500-char cap,
-    and avoids false-negative quarantines on long obituaries.
+    ``char_limit=6000`` is sized so the demise narrative (which sits deep in
+    the body for older companies like Sun Microsystems or WeWork) falls
+    inside the window. Costs ~$6 more per full HN pass than a tighter
+    1500-char cap, but avoids false-negative quarantines on long obituaries.
     """
 
     llm: LLMClient
@@ -341,7 +340,7 @@ def _reliability_for(source: str) -> int:
     return _RELIABILITY_RANK.get(source, 9)
 
 
-def _skip_key(  # noqa: PLR0913 - the spec-defined tuple is wide
+def _skip_key(  # noqa: PLR0913 - the contract tuple is wide
     *,
     content_hash: str,
     facet_sha: str,
@@ -361,12 +360,11 @@ def _skip_key(  # noqa: PLR0913 - the spec-defined tuple is wide
 
 
 def _truncate_to_tokens(text: str, max_tokens: int) -> str:
-    """Clip *text* so it encodes to at most *max_tokens* under cl100k_base.
+    """Clip *text* to at most *max_tokens* under cl100k_base.
 
-    Anthropic's tokenizer isn't published; cl100k_base (used by GPT-4) is a
-    good proxy for cost-control purposes. Anthropic and OpenAI tokenizers
-    agree to within ~10% on English prose, well inside the headroom for a
-    truncation budget.
+    Anthropic's tokenizer isn't published; cl100k_base (GPT-4) is a fine proxy
+    for cost control — the two agree to within ~10% on English prose, well
+    inside the truncation budget's headroom.
     """
     if max_tokens <= 0:
         return text
@@ -380,12 +378,12 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
 
 
 def _entry_summary_text(entry: RawEntry, *, max_tokens: int) -> str:
-    """Return the entry's body text for slop+facet+summarize stages.
+    """Return the entry's body text for slop / facet / summarize.
 
-    Body is clipped to *max_tokens* tokens (cl100k_base proxy) to bound
-    LLM input cost on long-tail articles. Wikipedia articles especially
-    can be 60KB+ of plain text after trafilatura; the demise narrative
-    is almost always in the lead and first major body section.
+    Clipped to *max_tokens* (cl100k_base proxy) to bound LLM input cost on
+    long-tail articles. Wikipedia entries especially can be 60KB+ after
+    trafilatura, but the demise narrative is almost always in the lead and
+    first major body section.
     """
     if entry.markdown_text:
         return _truncate_to_tokens(entry.markdown_text, max_tokens)
@@ -442,14 +440,14 @@ async def _gather_entries(
 ) -> tuple[list[RawEntry], int]:
     """Collect entries from every source. Per-source failures are logged and counted.
 
-    When *limit* is set, gather stops as soon as ``len(out) >= limit``;
-    sources beyond the cap aren't started, and an in-progress source
-    breaks out of its async iterator. This makes ``--limit`` a real
-    fast-path knob for smoke tests instead of just a post-gather slice.
+    When *limit* is set, gather stops as soon as ``len(out) >= limit``. Sources
+    beyond the cap aren't started, and an in-progress source breaks out of its
+    async iterator. ``--limit`` is a real fast-path knob for smoke tests, not
+    just a post-gather slice.
 
-    ``progress`` (when provided) gets one ``advance_phase(GATHER)`` per
-    entry so Rich's speed sampler has a rate to extrapolate an ETA from
-    when ``limit`` gives the bar a known total.
+    ``progress`` (when provided) gets one ``advance_phase(GATHER)`` per entry so
+    Rich's speed sampler can extrapolate an ETA when ``limit`` gives the bar a
+    known total.
     """
     out: list[RawEntry] = []
     failures = 0
@@ -464,7 +462,7 @@ async def _gather_entries(
                 bar.advance_phase(IngestPhase.GATHER)
                 if limit is not None and len(out) >= limit:
                     break
-        except Exception as exc:  # noqa: BLE001 - spec line 606: never abort the run.
+        except Exception as exc:  # noqa: BLE001 - never abort the run on a per-source failure.
             logger.warning(
                 "ingest: source %r failed: %s",
                 type(src).__name__,
@@ -498,7 +496,7 @@ async def _summarize_call(
 ) -> tuple[str, int, int]:
     """Return ``(summary, cache_read, cache_creation)``.
 
-    Inlined rather than delegating to ``summarize_for_rerank`` because we need
+    Inlined instead of delegating to ``summarize_for_rerank`` because we need
     the raw cache-token counters, which the helper discards.
     """
     prompt = render_prompt("summarize", body=text, source_id="")
@@ -523,7 +521,7 @@ async def _cache_warm(
     """Run one serial summarize call to warm the prompt cache.
 
     Returns ``(warmed, cache_creation_tokens, span_events)``. ``warmed`` is
-    True if the call returned ``cache_creation_tokens > 0`` (cache was created).
+    True when ``cache_creation_tokens > 0`` (cache actually got written).
     """
     span: list[str] = []
     try:
@@ -635,10 +633,10 @@ async def _facet_summarize_fanout(
 ) -> list[_FanoutResult | BaseException]:
     """Run facet+summarize concurrently under ``ingest_concurrency`` capacity.
 
-    Returns one :class:`_FanoutResult` per entry, in order, or the exception
-    that aborted that entry's pipeline. The limiter bounds LLM calls in
-    flight. Facet and summarize for the same entry run sequentially so two
-    LLM calls never share one limiter slot.
+    Returns one :class:`_FanoutResult` per entry in order, or the exception
+    that aborted that entry. The limiter bounds in-flight LLM calls. Facet
+    and summarize for the same entry run sequentially so two LLM calls never
+    share one limiter slot.
     """
     limiter = anyio.CapacityLimiter(config.ingest_concurrency)
     bar = progress or NullProgress()
@@ -685,7 +683,6 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     Returns:
         Either ``"processed"`` or ``"skipped"``.
     """
-    # Step 1: resolve canonical_id (tier-1/2/3 + alias + flip prechecks).
     name = entry.source_id  # ingest's name extraction is best-effort in v1
     sector = fan.facets.sector
     res = await resolve_entity(
@@ -704,10 +701,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         return "skipped"
     canonical_id = res.canonical_id
 
-    # Step 2: build the merged section list. For v1 ingest only knows about THIS
-    # raw section; merge with prior raw on disk happens via the read-back path
-    # in reconcile / multi-source ingest. The deterministic combined_text uses
-    # the single section here.
+    # v1 ingest only knows about THIS raw section. Merging with prior raw on
+    # disk happens via the read-back path in reconcile / multi-source ingest.
     section = Section(
         text=body,
         reliability_rank=_reliability_for(entry.source),
@@ -728,19 +723,16 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         reliability_rank_version=config.reliability_rank_version,
     )
 
-    # Step 3: skip-key short-circuit unless --force.
     existing = await journal.fetch_by_key(canonical_id, entry.source, entry.source_id)
     if not force and existing:
         row = existing[0]
         if row.get("merge_state") == "complete" and row.get("skip_key") == skip_key:
             return "skipped"
 
-    # Step 4: pending row.
     await journal.upsert_pending(
         canonical_id=canonical_id, source=entry.source, source_id=entry.source_id
     )
 
-    # Step 5: atomic raw write.
     text_id = _text_id_for(canonical_id)
     await write_raw_atomic(
         post_mortems_root,
@@ -759,7 +751,6 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         },
     )
 
-    # Step 6: atomic canonical write (one-section merge in this ingest).
     await write_canonical_atomic(
         post_mortems_root,
         text_id,
@@ -773,8 +764,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         },
     )
 
-    # Step 7: chunks + embed + qdrant. Re-upsert path: delete then re-upsert
-    # all chunk points for this canonical_id so prior-run orphans don't pile up.
+    # Delete then re-upsert all chunk points for this canonical_id so prior-run
+    # orphans don't pile up.
     if existing:
         with contextlib.suppress(Exception):
             await corpus.delete_chunks_for_canonical(canonical_id)
@@ -799,7 +790,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         sparse_encoder=sparse_encoder,
     )
 
-    # Step 8: mark complete with skip_key LAST.
+    # mark_complete must run LAST: skip_key being set is the only signal a
+    # later ingest uses to short-circuit this entry.
     await journal.mark_complete(
         canonical_id=canonical_id,
         source=entry.source,
@@ -847,31 +839,30 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     """Run one full ingest pass and return the aggregated :class:`IngestResult`.
 
     Args:
-        sources: Concrete :class:`Source` adapters to fetch from. Per-source
-            failures are logged and the run continues (spec line 606).
+        sources: :class:`Source` adapters to fetch from. Per-source failures
+            log and the run continues.
         enrichers: Optional pre-classifier enrichers (e.g. wayback fallback).
-        journal: SQLite merge journal: pending/complete writers and quarantine.
+        journal: SQLite merge journal — pending/complete writers and quarantine.
         corpus: :class:`Corpus` write surface. Production is :class:`QdrantCorpus`.
         llm: LLM client for facet_extract + summarize_for_rerank.
         embed_client: Dense embedding client. Vector dim is read at the
-            embedding client's level; ingest never hardcodes dim numbers.
-        budget: Shared :class:`~slopmortem.budget.Budget`. The LLM and embedding
+            client level; ingest never hardcodes dimensions.
+        budget: Shared :class:`~slopmortem.budget.Budget`. LLM and embedding
             clients reserve and settle internally.
         slop_classifier: Score-only classifier (Binoculars in production).
-        config: Loaded :class:`Config`. Pulls ingest_concurrency, slop_threshold,
-            model ids, taxonomy/reliability versions.
+        config: Loaded :class:`Config`. Reads ingest_concurrency,
+            slop_threshold, model ids, taxonomy/reliability versions.
         post_mortems_root: Root for ``raw/``, ``canonical/``, ``quarantine/``.
-        dry_run: When True, count entries that would be ingested but write
-            nothing. No journal rows, no disk, no qdrant.
-        force: When True, bypass the skip_key short-circuit and re-process
-            every entry.
-        sparse_encoder: Override the BM25 sparse encoder. ``None`` lazy-loads
-            the production fastembed model on first call. Tests pass a
-            no-op stub so they don't trigger the ~150 MB ONNX download.
-        limit: Optional cap on entries gathered from sources. ``None`` runs
-            unbounded; when set, sources past the cap aren't started.
-        progress: Optional :class:`IngestProgress` sink for phase-level updates.
-            Defaults to :class:`NullProgress` when ``None``.
+        dry_run: Count entries that would be ingested but write nothing —
+            no journal rows, no disk, no qdrant.
+        force: Bypass the skip_key short-circuit and re-process every entry.
+        sparse_encoder: BM25 sparse encoder override. ``None`` lazy-loads the
+            production fastembed model on first call. Tests pass a no-op stub
+            so they don't trigger the ~150 MB ONNX download.
+        limit: Cap on entries gathered. ``None`` is unbounded; when set,
+            sources past the cap aren't started.
+        progress: :class:`IngestProgress` sink for phase-level updates.
+            Defaults to :class:`NullProgress`.
 
     Returns:
         Counters and span event names for the run.
@@ -879,19 +870,18 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     result = IngestResult(dry_run=dry_run)
     progress = progress or NullProgress()
 
+    # Drain result.span_events into Laminar. Closure so every early-return path
+    # can call it; the list itself stays around for tests and the CLI renderer.
     def _emit_collected_events() -> None:
-        # Drain ``result.span_events`` into Laminar. Stays a local closure so
-        # every early-return path can call it; the list is preserved for tests
-        # and the CLI rendering helper.
         if not Laminar.is_initialized():
             return
         for name in result.span_events:
             Laminar.event(name=name)
 
+    # Without this, swallowed per-entry exceptions are invisible in Laminar:
+    # the parent span returns OK, the INGEST_ENTRY_FAILED event carries no
+    # payload, and error context only lives in stderr logs.
     def _record_error(entry_label: str, exc: BaseException) -> None:
-        # Without this, swallowed per-entry exceptions are invisible in
-        # Laminar: the parent span returns OK, the INGEST_ENTRY_FAILED event
-        # has no payload, and the only error context lives in stderr logs.
         if not Laminar.is_initialized():
             return
         idx = result.errors
@@ -923,18 +913,16 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             }
         )
 
-    # Default sparse encoder: BM25 via fastembed. Tests stub this with a dict-returning
-    # lambda so the ONNX model never loads under pytest.
+    # Default sparse encoder: BM25 via fastembed. Tests stub it with a
+    # dict-returning lambda so the ONNX model never loads under pytest.
     if sparse_encoder is None:
         from slopmortem.corpus.embed_sparse import encode as _encode_sparse  # noqa: PLC0415
 
         sparse_encoder = _encode_sparse
 
-    # Step 1: pull every entry; per-source errors counted, run continues.
-    # `limit` short-circuits gathering; sources past the cap aren't started.
-    # ``total=limit`` when set gives Rich a real denominator so the ETA column
-    # works; without ``--limit`` the count is unknown up front, so we pass
-    # ``None`` (indeterminate, pulsing bar) rather than lying with ``0``.
+    # When ``--limit`` is set, ``total=limit`` gives Rich a real denominator
+    # so the ETA column works. Without it, the count isn't known up front,
+    # so pass ``None`` (indeterminate, pulsing bar) rather than lying with 0.
     progress.start_phase(IngestPhase.GATHER, total=limit)
     entries, source_failures = await _gather_entries(
         sources, span_events=result.span_events, limit=limit, progress=progress
@@ -943,7 +931,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     progress.log(f"gathered {len(entries)} entries from {len(sources)} sources")
     result.source_failures = source_failures
 
-    # Step 2: enrich, slop classify, length-floor.
     progress.start_phase(IngestPhase.CLASSIFY, total=len(entries))
     keepers: list[tuple[RawEntry, str]] = []  # (entry, body) post-extract.
     for entry in entries:
@@ -965,11 +952,11 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             progress.advance_phase(IngestPhase.CLASSIFY)
             continue
 
-        # Slop classify; quarantine routes do NOT reach LLM/embed/qdrant.
+        # Slop classify. Quarantine routes never reach LLM/embed/qdrant.
         # Pre-vetted sources skip the LLM judge: ``curated`` is human-reviewed
-        # YAML, and ``crunchbase_csv`` rows are pre-filtered to ``status=closed``.
+        # YAML and ``crunchbase_csv`` rows are pre-filtered to ``status=closed``.
         # Running the dead-company classifier on a Wayback'd live-era homepage
-        # would systematically mis-quarantine them since the body is marketing
+        # would systematically mis-quarantine these — the body is marketing
         # copy, not a death narrative.
         if entry.source in _PRE_VETTED_SOURCES:
             slop_score = 0.0
@@ -1002,7 +989,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     skipped = result.skipped
     progress.log(f"classified: {len(keepers)} kept, {quarantined} quarantined, {skipped} skipped")
 
-    # Dry-run early exit: only count, never write.
     if dry_run:
         result.would_process = len(keepers)
         _emit_collected_events()
@@ -1012,7 +998,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
         _emit_collected_events()
         return result
 
-    # Step 3: cache-warm one serial call so fan-out runs hot.
     progress.start_phase(IngestPhase.CACHE_WARM, total=1)
     warmed, warm_creation, warm_events = await _cache_warm(
         llm=llm,
@@ -1026,12 +1011,12 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     result.cache_creation_tokens_warm = warm_creation
     result.span_events.extend(warm_events)
 
-    # Step 4: bounded fan-out for facets and summarize.
     progress.start_phase(IngestPhase.FAN_OUT, total=len(keepers))
     fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
     progress.end_phase(IngestPhase.FAN_OUT)
 
-    # Step 5: read-ratio probe on first 5 fan-out responses.
+    # Read-ratio probe on the first N fan-out responses; emit a span event if
+    # the cache isn't being read.
     probe = [r for r in fanout if isinstance(r, _FanoutResult)][:_CACHE_READ_RATIO_PROBE_N]
     if probe:
         total_read = sum(r.cache_read for r in probe)
@@ -1042,7 +1027,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             if ratio < _CACHE_READ_RATIO_THRESHOLD:
                 result.span_events.append(SpanEvent.CACHE_READ_RATIO_LOW.value)
 
-    # Step 6: per-entry sequential write phase.
     progress.start_phase(IngestPhase.WRITE, total=len(keepers))
     for (entry, body), fan in zip(keepers, fanout, strict=True):
         if isinstance(fan, BaseException):
@@ -1074,7 +1058,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
                 span_events=result.span_events,
                 sparse_encoder=sparse_encoder,
             )
-        except Exception as exc:  # noqa: BLE001 - spec line 606: run continues.
+        except Exception as exc:  # noqa: BLE001 - per-entry isolation; run continues.
             logger.warning(
                 "ingest: write phase failed for %s:%s: %s",
                 entry.source,
@@ -1091,10 +1075,10 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             progress.advance_phase(IngestPhase.WRITE)
             continue
         except BaseException as exc:
-            # CancelledError / SystemExit / etc.; ``except Exception`` above
-            # misses these. Surface what's escaping (which entry, what type)
-            # via the progress error channel before letting it propagate so
-            # the run terminates loud rather than silent.
+            # CancelledError / SystemExit / etc; ``except Exception`` above misses
+            # these. Surface what's escaping (which entry, what type) via the
+            # progress error channel before letting it propagate, so the run
+            # terminates loud rather than silent.
             progress.error(
                 IngestPhase.WRITE,
                 f"FATAL {type(exc).__name__} on {entry.source}:{entry.source_id}: {exc}",

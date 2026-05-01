@@ -2,10 +2,10 @@
 """JSONL dump/restore + SHA for the eval corpus fixture.
 
 The fixture is a regenerable artifact (run ``just eval-record-corpus``).
-This module bridges a populated Qdrant collection and a human-diffable
-JSONL file. The per-file ``reportAny`` / ``reportUnknown*`` silences match
-the SDK-boundary pattern in ``slopmortem/corpus/qdrant_store.py``, because
-Qdrant's models surface ``Optional`` / ``Mapping`` everywhere.
+This module bridges a populated Qdrant collection and a human-diffable JSONL
+file. Per-file ``reportAny`` / ``reportUnknown*`` silences match the
+SDK-boundary pattern in ``slopmortem/corpus/qdrant_store.py`` — Qdrant's
+models surface ``Optional`` / ``Mapping`` everywhere.
 """
 
 from __future__ import annotations

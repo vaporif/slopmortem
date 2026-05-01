@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-# Closed-enum facet fields whose values MUST appear in ``taxonomy.yml``.
-# Free-form fields (sub_sector, product_type, price_point, founding_year,
-# failure_year) deliberately stay open and are not enum-validated.
+# Closed-enum facet fields whose values MUST be in taxonomy.yml. Free-form
+# fields like sub_sector, product_type, price_point, founding_year, and
+# failure_year stay open and aren't enum-validated.
 _CLOSED_FACET_FIELDS: tuple[str, ...] = (
     "sector",
     "business_model",
@@ -29,7 +29,7 @@ _TAXONOMY_PATH = Path(__file__).resolve().parent / "corpus" / "taxonomy.yml"
 @cache
 def _load_taxonomy() -> dict[str, frozenset[str]]:
     """Load ``taxonomy.yml`` once, returning each closed-enum field as a frozenset."""
-    # yaml.safe_load is loosely typed; we narrow at the dict boundary, same as
+    # yaml.safe_load is loosely typed; narrow at the dict boundary, same as
     # slopmortem.corpus.sources.curated.
     raw = cast(
         "dict[str, list[Any]]",  # pyright: ignore[reportExplicitAny]
@@ -38,9 +38,9 @@ def _load_taxonomy() -> dict[str, frozenset[str]]:
     return {field: frozenset(raw[field]) for field in _CLOSED_FACET_FIELDS}
 
 
-# Dynamic Literal types built from taxonomy.yml at module-load time. Pydantic v2
-# emits the values as ``"enum": [...]`` in the JSON schema, which Anthropic's
-# grammar-constrained sampler then enforces, eliminating hallucinations like
+# Dynamic Literal types built from taxonomy.yml at module-load. Pydantic v2
+# emits these as ``"enum": [...]`` in the JSON schema, and Anthropic's
+# grammar-constrained sampler enforces them. Kills hallucinations like
 # ``geography="japan"`` (Haiku used to invent country names instead of the
 # regional ``apac`` bucket) or ``customer_type="b2c"`` (instead of the
 # taxonomy's ``consumer``).
@@ -52,9 +52,9 @@ _GEOGRAPHY_VALUES: tuple[str, ...] = tuple(sorted(_TAX["geography"]))
 _MONETIZATION_VALUES: tuple[str, ...] = tuple(sorted(_TAX["monetization"]))
 
 # Pydantic introspects the *runtime* Literal to emit JSON-schema ``enum``
-# constraints; basedpyright can't expand a tuple at type-check time, so we
-# fall back to ``str`` for static analysis. The runtime Literal still enforces
-# the closed set via Pydantic's validator.
+# constraints. basedpyright can't expand a tuple at type-check time, so fall
+# back to ``str`` for static analysis. The runtime Literal still enforces the
+# closed set via Pydantic's validator.
 if TYPE_CHECKING:
     SectorLit = str
     BusinessModelLit = str
@@ -86,13 +86,13 @@ class SimilarityScores(BaseModel):
 
 
 class Facets(BaseModel):
-    """Facets extracted from an input pitch. The closed-key half pins the taxonomy schema.
+    """Facets extracted from an input pitch. Closed-key half pins the taxonomy schema.
 
     Closed enums are typed as ``Literal[*taxonomy_values]`` so Pydantic emits a
-    JSON-schema ``enum`` constraint, which Anthropic's grammar-constrained
-    sampler then enforces. The post-hoc validator that previously coerced
-    out-of-taxonomy values to ``"other"`` is gone; values that aren't in the
-    enum can no longer reach this class because the LLM can't generate them.
+    JSON-schema ``enum`` constraint that Anthropic's grammar-constrained
+    sampler enforces. The post-hoc validator that used to coerce
+    out-of-taxonomy values to ``"other"`` is gone — out-of-enum values can't
+    reach this class anymore because the LLM can't generate them.
     """
 
     sector: SectorLit
@@ -108,11 +108,13 @@ class Facets(BaseModel):
 
 
 class LLMSynthesis(BaseModel):
-    """The fields the LLM emits for one candidate.
+    """Fields the LLM emits for one candidate.
 
-    failure_date and lifespan_months are deliberately absent: those are
-    derived from the candidate's CandidatePayload in stages.synthesize,
-    not asked of the LLM (which used to fabricate them from prose).
+    failure_date, lifespan_months, and sources are intentionally missing. The
+    dates are derived from CandidatePayload in stages.synthesize; sources are
+    passed through from CandidatePayload as well, since the LLM never sees
+    provenance URLs (the body is plain text after extract_clean) and used to
+    either emit nothing or hallucinate URLs that the host filter then dropped.
     """
 
     candidate_id: str
@@ -123,15 +125,15 @@ class LLMSynthesis(BaseModel):
     where_diverged: str
     failure_causes: list[str]
     lessons_for_input: list[str]
-    sources: list[str]
 
 
 class Synthesis(BaseModel):
-    """The synthesized post-mortem analogue per candidate.
+    """Synthesized post-mortem analogue for one candidate.
 
-    Composed of the LLM-emitted fields (LLMSynthesis) plus failure_date
-    and lifespan_months, which are derived from the candidate's typed
-    payload dates rather than re-extracted from prose.
+    LLMSynthesis fields plus failure_date, lifespan_months, and sources.
+    The dates are derived from the candidate's typed payload; ``sources``
+    is passed through directly from ``CandidatePayload.sources`` rather than
+    asked of the LLM, since the LLM never sees provenance URLs anyway.
     """
 
     candidate_id: str
@@ -153,8 +155,9 @@ class Synthesis(BaseModel):
         *,
         founding_date: date | None,
         failure_date: date | None,
+        sources: list[str],
     ) -> Synthesis:
-        """Build a Synthesis from the LLM's output plus typed payload dates."""
+        """Build a Synthesis from the LLM's output plus typed payload dates and sources."""
         lifespan = _months_between(founding_date, failure_date)
         return cls(
             candidate_id=llm_synth.candidate_id,
@@ -167,7 +170,7 @@ class Synthesis(BaseModel):
             where_diverged=llm_synth.where_diverged,
             failure_causes=llm_synth.failure_causes,
             lessons_for_input=llm_synth.lessons_for_input,
-            sources=llm_synth.sources,
+            sources=sources,
         )
 
 
@@ -180,15 +183,15 @@ def _months_between(founding: date | None, failure: date | None) -> int | None:
 
 
 class CandidatePayload(BaseModel):
-    """Persisted candidate doc: body, facets, provenance, and text id.
+    """Persisted candidate doc: body, facets, provenance, text id.
 
-    sources is URL-only (may be empty when the upstream entry had no URL,
-    e.g. CSV imports). provenance_id is the synthetic "<source>:<source_id>"
+    ``sources`` is URL-only (empty when the upstream entry had no URL, e.g. CSV
+    imports). ``provenance_id`` is the synthetic ``"<source>:<source_id>"``
     audit string that always identifies where the doc came from.
 
-    Splitting these prevents the synthetic id from leaking into the synth
-    host allowlist: urlparse("curated:Celsius Network").hostname is None,
-    which used to drop every cited URL.
+    Splitting these stops the synthetic id from leaking into the synth host
+    allowlist: ``urlparse("curated:Celsius Network").hostname is None`` used
+    to drop every cited URL.
     """
 
     name: str
@@ -258,19 +261,20 @@ class PipelineMeta(BaseModel):
     trace_id: str | None
     budget_remaining_usd: float
     budget_exceeded: bool
+    filtered_pre_synth: int = 0
 
 
 class ConsolidatedRisk(BaseModel):
     """One pitch-applicable risk consolidated across comparables.
 
     Attributes:
-        summary: Imperative one-liner for the founder. Canonical wording
-            picked by the LLM when merging paraphrases.
-        applies_because: Why this risk hits THIS pitch — must reference a
-            concrete element of the pitch (asset class, scale, customer
-            type, product feature). Empty string is invalid.
-        raised_by: candidate_ids that emitted any lesson contributing to
-            this risk. Always non-empty for kept risks.
+        summary: Imperative one-liner for the founder. Canonical wording the
+            LLM picks when merging paraphrases.
+        applies_because: Why this risk hits THIS pitch. Must reference a
+            concrete element (asset class, scale, customer type, product
+            feature). Empty string is invalid.
+        raised_by: candidate_ids that emitted any lesson contributing to this
+            risk. Always non-empty for kept risks.
         severity: "high" | "medium" | "low". At most 4 highs per report.
     """
 
@@ -343,7 +347,7 @@ class AliasEdge(BaseModel):
 
 
 class PendingReviewRow(BaseModel):
-    """A row in the entity-resolution ``pending_review`` queue (spec line 264)."""
+    """A row in the entity-resolution ``pending_review`` queue."""
 
     pair_key: str
     similarity_score: float | None
@@ -353,7 +357,7 @@ class PendingReviewRow(BaseModel):
 
 
 class ReclassifyReport(BaseModel):
-    """Result of a ``slopmortem ingest --reclassify`` pass (spec line 252)."""
+    """Result of a ``slopmortem ingest --reclassify`` pass."""
 
     total: int
     declassified: int

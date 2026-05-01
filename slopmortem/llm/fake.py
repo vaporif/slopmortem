@@ -16,7 +16,7 @@ class NoCannedResponseError(KeyError):
     """Raised when FakeLLMClient can't find a canned reply for the given key.
 
     The error message names the missing ``(template_sha, model, prompt_hash)``
-    so you don't need a repro to find what's missing.
+    so you can find the gap without a repro.
     """
 
 
@@ -59,12 +59,12 @@ class _Call:
 class FakeLLMClient:
     r"""In-memory LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
 
-    Callers pass the template SHA via ``extra_body['prompt_template_sha']``;
-    stage tests load it from ``slopmortem.llm.prompts.prompt_template_sha(name)``
-    so any change in the prompt text changes the fixture key too.
-    The ``prompt_hash`` slot is the first 16 hex chars of
-    ``sha256(system + '\x1f' + prompt)`` (computed via
-    :func:`slopmortem.llm.cassettes.llm_cassette_key`); tests may override it
+    Callers pass the template SHA via ``extra_body['prompt_template_sha']``.
+    Stage tests load it from
+    ``slopmortem.llm.prompts.prompt_template_sha(name)`` so any change in
+    prompt text changes the fixture key too. The ``prompt_hash`` slot is the
+    first 16 hex chars of ``sha256(system + '\x1f' + prompt)`` (via
+    :func:`slopmortem.llm.cassettes.llm_cassette_key`); tests can override it
     by passing ``extra_body['prompt_hash']`` directly.
     """
 
@@ -95,8 +95,8 @@ class FakeLLMClient:
                 f"none supplied for model {eff_model!r}"
             )
             raise NoCannedResponseError(msg)
-        # Compute prompt_hash from prompt+system; allow override via extra_body
-        # so tests can pin a specific hash.
+        # Compute prompt_hash from prompt+system; tests can pin a specific
+        # hash by setting extra_body["prompt_hash"].
         prompt_hash: str
         if extra_body and "prompt_hash" in extra_body:
             prompt_hash = str(extra_body["prompt_hash"])  # pyright: ignore[reportAny]

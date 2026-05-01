@@ -1,8 +1,8 @@
 """Recording wrappers: forward to a real client, write a cassette on success.
 
-Lives under `slopmortem/evals/` rather than `slopmortem/llm/` so the
-production LLM modules don't pull in test infrastructure. Import direction
-is one-way: `evals -> llm`, never the reverse.
+Lives under `slopmortem/evals/` rather than `slopmortem/llm/` so production
+LLM modules don't pull in test infrastructure. Import direction is one-way:
+`evals → llm`, never the reverse.
 """
 
 from __future__ import annotations

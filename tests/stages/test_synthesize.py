@@ -70,10 +70,10 @@ def _synthesis_payload(
     candidate_id: str = "acme-corp",
     name: str = "Acme",
     where_diverged: str = "New pitch is web-first; Acme was mobile-only.",
-    sources: list[str] | None = None,
 ) -> str:
-    """Build a canned LLM response. failure_date/lifespan_months are derived
-    by the pipeline from the candidate payload, so the LLM no longer emits them.
+    """Build a canned LLM response. failure_date, lifespan_months, and sources
+    are derived/passed-through by the pipeline from the candidate payload, so
+    the LLM no longer emits them.
     """
     return json.dumps(
         {
@@ -90,7 +90,6 @@ def _synthesis_payload(
             "where_diverged": where_diverged,
             "failure_causes": ["CAC > LTV", "long sales cycles"],
             "lessons_for_input": ["target larger ACVs", "avoid SMB churn traps"],
-            "sources": sources if sources is not None else ["https://acme.com/postmortem"],
         }
     )
 
@@ -146,6 +145,36 @@ async def test_synthesize_derives_dates_from_payload_not_llm() -> None:
 
     assert s.failure_date == cand.payload.failure_date
     assert s.lifespan_months == 60
+
+
+async def test_synthesize_sources_pass_through_from_payload() -> None:
+    """``Synthesis.sources`` mirrors ``CandidatePayload.sources``; LLM is bypassed."""
+    cand = _candidate(sources=["https://en.wikipedia.org/wiki/Acme", "https://example.com/x"])
+    fake_llm = FakeLLMClient(
+        canned=_synthesize_canned(
+            [cand], _ctx(), text=_synthesis_payload(candidate_id=cand.canonical_id)
+        ),
+        default_model=_DEFAULT_MODEL,
+    )
+
+    s = await synthesize(cand, _ctx(), fake_llm, Config(), model=_DEFAULT_MODEL)
+
+    assert s.sources == cand.payload.sources
+
+
+async def test_synthesize_sources_empty_when_payload_has_none() -> None:
+    """Payload with no URL → empty Synthesis.sources, regardless of LLM output."""
+    cand = _candidate(sources=[])
+    fake_llm = FakeLLMClient(
+        canned=_synthesize_canned(
+            [cand], _ctx(), text=_synthesis_payload(candidate_id=cand.canonical_id)
+        ),
+        default_model=_DEFAULT_MODEL,
+    )
+
+    s = await synthesize(cand, _ctx(), fake_llm, Config(), model=_DEFAULT_MODEL)
+
+    assert s.sources == []
 
 
 async def test_synthesize_lifespan_none_when_dates_unknown() -> None:

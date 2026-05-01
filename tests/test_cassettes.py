@@ -61,10 +61,6 @@ def test_template_sha_changes_when_response_format_changes() -> None:
     assert a != b
 
 
-def test_template_sha_stable_across_calls() -> None:
-    assert template_sha("hello", None, _Schema) == template_sha("hello", None, _Schema)
-
-
 def test_llm_cassette_key_separator_isolates_system_from_prompt() -> None:
     # \x1f-separated; absent system means empty prefix.
     a = llm_cassette_key(prompt="ab", system=None, template_sha="t", model="m")

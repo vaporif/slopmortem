@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 760" width="1280" height="760"
+     font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+
+  <!-- ============================================================
+       slopmortem · ingest & query data flow
+       Single 26s SMIL loop; each step has a fade-in (begin=loop.begin+t)
+       and a shared fade-out at loop.begin+24.5s. The hidden #loop
+       animate self-restarts via begin="0s;loop.end".
+       ============================================================ -->
+
+  <defs>
+    <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="ah-green" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#16a34a"/>
+    </marker>
+    <marker id="ah-amber" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#b45309"/>
+    </marker>
+    <marker id="ah-slate" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect width="1280" height="760" fill="#fafafa"/>
+
+  <!-- master loop anchor -->
+  <rect x="-20" y="-20" width="1" height="1" opacity="0">
+    <animate id="loop" attributeName="x" from="-20" to="-20"
+             dur="26s" begin="0s;loop.end"/>
+  </rect>
+
+  <!-- title -->
+  <text x="640" y="34" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">
+    slopmortem · ingest &amp; query data flow
+  </text>
+  <text x="640" y="56" text-anchor="middle" font-size="13" fill="#475569">
+    one anyio.run · every stage async · OpenRouter → Anthropic · Qdrant hybrid retrieval
+  </text>
+
+  <!-- column dividers (static) -->
+  <line x1="640" y1="80" x2="640" y2="580" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="2 4"/>
+
+  <!-- column headers (static) -->
+  <text x="300" y="92" text-anchor="middle" font-size="14" font-weight="700" fill="#1e40af">
+    INGEST  ·  slopmortem ingest
+  </text>
+  <text x="980" y="92" text-anchor="middle" font-size="14" font-weight="700" fill="#047857">
+    QUERY  ·  slopmortem query "..."
+  </text>
+
+  <!-- =================== INGEST COLUMN =================== -->
+
+  <!-- Sources chip (t=1.0) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+1.0s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="60" y="110" width="480" height="36" rx="6" ry="6"
+          fill="#dbeafe" stroke="#1e40af" stroke-width="1.4"/>
+    <text x="300" y="133" text-anchor="middle" font-size="12" fill="#0f172a">
+      Sources  ·  HN Algolia  ·  Wayback  ·  curated YAML  ·  Crunchbase CSV
+    </text>
+  </g>
+
+  <!-- arrow Sources → I1 (t=1.5) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+1.5s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="300" y1="146" x2="300" y2="156" stroke="#2563eb" stroke-width="1.6" marker-end="url(#ah-blue)"/>
+  </g>
+
+  <!-- I1 Fetch (t=1.7) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+1.7s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="60" y="158" width="480" height="36" rx="6" ry="6"
+          fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.4"/>
+    <text x="300" y="181" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">Fetch</tspan>  ·  httpx + SSRF guard  ·  trafilatura strips nav / cookies
+    </text>
+  </g>
+
+  <!-- arrow I1 → I2 (t=2.3) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+2.3s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="300" y1="194" x2="300" y2="204" stroke="#2563eb" stroke-width="1.6" marker-end="url(#ah-blue)"/>
+  </g>
+
+  <!-- I2 Extract / length floor (t=2.5) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+2.5s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="60" y="206" width="480" height="36" rx="6" ry="6"
+          fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.4"/>
+    <text x="300" y="229" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">Extract + slop classifier</tspan>  ·  length floor  ·  Haiku reject → quarantine/
+    </text>
+  </g>
+
+  <!-- arrow I2 → I3 (t=3.1) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+3.1s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="300" y1="242" x2="300" y2="252" stroke="#2563eb" stroke-width="1.6" marker-end="url(#ah-blue)"/>
+  </g>
+
+  <!-- I3 LLM fan-out (t=3.3) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+3.3s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="60" y="254" width="480" height="52" rx="6" ry="6"
+          fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.4"/>
+    <text x="300" y="273" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">LLM fan-out</tspan>  ·  facet + rerank-summary  ·  2 Haiku calls / doc
+    </text>
+    <text x="300" y="291" text-anchor="middle" font-size="11" fill="#334155">
+      anyio.CapacityLimiter(20)  ·  1h prompt cache (warmed by 1 sync call)  ·  Tavily opt-in enrich
+    </text>
+  </g>
+
+  <!-- arrow I3 → I4 (t=3.9) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+3.9s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="300" y1="306" x2="300" y2="316" stroke="#2563eb" stroke-width="1.6" marker-end="url(#ah-blue)"/>
+  </g>
+
+  <!-- I4 Embed (t=4.1) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+4.1s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="60" y="318" width="480" height="36" rx="6" ry="6"
+          fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.4"/>
+    <text x="300" y="341" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">Embed</tspan>  ·  fastembed nomic-v1.5 dense (768d) + BM25 sparse
+    </text>
+  </g>
+
+  <!-- arrow I4 → I5 (t=4.7) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+4.7s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="300" y1="354" x2="300" y2="364" stroke="#2563eb" stroke-width="1.6" marker-end="url(#ah-blue)"/>
+  </g>
+
+  <!-- I5 Entity Resolution (t=4.9) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+4.9s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="60" y="366" width="480" height="36" rx="6" ry="6"
+          fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.4"/>
+    <text x="300" y="389" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">Entity resolution</tspan>  ·  domain → embed sim → Haiku tiebreak
+    </text>
+  </g>
+
+  <!-- arrow I5 → I6 (t=5.5) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+5.5s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="300" y1="402" x2="300" y2="412" stroke="#2563eb" stroke-width="1.6" marker-end="url(#ah-blue)"/>
+  </g>
+
+  <!-- I6 Merge (t=5.7) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+5.7s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="60" y="414" width="480" height="52" rx="6" ry="6"
+          fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.4"/>
+    <text x="300" y="433" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">Merge (transactional)</tspan>
+    </text>
+    <text x="300" y="451" text-anchor="middle" font-size="11" fill="#334155">
+      journal=pending → md via os.replace → qdrant upsert → journal=complete  ·  reconcile patches drift
+    </text>
+  </g>
+
+  <!-- I6 → Journal write (t=6.3) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+6.3s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <path d="M 160 466 C 160 540, 360 540, 360 600" fill="none"
+          stroke="#b45309" stroke-width="1.8" marker-end="url(#ah-amber)"/>
+    <text x="200" y="540" font-size="10" fill="#b45309" font-style="italic">write</text>
+  </g>
+
+  <!-- I6 → Markdown write (t=6.4) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+6.4s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <path d="M 300 466 C 300 540, 640 540, 640 600" fill="none"
+          stroke="#b45309" stroke-width="1.8" marker-end="url(#ah-amber)"/>
+    <text x="470" y="525" font-size="10" fill="#b45309" font-style="italic">write</text>
+  </g>
+
+  <!-- I6 → Qdrant write (t=6.5) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+6.5s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <path d="M 440 466 C 440 540, 920 540, 920 600" fill="none"
+          stroke="#b45309" stroke-width="1.8" marker-end="url(#ah-amber)"/>
+    <text x="700" y="510" font-size="10" fill="#b45309" font-style="italic">upsert</text>
+  </g>
+
+  <!-- =================== QUERY COLUMN =================== -->
+
+  <!-- Pitch chip (t=8.5) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+8.5s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="110" width="480" height="36" rx="6" ry="6"
+          fill="#dcfce7" stroke="#166534" stroke-width="1.4"/>
+    <text x="980" y="133" text-anchor="middle" font-size="12" fill="#0f172a">
+      User pitch  ·  slopmortem query  "we're building a marketplace for industrial scrap metal"
+    </text>
+  </g>
+
+  <!-- pitch → Q1 (t=9.0) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+9.0s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="146" x2="980" y2="156" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Q1 facet_extract (t=9.2) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+9.2s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="158" width="480" height="36" rx="6" ry="6"
+          fill="#ecfdf5" stroke="#047857" stroke-width="1.4"/>
+    <text x="980" y="181" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">facet_extract</tspan>  ·  Haiku  →  sector / business-model / stage
+    </text>
+  </g>
+
+  <!-- Q1 → Q2 (t=9.8) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+9.8s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="194" x2="980" y2="204" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Q2 embed (t=10.0) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+10.0s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="206" width="480" height="36" rx="6" ry="6"
+          fill="#ecfdf5" stroke="#047857" stroke-width="1.4"/>
+    <text x="980" y="229" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">Embed</tspan>  ·  dense + sparse  ·  fastembed local (free)
+    </text>
+  </g>
+
+  <!-- Q2 → Q3 (t=10.6) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+10.6s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="242" x2="980" y2="252" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Q3 retrieve (t=10.8) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+10.8s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="254" width="480" height="52" rx="6" ry="6"
+          fill="#ecfdf5" stroke="#047857" stroke-width="1.4"/>
+    <text x="980" y="273" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">Retrieve</tspan>  ·  Qdrant prefetch  (dense ‖ sparse ‖ facet-filtered)
+    </text>
+    <text x="980" y="291" text-anchor="middle" font-size="11" fill="#334155">
+      server-side Reciprocal Rank Fusion  →  top 30  ·  no HyDE / no rewrite
+    </text>
+  </g>
+
+  <!-- Qdrant → Q3 read (t=11.1) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+11.1s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <path d="M 920 600 C 920 480, 740 380, 740 290" fill="none"
+          stroke="#16a34a" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ah-green)"/>
+    <text x="800" y="475" font-size="10" fill="#15803d" font-style="italic">read</text>
+  </g>
+
+  <!-- Q3 → Q4 (t=11.4) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+11.4s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="306" x2="980" y2="316" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Q4 rerank (t=11.6) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+11.6s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="318" width="480" height="36" rx="6" ry="6"
+          fill="#ecfdf5" stroke="#047857" stroke-width="1.4"/>
+    <text x="980" y="341" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">llm_rerank</tspan>  ·  one Sonnet call  ·  JSON schema  →  top 5
+    </text>
+  </g>
+
+  <!-- Q4 → Q5 (t=12.2) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+12.2s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="354" x2="980" y2="364" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Q5 synthesize × N (t=12.4) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+12.4s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="366" width="480" height="52" rx="6" ry="6"
+          fill="#ecfdf5" stroke="#047857" stroke-width="1.4"/>
+    <text x="980" y="385" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">synthesize × N</tspan>  ·  Sonnet + tools (get_post_mortem / search_corpus)
+    </text>
+    <text x="980" y="403" text-anchor="middle" font-size="11" fill="#334155">
+      first call warms 1h cache (assert cache_creation_tokens&gt;0)  ·  then fan out under CapacityLimiter(N)
+    </text>
+  </g>
+
+  <!-- MD → Q5 tool read (t=12.7) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+12.7s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <path d="M 640 600 C 640 500, 740 470, 740 410" fill="none"
+          stroke="#16a34a" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#ah-green)"/>
+    <text x="650" y="495" font-size="10" fill="#15803d" font-style="italic">tool read</text>
+  </g>
+
+  <!-- Q5 → Q6 (t=13.0) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+13.0s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="418" x2="980" y2="428" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Q6 consolidate_risks (t=13.2) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+13.2s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="430" width="480" height="36" rx="6" ry="6"
+          fill="#ecfdf5" stroke="#047857" stroke-width="1.4"/>
+    <text x="980" y="453" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">consolidate_risks</tspan>  ·  Sonnet  ·  merge paraphrases · ground in pitch
+    </text>
+  </g>
+
+  <!-- Q6 → Q7 (t=13.8) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+13.8s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="466" x2="980" y2="476" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Q7 render (t=14.0) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+14.0s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="478" width="480" height="36" rx="6" ry="6"
+          fill="#ecfdf5" stroke="#047857" stroke-width="1.4"/>
+    <text x="980" y="501" text-anchor="middle" font-size="12" fill="#0f172a">
+      <tspan font-weight="600">render</tspan>  ·  Report → Markdown  ·  top risks · per-candidate · footer
+    </text>
+  </g>
+
+  <!-- Q7 → Output (t=14.6) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+14.6s" dur="0.3s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <line x1="980" y1="514" x2="980" y2="524" stroke="#16a34a" stroke-width="1.6" marker-end="url(#ah-green)"/>
+  </g>
+
+  <!-- Output (t=14.8) -->
+  <g opacity="0">
+    <animate attributeName="opacity" from="0" to="1" begin="loop.begin+14.8s" dur="0.4s" fill="freeze"/>
+    <animate attributeName="opacity" from="1" to="0" begin="loop.begin+24.5s" dur="0.5s" fill="freeze"/>
+    <rect x="740" y="526" width="480" height="36" rx="6" ry="6"
+          fill="#dcfce7" stroke="#166534" stroke-width="1.4"/>
+    <text x="980" y="549" text-anchor="middle" font-size="12" fill="#0f172a">
+      stdout  ·  ~$0.30  ·  90–130 s  ·  trace → Laminar
+    </text>
+  </g>
+
+  <!-- =================== STORAGE ROW (static) =================== -->
+
+  <rect x="240" y="600" width="240" height="60" rx="8" ry="8"
+        fill="#fef3c7" stroke="#b45309" stroke-width="1.4"/>
+  <text x="360" y="624" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a">MergeJournal</text>
+  <text x="360" y="642" text-anchor="middle" font-size="11" fill="#334155">sqlite WAL · busy_timeout=5s</text>
+  <text x="360" y="655" text-anchor="middle" font-size="10" fill="#64748b">pending → complete</text>
+
+  <rect x="520" y="600" width="240" height="60" rx="8" ry="8"
+        fill="#fef3c7" stroke="#b45309" stroke-width="1.4"/>
+  <text x="640" y="624" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a">post_mortems/</text>
+  <text x="640" y="642" text-anchor="middle" font-size="11" fill="#334155">raw/ · canonical/ · quarantine/</text>
+  <text x="640" y="655" text-anchor="middle" font-size="10" fill="#64748b">os.replace atomic writes</text>
+
+  <rect x="800" y="600" width="240" height="60" rx="8" ry="8"
+        fill="#fef3c7" stroke="#b45309" stroke-width="1.4"/>
+  <text x="920" y="624" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a">Qdrant</text>
+  <text x="920" y="642" text-anchor="middle" font-size="11" fill="#334155">dense (768d) + sparse (BM25)</text>
+  <text x="920" y="655" text-anchor="middle" font-size="10" fill="#64748b">facet payload · RRF</text>
+
+  <!-- =================== EXTERNAL ROW (static) =================== -->
+
+  <rect x="60" y="690" width="280" height="44" rx="6" ry="6"
+        fill="#f1f5f9" stroke="#64748b" stroke-width="1" stroke-dasharray="4 2"/>
+  <text x="200" y="709" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">OpenRouter</text>
+  <text x="200" y="725" text-anchor="middle" font-size="11" fill="#475569">→ Anthropic Sonnet · Haiku</text>
+
+  <rect x="360" y="690" width="200" height="44" rx="6" ry="6"
+        fill="#f1f5f9" stroke="#64748b" stroke-width="1" stroke-dasharray="4 2"/>
+  <text x="460" y="709" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Tavily</text>
+  <text x="460" y="725" text-anchor="middle" font-size="11" fill="#475569">opt-in enrich (ingest + synth)</text>
+
+  <rect x="580" y="690" width="280" height="44" rx="6" ry="6"
+        fill="#f1f5f9" stroke="#64748b" stroke-width="1" stroke-dasharray="4 2"/>
+  <text x="720" y="709" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">fastembed (local ONNX)</text>
+  <text x="720" y="725" text-anchor="middle" font-size="11" fill="#475569">nomic-v1.5 dense + BM25 sparse</text>
+
+  <rect x="880" y="690" width="340" height="44" rx="6" ry="6"
+        fill="#f1f5f9" stroke="#64748b" stroke-width="1" stroke-dasharray="4 2"/>
+  <text x="1050" y="709" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Laminar / OTel  ·  budget.py</text>
+  <text x="1050" y="725" text-anchor="middle" font-size="11" fill="#475569">trace IDs · per-invocation $ cap</text>
+
+  <!-- legend (static, very small) -->
+  <g font-size="10" fill="#475569">
+    <rect x="60" y="744" width="14" height="8" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1"/>
+    <text x="80" y="751">ingest stage</text>
+    <rect x="170" y="744" width="14" height="8" fill="#ecfdf5" stroke="#047857" stroke-width="1"/>
+    <text x="190" y="751">query stage</text>
+    <rect x="280" y="744" width="14" height="8" fill="#fef3c7" stroke="#b45309" stroke-width="1"/>
+    <text x="300" y="751">storage</text>
+    <line x1="360" y1="748" x2="390" y2="748" stroke="#b45309" stroke-width="1.8"/>
+    <text x="395" y="751">write</text>
+    <line x1="430" y1="748" x2="460" y2="748" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="5 3"/>
+    <text x="465" y="751">read</text>
+  </g>
+
+</svg>

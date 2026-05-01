@@ -2,9 +2,8 @@
 
 The corpus tools (``_get_post_mortem`` / ``_search_corpus``) delegate to a
 module-level :class:`Corpus` bound at CLI startup via :func:`_set_corpus`.
-The indirection keeps the tool functions as plain ``async def`` so they
-match the :class:`ToolSpec` signature contract (no closures, no bound
-methods).
+The indirection keeps tool functions as plain ``async def`` so they match the
+:class:`ToolSpec` signature contract (no closures, no bound methods).
 """
 
 from __future__ import annotations
@@ -56,11 +55,10 @@ class GetPostMortemArgs(BaseModel):
 class SearchFacets(BaseModel):
     """Closed-enum filters for ``search_corpus``; all optional.
 
-    Values are pulled from ``taxonomy.yml`` at module load (via ``*Lit``),
-    so the JSON schema carries an ``enum`` constraint per field. Anthropic's
-    grammar-constrained sampler / OpenAI strict tools mode then enforce
-    validity at decode time — the model can't emit a typo'd key or an
-    out-of-taxonomy value.
+    Values come from ``taxonomy.yml`` at module load (via ``*Lit``), so the
+    JSON schema carries an ``enum`` constraint per field. Anthropic's
+    grammar-constrained sampler / OpenAI strict tools mode enforces validity
+    at decode time — the model can't emit a typo or an out-of-taxonomy value.
     """
 
     sector: SectorLit | None = None

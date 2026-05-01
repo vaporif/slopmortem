@@ -144,7 +144,6 @@ def _synthesis_payload(canonical_id: str) -> str:
             "where_diverged": "Pitch is web-first; analogue was mobile-only.",
             "failure_causes": ["CAC > LTV"],
             "lessons_for_input": ["target larger ACVs"],
-            "sources": [f"https://news.ycombinator.com/item?id={canonical_id}"],
         }
     )
 

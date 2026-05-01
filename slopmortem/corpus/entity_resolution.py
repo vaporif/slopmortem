@@ -5,7 +5,7 @@
 canonical_id, the action (``create`` / ``merge`` / ``resolver_flipped`` /
 ``alias_blocked``), and any span events the caller should emit.
 
-Tiered IDs (spec lines 257-268):
+Tiered IDs:
 
 - Tier 1: registrable_domain (via ``tldextract``). Demoted if the domain is
   on the CODEOWNERS-protected ``platform_domains.yml`` blocklist, or if a
@@ -17,19 +17,19 @@ Tiered IDs (spec lines 257-268):
   canonical, with a Haiku tiebreaker inside the calibration band
   ``[0.65, 0.85]``.
 
-Atomicity contracts (spec line 538):
+Atomicity contracts:
 
 - Resolver-flip precheck runs first. If ``(source, source_id)`` was
   previously bound to a different canonical_id, the journal row lands as
-  ``resolver_flipped`` in its terminal state. No transient ``pending`` row,
+  ``resolver_flipped`` in its terminal state — no transient ``pending`` row,
   no ingest of the new canonical (``--reconcile`` owns repair).
 - Alias precheck runs before any ingest write. With an alias hint,
   :meth:`MergeJournal.upsert_alias_blocked` writes the alias edge and the
   journal row in one SQLite transaction; on failure both roll back.
 
 Tier-3 decisions cache in a module-private ``tier3_decisions`` SQLite table
-that shares the merge journal's ``db_path``. The cache key is
-lex-sorted so ``(A, B)`` and ``(B, A)`` collapse to one row.
+sharing the merge journal's ``db_path``. The cache key is lex-sorted so
+``(A, B)`` and ``(B, A)`` collapse to one row.
 """
 
 from __future__ import annotations
@@ -88,8 +88,8 @@ _CORPORATE_SUFFIXES_RE = re.compile(rf"\s+({'|'.join(_CORPORATE_SUFFIXES)})\b\.?
 # Founding-year delta: more than this many years apart → demote (recycled domain).
 _RECYCLED_DOMAIN_YEAR_DELTA = 10
 
-# Tier-3 calibration band: similarity in this range invokes the Haiku tiebreaker.
-# Values outside the band auto-decide. See spec line 264.
+# Tier-3 calibration band: similarity in this range triggers the Haiku
+# tiebreaker. Values outside the band auto-decide.
 _DEFAULT_TIER3_BAND: tuple[float, float] = (0.65, 0.85)
 
 _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
@@ -495,8 +495,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             the resolver auto-decides; ``None`` is fine if the band is never
             entered.
         haiku_model_id: Model id for the tier-3 tiebreaker.
-        tier3_band: Calibration band for the tier-3 tiebreaker; semantics
-            mirror spec line 264.
+        tier3_band: Calibration band for the tier-3 tiebreaker.
         force_similarity: Test-only. Skips the embedding cosine and uses
             this value directly.
         tiebreaker_max_tokens: Optional cap on completion tokens for the
@@ -510,9 +509,9 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
             transaction rolls back (see
             :meth:`MergeJournal.upsert_alias_blocked`).
     """
-    # Same-package coordination: the resolver's tier-3 cache and
-    # founding-year cache live in the same sqlite file as the merge journal.
-    # No public accessor by design (merge.py is read-only from this side).
+    # tier-3 cache and founding-year cache live in the same sqlite file as the
+    # merge journal. No public accessor on purpose — merge.py is read-only
+    # from this side.
     db_path = journal._db  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
     await to_thread.run_sync(_ensure_tier3_table_sync, db_path)
 
@@ -588,10 +587,9 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         )
 
     if founding_year is not None and _looks_tier1(candidate_id):
-        # content_sha256 keyed cache: the spec asks for content_sha256 as
-        # the second key component, but we don't have the merged content
-        # yet at resolve time. Use the entry's source_id as the per-row
-        # dedup key. Fine for v1 since the cache only needs *some* entry
+        # Ideally the cache key would include content_sha256, but the merged
+        # content doesn't exist yet at resolve time. The entry's source_id
+        # works as a per-row dedup key — v1's cache only needs *some* entry
         # per (registrable_domain, *) for the delta check.
         await to_thread.run_sync(
             _write_founding_year_sync,
@@ -642,7 +640,6 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
     ]
     if not siblings:
         return candidate_id
-    # Pick the lex-smallest sibling deterministically.
     sibling = sorted(siblings)[0]
     section_head_new = (entry.markdown_text or "")[:200]
     if force_similarity is not None:

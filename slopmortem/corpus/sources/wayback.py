@@ -1,10 +1,10 @@
 """Wayback enricher. Recovers content for curated rows whose live URL is dead.
 
-Per spec line 359 the v1 role is narrow: take a ``RawEntry`` whose ``raw_html``
-is empty, hit the Wayback availability API
-(``https://archive.org/wayback/available?url=<url>``), and if a snapshot is
-available, fetch it and stash the response in ``raw_html`` + ``markdown_text``.
-A no-op when ``raw_html`` is already populated.
+Narrow v1 role: take a ``RawEntry`` whose ``raw_html`` is empty, hit the
+Wayback availability API
+(``https://archive.org/wayback/available?url=<url>``), and if there's a
+snapshot, fetch it and stash the response in ``raw_html`` + ``markdown_text``.
+No-op when ``raw_html`` is already populated.
 """
 
 from __future__ import annotations

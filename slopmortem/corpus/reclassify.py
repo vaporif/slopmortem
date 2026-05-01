@@ -1,27 +1,27 @@
 """Re-score quarantined docs; declassify survivors out of the quarantine tree.
 
-Spec ref: Quarantine and reclassify line 252. ``slopmortem ingest --reclassify``
-re-runs the classifier when the threshold or model changes; declassified docs
-flow back toward entity resolution at the next normal ``ingest`` run.
+``slopmortem ingest --reclassify`` re-runs the classifier when the threshold
+or model changes; declassified docs flow back toward entity resolution on the
+next normal ``ingest`` run.
 
 The quarantine row primary key is ``(content_sha256, source, source_id)``
 (see :mod:`slopmortem.corpus.merge` schema). Quarantine markdown lives at
-``<post_mortems_root>/quarantine/<content_sha256>.md``. Survivors are moved
-to ``<post_mortems_root>/raw/<source>/<text_id>.md`` where ``text_id`` is the
+``<post_mortems_root>/quarantine/<content_sha256>.md``. Survivors move to
+``<post_mortems_root>/raw/<source>/<text_id>.md``, where ``text_id`` is the
 first 16 hex chars of the content_sha256 (consistent with
-:func:`slopmortem.ingest._text_id_for`'s 16-char shape and what the merge
-journal expects). The quarantine row is dropped via
+:func:`slopmortem.ingest._text_id_for` and what the merge journal expects).
+The quarantine row is dropped via
 :meth:`MergeJournal.drop_quarantine_row`. The next normal ``ingest`` run
 re-fetches the entry from its source and routes it through entity resolution.
 
 Deviation from the originating plan: the plan also called for inserting a
 ``merge_state="pending"`` row into the main merge journal. The schema's
 ``canonical_id TEXT NOT NULL`` constraint plus the resolver-flip semantics
-in :func:`slopmortem.corpus.entity_resolution.resolve_entity` make this
-unsafe without a real ``canonical_id``, which only entity resolution can
-assign. We therefore drop the quarantine row and move the file. Re-pickup
-relies on the next normal ingest re-fetching the entry through its source
-adapter and running entity resolution from scratch.
+in :func:`slopmortem.corpus.entity_resolution.resolve_entity` make this unsafe
+without a real ``canonical_id``, which only entity resolution can assign. So
+we drop the quarantine row and move the file. Re-pickup relies on the next
+normal ingest re-fetching the entry through its source adapter and running
+entity resolution from scratch.
 """
 
 from __future__ import annotations

@@ -49,10 +49,10 @@ class FastEmbedEmbeddingClient:
         await self._ensure_loaded()
 
     async def _ensure_loaded(self) -> TextEmbedding:
-        """Materialize the fastembed model on first use; idempotent.
+        """Materialize the fastembed model on first use. Idempotent.
 
         Lock-and-double-check so concurrent embed() calls (ingest fans out to
-        ``ingest_concurrency`` callers) do not each load a separate ~550MB
+        ``ingest_concurrency`` callers) don't each load a separate ~550MB
         model into memory.
         """
         if self._te is not None:
@@ -105,8 +105,8 @@ class FastEmbedEmbeddingClient:
 
         Vectors are L2-normalized before return so cosine == dot in Qdrant.
         fastembed routes ``nomic-ai/nomic-embed-text-v1.5`` through
-        ``PooledEmbedding`` (mean pooling without normalization), so we
-        normalize here.
+        ``PooledEmbedding`` (mean pooling, no normalization), so the normalize
+        happens here.
         """
         vectors: list[list[float]] = []
         for v in te.embed(texts):

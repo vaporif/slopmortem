@@ -1,8 +1,8 @@
 """Record cassettes for a set of inputs end to end.
 
 Handles the ephemeral Qdrant lifecycle, the recording wrappers, the two-step
-atomic dir swap, and forces Tavily off. Test authors call this when they
-want a per-test cassette set without re-implementing the plumbing.
+atomic dir swap, and forces Tavily off. Test authors call this when they want
+a per-test cassette set without re-implementing the plumbing.
 """
 
 from __future__ import annotations
@@ -40,8 +40,8 @@ _STALE_TMP_SECONDS = 24 * 3600
 def _sweep_stale_recording_dirs(root: Path, *, max_age_seconds: int) -> None:
     """Remove ``*.recording`` dirs older than ``max_age_seconds`` under ``root``.
 
-    Conservative best-effort: any stat/rm failure is swallowed. Ignored
-    silently when ``root`` does not yet exist.
+    Best-effort. Any stat/rm failure is swallowed. Silently no-op when
+    ``root`` doesn't exist yet.
     """
     if not root.exists():
         return
@@ -55,13 +55,13 @@ def _sweep_stale_recording_dirs(root: Path, *, max_age_seconds: int) -> None:
 
 
 def _atomic_swap(*, tmp_dir: Path, real_dir: Path) -> None:
-    """Two-step rename: real -> real.old, tmp -> real, rmtree real.old.
+    """Two-step rename: real → real.old, tmp → real, rmtree real.old.
 
-    POSIX ``rename(2)`` requires an empty destination, so we pre-rename the
-    existing real_dir out of the way before moving the tmp dir in. A
-    SIGKILL between the two replaces leaves either real_dir intact under
-    ``.old`` or the new dir under real_dir; never a half-populated tmp_dir
-    under the canonical name.
+    POSIX ``rename(2)`` needs an empty destination, so pre-rename the
+    existing real_dir out of the way before moving the tmp dir in. A SIGKILL
+    between the two replaces leaves either real_dir intact under ``.old`` or
+    the new dir under real_dir — never a half-populated tmp_dir under the
+    canonical name.
     """
     old = real_dir.parent / (real_dir.name + ".old")
     # Idempotent cleanup of any leftover ``.old`` from a prior crash.

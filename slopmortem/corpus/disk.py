@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # Front-matter values are JSON-y (str / int / float / bool / list / dict / None).
-# Pyright's `reportExplicitAny` blocks the obvious `Any` annotation, so we use
-# `object` and round-trip through `yaml.safe_dump`, which accepts anything.
+# Pyright's `reportExplicitAny` blocks the obvious `Any` annotation, so use
+# `object` and round-trip through `yaml.safe_dump`, which takes anything.
 type FrontMatter = dict[str, object]
 
 
@@ -32,15 +32,15 @@ def _render(body: str, front_matter: FrontMatter) -> str:
 
 def _write_sync(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Unique tmp suffix per call: two concurrent writes to the same path
-    # mustn't share a tmp filename and clobber each other's rename.
+    # Unique tmp suffix per call. Two concurrent writes to the same path
+    # mustn't share a tmp filename — they'd clobber each other's rename.
     tmp = path.with_suffix(f"{path.suffix}.{secrets.token_hex(8)}.tmp")
     try:
         tmp.write_text(contents, encoding="utf-8")
         tmp.replace(path)
     finally:
-        # On success, replace already renamed tmp. On failure, clean up so we
-        # don't leak a .tmp.
+        # On success, replace already renamed tmp. On failure, clean up so
+        # we don't leak a .tmp.
         if tmp.exists():
             tmp.unlink()
 

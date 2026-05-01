@@ -1,10 +1,9 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportIndexIssue=false, reportOptionalSubscript=false
 """Qdrant-backed corpus store: collection bootstrap, read methods, and chunk upsert.
 
-Vendor-SDK boundary module. Qdrant's models are loosely typed
-(``Optional`` / ``Mapping`` everywhere), so the per-file ``reportAny`` /
-``reportUnknown*`` silences match the pattern in
-``slopmortem/llm/openai_embeddings.py``.
+Vendor-SDK boundary module. Qdrant's models are loosely typed (``Optional``
+/ ``Mapping`` everywhere), so the per-file ``reportAny`` / ``reportUnknown*``
+silences match the pattern from ``slopmortem/llm/openai_embeddings.py``.
 """
 
 from __future__ import annotations
@@ -76,9 +75,9 @@ async def ensure_collection(client: AsyncQdrantClient, name: str, *, dim: int) -
 class QdrantCorpus:
     """Live :class:`Corpus` impl backed by a Qdrant service plus on-disk markdown tree.
 
-    Vectors and small payload live in Qdrant; the full canonical body lives
-    on disk under ``<post_mortems_root>/canonical/<text_id>.md`` and loads
-    on demand via ``get_post_mortem``.
+    Vectors and small payload live in Qdrant. The full canonical body lives
+    on disk under ``<post_mortems_root>/canonical/<text_id>.md`` and loads on
+    demand via ``get_post_mortem``.
     """
 
     def __init__(  # noqa: PLR0913 — orchestration knobs are public construction surface
@@ -97,16 +96,16 @@ class QdrantCorpus:
             client: Live :class:`AsyncQdrantClient`.
             collection: Qdrant collection name.
             post_mortems_root: Root for ``raw/`` and ``canonical/`` markdown.
-            facet_boost: Per-non-``"other"`` facet match boost added on top
-                of the inner RRF score. ``0.01`` matches the spec's
-                provisional value (lifts ~0.04 max for a 4-facet match
-                against an RRF ceiling of ~0.033).
+            facet_boost: Per-non-``"other"`` facet match boost added to the
+                inner RRF score. ``0.01`` matches the spec's provisional
+                value (lifts ~0.04 max for a 4-facet match against an RRF
+                ceiling of ~0.033).
             rrf_k: Reciprocal-rank-fusion ``k`` constant, passed through to
                 the inner :class:`Prefetch`. Default 60 matches Qdrant's
                 server default.
-            fetch_aliases: Optional async fetcher (canonical_id -> list of
-                alias edges). When ``None``, the alias-graph dedup pass is
-                a no-op (useful for tests that don't seed an aliases table).
+            fetch_aliases: Optional async fetcher (canonical_id -> alias
+                edges). When ``None``, the alias-graph dedup pass is a no-op
+                (handy for tests that don't seed an aliases table).
         """
         self._client = client
         self._collection = collection
@@ -115,7 +114,7 @@ class QdrantCorpus:
         self._rrf_k = rrf_k
         self._fetch_aliases = fetch_aliases
 
-    async def query(  # noqa: PLR0913 — Protocol method signature is the public contract; orchestration density mirrors spec lines 605-689
+    async def query(  # noqa: PLR0913 — Protocol method signature is the public contract
         self,
         *,
         dense: list[float],
@@ -127,24 +126,22 @@ class QdrantCorpus:
     ) -> list[Candidate]:
         """Hybrid retrieve top-K candidates with FormulaQuery facet boost.
 
-        Spec lines 605-689: an inner :class:`Prefetch` with dense+sparse
-        RRF fusion, an outer :class:`FormulaQuery` adding a per-facet boost
-        (skipping ``"other"``) on top of ``$score``, and a recency
-        :class:`Filter` with three branches (or one under
-        ``--strict-deaths``).
+        Inner :class:`Prefetch` with dense+sparse RRF fusion, outer
+        :class:`FormulaQuery` adding a per-facet boost (skipping ``"other"``)
+        on top of ``$score``, and a recency :class:`Filter` with three branches
+        (or one under ``--strict-deaths``).
 
         Over-fetches chunks at ``k_retrieve * 4`` so the in-Python collapse
         to parents has room. After collapse,
         :func:`collapse_alias_components` dedupes alias-graph connected
-        components and the result is truncated to ``k_retrieve``
-        Candidates.
+        components and the result truncates to ``k_retrieve``.
 
         Args:
             dense: Dense query vector.
             sparse: Sparse query vector as ``{token_id: weight}``.
             facets: Facets to soft-boost on; ``"other"`` values skipped.
             cutoff_iso: ISO-8601 lower bound for the recency filter, or
-                ``None`` to disable the filter.
+                ``None`` to disable filtering.
             strict_deaths: When ``True``, recency requires a known
                 ``failure_date >= cutoff_iso`` (branch A only).
             k_retrieve: Final number of parent candidates to return.
@@ -183,10 +180,9 @@ class QdrantCorpus:
             limit=k_retrieve * 2,
         )
 
-        # Build the facet-boost FilterCondition: skip "other" deliberately.
-        # Free-form (sub_sector, product_type, ...) and integer-typed year
-        # facets stay out of the soft-boost set. The closed taxonomy fields
-        # are the contract surface (spec line 605-648).
+        # Build the facet-boost FilterCondition. Skip "other" deliberately.
+        # Free-form fields (sub_sector, product_type, ...) and year integers
+        # stay out of the soft-boost set. Only closed taxonomy fields participate.
         boost_must: list[Any] = []  # pyright: ignore[reportExplicitAny]
         for fname in ("sector", "business_model", "customer_type", "geography", "monetization"):
             val = getattr(facets, fname)
@@ -209,11 +205,11 @@ class QdrantCorpus:
         )
 
         # TODO(prod): chunk over-fetch may under-fill long post-mortems (#25).
-        # The ``k_retrieve * 4`` multiplier assumes ~4 chunks per parent on
-        # average; long post-mortems can chunk into many more, silently
-        # under-filling the parent set after collapse. Measure ``len(best)``
-        # vs ``k_retrieve`` against a real corpus and bump the multiplier (or
-        # switch to a parent-aware fetcher) before going live.
+        # ``k_retrieve * 4`` assumes ~4 chunks per parent on average. Long
+        # post-mortems can chunk into many more, silently under-filling the
+        # parent set after collapse. Measure ``len(best)`` vs ``k_retrieve``
+        # against a real corpus and bump the multiplier (or switch to a
+        # parent-aware fetcher) before going live.
         resp = await self._client.query_points(
             collection_name=self._collection,
             prefetch=inner,
@@ -242,8 +238,7 @@ class QdrantCorpus:
         # fail the whole query.
         # TODO(perf): cache pydantic-validated payloads if hot (#26).
         # Keyed on (canonical_id, chunk_idx); payloads are immutable
-        # post-ingest, so the cache is safe. Skip until measurements
-        # justify it.
+        # post-ingest so the cache is safe. Skip until measurements justify it.
         ordered = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)
         candidates: list[Candidate] = []
         for cid, (score, payload) in ordered:
@@ -258,8 +253,8 @@ class QdrantCorpus:
         # edge referencing any retrieved canonical.
         # Known limitation: only fetches edges for canonicals in the top-K.
         # Alias chains longer than 1 hop where a mid-chain node was pruned
-        # upstream stay un-collapsed. See README "Known Limitations". Might
-        # revisit with a transitive-closure pass if it shows up in practice.
+        # upstream stay un-collapsed. See README "Known limitations".
+        # A transitive-closure pass would fix it if this shows up in practice.
         if self._fetch_aliases is not None and candidates:
             import asyncio  # noqa: PLC0415 — local to keep top-level imports lean
 
@@ -284,9 +279,9 @@ class QdrantCorpus:
         """Scroll-based search; returns a list of payload dicts.
 
         v1 uses Qdrant's payload scroll filtering on canonical_id and the
-        provided facet keys. Full text relevance arrives with the
-        FormulaQuery path in Task #7. The synthesis-tool layer asks for a
-        handful of hits at most.
+        provided facet keys. Full text relevance arrives with the FormulaQuery
+        path in Task #7. The synthesis-tool layer asks for a handful of hits
+        at most.
         """
         from qdrant_client.models import (  # noqa: PLC0415 — keep import surface lean
             FieldCondition,
@@ -321,8 +316,8 @@ class QdrantCorpus:
     async def upsert_chunk(self, point: Any) -> None:  # pyright: ignore[reportExplicitAny]
         """Upsert a single chunk point into the collection (used by ingest).
 
-        Ingest hands us :class:`slopmortem.ingest._Point` (a dataclass
-        with ``id``, ``vector={"dense": list[float], "sparse": dict[int, float]}``,
+        Ingest hands in a :class:`slopmortem.ingest._Point` (a dataclass with
+        ``id``, ``vector={"dense": list[float], "sparse": dict[int, float]}``,
         ``payload``). qdrant-client's ``PointsList`` is strict pydantic v2 and
         rejects arbitrary dataclasses, so build a real ``PointStruct`` here.
         """
@@ -355,10 +350,9 @@ def canonical_path_for(post_mortems_root: Path, canonical_id: str) -> Path:
 def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any:  # pyright: ignore[reportExplicitAny]
     """Compose the three-branch recency :class:`Filter` (single-branch in strict mode).
 
-    Branches A/B/C (spec lines 661-689) use derived
-    ``failure_date_unknown`` / ``founding_date_unknown`` boolean payloads
-    rather than ``IsNullCondition`` (qdrant#5148, documented slow under
-    indexed payloads).
+    Branches A/B/C use derived ``failure_date_unknown`` /
+    ``founding_date_unknown`` boolean payloads instead of ``IsNullCondition``
+    (qdrant#5148, documented slow under indexed payloads).
     """
     if cutoff_iso is None:
         return None
@@ -370,10 +364,10 @@ def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any
         MatchValue,
     )
 
-    # ``DatetimeRange.gte`` is typed ``datetime | date | None``. The runtime
+    # ``DatetimeRange.gte`` is typed ``datetime | date | None``. Runtime
     # accepts ISO strings via pydantic coercion, but the stub is strict, so
-    # parse once here to keep the rest narrow. Python 3.11+
-    # ``fromisoformat`` handles the trailing ``Z`` directly.
+    # parse once here to keep the rest narrow. Python 3.11+ ``fromisoformat``
+    # handles the trailing ``Z`` directly.
     cutoff_dt = datetime.fromisoformat(cutoff_iso)
 
     branch_a_must: list[Any] = [  # pyright: ignore[reportExplicitAny]

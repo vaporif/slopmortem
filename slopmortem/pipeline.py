@@ -1,17 +1,17 @@
-"""Top-level orchestration: ``run_query`` wires every stage of the slopmortem pipeline.
+"""Top-level orchestration: ``run_query`` wires every stage of the pipeline.
 
-Pure library code. No I/O, no stderr, no path/file access, no outbound HTTP. Every
-side-effecting capability arrives via injected dependencies (LLM client, embedding
-client, Corpus, Budget, optional progress callback). The CLI in ``slopmortem.cli``
-constructs those dependencies and calls ``run_query``.
+Pure library code: no I/O, no stderr, no file access, no outbound HTTP. Every
+side-effecting capability is injected (LLM client, embedding client, Corpus,
+Budget, optional progress callback). The CLI in ``slopmortem.cli`` builds those
+deps and calls ``run_query``.
 
-Failure model (spec §770-775):
-- A :class:`BudgetExceededError` raised by any stage truncates the run. Whatever
-  Synthesis values had already accumulated up to that point are still returned in
-  the final :class:`Report` with ``budget_exceeded=True``.
-- Per-candidate synthesis failures do NOT abort the run. ``synthesize_all`` already
-  swallows them as exception entries, and we filter them out of the final list so
-  ``Report.candidates`` only carries successful Synthesis values.
+Failure model:
+- A :class:`BudgetExceededError` from any stage truncates the run. Whatever
+  Synthesis values had accumulated up to that point come back in the final
+  :class:`Report` with ``budget_exceeded=True``.
+- Per-candidate synthesis failures do NOT abort the run. ``synthesize_all``
+  swallows them as exception entries; we filter those out so ``Report.candidates``
+  only carries successes.
 """
 
 from __future__ import annotations
@@ -47,11 +47,10 @@ _DAYS_PER_YEAR = 365
 
 
 class QueryPhase(StrEnum):
-    """Closed set of phase keys used by :class:`QueryProgress`.
+    """Phase keys used by :class:`QueryProgress`.
 
-    Mirrors :class:`slopmortem.ingest.IngestPhase`: a closed enum gives typo
-    safety (``"facetextract"`` fails at parse time) and exhaustiveness checks
-    in match statements and dict literals.
+    Mirrors :class:`slopmortem.ingest.IngestPhase`. Closed enum so typos
+    (``"facetextract"``) fail at parse time and match statements stay exhaustive.
     """
 
     FACET_EXTRACT = "facet_extract"
@@ -64,10 +63,9 @@ class QueryPhase(StrEnum):
 class QueryProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem query``.
 
-    Methods are no-op-safe: :class:`NullQueryProgress` keeps the orchestrator
-    decoupled from any specific UI library, while the CLI wires a Rich-based
-    implementation. Mirrors :class:`slopmortem.ingest.IngestProgress` so a
-    future shared base is straightforward.
+    Methods are no-op-safe. :class:`NullQueryProgress` is the default so the
+    orchestrator stays decoupled from any UI library; the CLI wires a Rich
+    implementation. Mirrors :class:`slopmortem.ingest.IngestProgress`.
     """
 
     def start_phase(self, phase: QueryPhase, total: int) -> None:
@@ -112,10 +110,10 @@ class NullQueryProgress:
 
 
 def cutoff_iso(years_filter: int | None) -> str | None:
-    """Convert a years-back recency filter into an ISO-8601 date string.
+    """Convert a years-back recency filter to an ISO-8601 date.
 
-    Retrieve takes ISO-8601 dates (``YYYY-MM-DD``), not full timestamps. Floor
-    to ``date()`` here so the cutoff stays stable across the hour the query runs.
+    Retrieve takes dates (``YYYY-MM-DD``), not timestamps. Flooring to
+    ``date()`` here keeps the cutoff stable across the query's hour.
     """
     if years_filter is None:
         return None
@@ -146,8 +144,8 @@ def _filter_synth_by_min_similarity(
     """Drop syntheses whose mean perspective score is below ``threshold``.
 
     Synthesis sometimes re-scores a candidate lower than rerank did, so a row
-    that cleared the rerank-side filter can still come back below the bar.
-    This second pass keeps the rendered table consistent with the threshold.
+    that cleared the rerank-side filter can come back below the bar. Second
+    pass keeps the rendered table consistent.
     """
     return [s for s in syntheses if _mean_similarity_score(s.similarity) >= threshold]
 
@@ -157,11 +155,10 @@ def _join_to_candidates(
 ) -> list[Candidate]:
     """Re-attach :class:`Candidate` payloads to the rerank-ordered ids.
 
-    The reranker returns :class:`ScoredCandidate` (id and perspective scores)
-    but synthesize needs the full :class:`Candidate` (with ``payload.body``).
-    We preserve the rerank order and silently drop any ranked id missing
-    from the retrieved set. Defensive only, since the reranker only sees
-    retrieved ids.
+    Reranker returns :class:`ScoredCandidate` (id + scores); synthesize needs
+    the full :class:`Candidate` with ``payload.body``. Preserves rerank order
+    and silently drops any ranked id missing from the retrieved set —
+    defensive, since the reranker only ever sees retrieved ids.
     """
     id_to_candidate = {c.canonical_id: c for c in retrieved}
     out: list[Candidate] = []
@@ -198,36 +195,36 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
 
     Args:
-        input_ctx: The user's :class:`InputContext` (name, description, optional
+        input_ctx: User's :class:`InputContext` (name, description, optional
             recency filter).
-        llm: Async :class:`LLMClient` shared by every LLM-driven stage.
+        llm: Async :class:`LLMClient` shared by every LLM stage.
         embedding_client: Async dense embedder used inside ``retrieve``.
-        corpus: Read-side :class:`Corpus` impl (Qdrant in production, fake in tests).
-        config: :class:`Config`. ``K_retrieve``, ``N_synthesize``, model ids,
+        corpus: Read-side :class:`Corpus` impl (Qdrant in prod, fake in tests).
+        config: :class:`Config` — ``K_retrieve``, ``N_synthesize``, model ids,
             ``strict_deaths``.
-        budget: Shared per-run :class:`Budget` for cost bookkeeping. Stages
-            book costs through their LLM/embedding clients; this function only
-            reads ``spent_usd``/``remaining`` at the end.
-        progress: Optional :class:`QueryProgress` sink for phase-level updates.
-            CLI wires a Rich-backed impl; passing ``None`` (or omitting) is
-            equivalent to :class:`NullQueryProgress`. Pipeline never writes to
-            stderr itself.
-        sparse_encoder: Optional override for the BM25 sparse encoder forwarded
-            to ``retrieve``. ``None`` lazy-loads the production fastembed model
-            on first call. The recording helper passes a wrapped encoder so it
-            can persist sparse cassettes alongside dense + LLM cassettes.
+        budget: Shared per-run :class:`Budget`. Stages book costs through their
+            clients; this function only reads ``spent_usd`` / ``remaining`` at
+            the end.
+        progress: Optional :class:`QueryProgress` sink. CLI wires a Rich impl;
+            ``None`` falls back to :class:`NullQueryProgress`. Pipeline never
+            writes stderr itself.
+        sparse_encoder: Optional BM25 encoder override forwarded to ``retrieve``.
+            ``None`` lazy-loads the production fastembed model on first call.
+            The recording helper passes a wrapped encoder so it can persist
+            sparse cassettes alongside dense + LLM cassettes.
 
     Returns:
-        A :class:`Report` carrying the input echo, generated_at, the synthesized
-        :class:`Synthesis` candidates (only successes; per-candidate exceptions
-        are dropped silently), and a :class:`PipelineMeta` with cost, latency,
-        trace id, and budget bookkeeping. ``budget_exceeded`` is ``True`` iff
-        a :class:`BudgetExceededError` truncated the run.
+        A :class:`Report` with the input echo, generated_at, the synthesized
+        :class:`Synthesis` values (successes only; per-candidate exceptions are
+        dropped silently), and a :class:`PipelineMeta` carrying cost, latency,
+        trace id, and budget bookkeeping. ``budget_exceeded`` is ``True`` iff a
+        :class:`BudgetExceededError` truncated the run.
     """
     t0 = time.monotonic()
     successes: list[Synthesis] = []
     top_risks = TopRisks()
     budget_exceeded = False
+    filtered_pre_synth = 0
 
     if Laminar.is_initialized():
         Laminar.set_span_attributes(
@@ -288,11 +285,14 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
 
         survivors = _filter_by_min_similarity(reranked.ranked, config.min_similarity_score)
         top_n = _join_to_candidates(retrieved, survivors)[: config.N_synthesize]
+        # Reranker is contracted to return exactly N_synthesize ranked rows
+        # (see llm_rerank), so any shortfall here is the min_similarity filter.
+        filtered_pre_synth = max(0, config.N_synthesize - len(top_n))
 
         progress.start_phase(QueryPhase.SYNTHESIZE, total=len(top_n))
-        # The first synthesize call runs alone to warm Anthropic's prompt cache
-        # before the fan-out (see ``synthesize_all``). Surface that on the bar
-        # so users don't read the 0/N as "stuck".
+        # First synthesize call runs alone to warm Anthropic's prompt cache before
+        # the fan-out (see synthesize_all). Surface it on the bar so users don't
+        # read the 0/N as "stuck".
         progress.set_phase_status(QueryPhase.SYNTHESIZE, "warming prompt cache")
         warmup_cleared = False
 
@@ -316,9 +316,9 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
         successes = _filter_synth_by_min_similarity(successes, config.min_similarity_score)
-        # Consolidate runs inside the try block so a successful run gets full
-        # top-risks. A budget-exceeded run skips it and returns the default-empty
-        # TopRisks initialized above; the truncated-run shape stays minimal.
+        # Consolidate runs inside the try so successful runs get full top-risks.
+        # A budget-exceeded run skips it and falls through to the default-empty
+        # TopRisks above, keeping the truncated-run shape minimal.
         top_risks = await consolidate_risks(
             successes,
             pitch=input_ctx.description,
@@ -352,5 +352,6 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             trace_id=_current_trace_id(),
             budget_remaining_usd=budget.remaining,
             budget_exceeded=budget_exceeded,
+            filtered_pre_synth=filtered_pre_synth,
         ),
     )

@@ -1,15 +1,15 @@
 """Per-host throttle and robots.txt cache for source adapters.
 
-* :func:`throttle_for`: process-wide token bucket keyed on host. Default budget
-  is 1 request per second per host. Built on an in-memory dict rather than
-  ``aiolimiter`` since the call surface is ~30 LOC and a new dep isn't worth it.
-* :func:`respect_robots`: fetch and parse the host's ``robots.txt`` once per
+* :func:`throttle_for` — process-wide token bucket keyed on host. Default
+  budget: 1 req/sec/host. In-memory dict instead of ``aiolimiter`` because the
+  call surface is ~30 LOC and a new dep isn't worth it.
+* :func:`respect_robots` — fetch and parse the host's ``robots.txt`` once per
   process, then ask :class:`urllib.robotparser.RobotFileParser` whether *url*
   is permitted for the configured user agent.
 
 Both helpers send outbound HTTP through :func:`slopmortem.http.safe_get` and
-don't care which source adapter calls them. Curated, HN, and Wayback all share
-the same instance. Crunchbase CSV reads the filesystem and skips both.
+don't care which source adapter calls them. Curated, HN, and Wayback all
+share one instance. Crunchbase CSV reads the filesystem and skips both.
 """
 
 from __future__ import annotations

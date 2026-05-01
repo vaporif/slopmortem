@@ -53,8 +53,8 @@ def _resolve_all(host: str) -> list[str]:
     except socket.gaierror as e:
         msg = f"cannot resolve host {host!r}: {e}"
         raise SSRFBlockedError(msg) from e
-    # getaddrinfo returns sockaddr tuples whose [0] element is a host string;
-    # cast keeps mypy from widening the set element type to ``str | int``.
+    # getaddrinfo returns sockaddr tuples whose [0] is a host string. The cast
+    # keeps mypy from widening the set element type to ``str | int``.
     return list({str(info[4][0]) for info in infos})
 
 
@@ -63,11 +63,11 @@ def _resolve_and_validate(url: str) -> str:
 
     Returns the original *url*'s host (for the ``Host`` header). Raises
     :class:`SSRFBlockedError` on any policy failure: non-http(s) scheme,
-    missing host, IMDS hostname, unresolvable host, or any resolved address
-    falling inside the blocklist (loopback, link-local, private, multicast,
-    reserved, unspecified, CGNAT, ULA, IPv6 link-local).
+    missing host, IMDS hostname, unresolvable host, or any resolved address in
+    the blocklist (loopback, link-local, private, multicast, reserved,
+    unspecified, CGNAT, ULA, IPv6 link-local).
 
-    Shared by :func:`safe_get` and :func:`safe_post` so a single code path
+    Shared by :func:`safe_get` and :func:`safe_post` so one code path
     enforces the policy.
     """
     parsed = urlparse(url)
@@ -113,11 +113,11 @@ async def safe_post(
     user_agent: str = USER_AGENT,
     timeout: float = 30.0,  # noqa: ASYNC109 - caller-controlled timeout is part of the public API
 ) -> httpx.Response:
-    """POST *json* to *url* via httpx after enforcing the same SSRF policy as ``safe_get``.
+    """POST *json* to *url* via httpx, same SSRF policy as ``safe_get``.
 
-    Mirrors :func:`safe_get`'s scheme and DNS validation by routing through
-    the shared :func:`_resolve_and_validate` helper. Used by the Tavily
-    synthesis tools (``/search`` and ``/extract`` are POST-only).
+    Routes through :func:`_resolve_and_validate` for the same scheme and DNS
+    checks. Used by the Tavily synthesis tools (``/search`` and ``/extract``
+    are POST-only).
     """
     host = _resolve_and_validate(url)
     merged_headers: dict[str, str] = {"Host": host, "User-Agent": user_agent}
