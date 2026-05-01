@@ -808,6 +808,22 @@ class _OptionalMofNCompleteColumn(MofNCompleteColumn):
         return super().render(task)
 
 
+class _OptionalETAColumn(TimeRemainingColumn):
+    """Renders ``eta <remaining>`` while running, hides otherwise.
+
+    Suppressed when the task is finished (Rich's default keeps painting
+    ``0:00``, which reads as "still computing, 0s left") and when the task
+    has no granular total — single-shot phases pulse, so a remaining-time
+    estimate is meaningless.
+    """
+
+    @override
+    def render(self, task: Task) -> Text:
+        if task.finished or task.total is None or task.total <= 1:
+            return Text("")
+        return Text("eta ", style="dim") + super().render(task)
+
+
 class _RichPhaseProgress[PhaseT: StrEnum]:
     """Rich-backed phase progress shared by ingest and query pipelines.
 
@@ -836,8 +852,7 @@ class _RichPhaseProgress[PhaseT: StrEnum]:
             _OptionalMofNCompleteColumn(),
             TextColumn("[dim]•"),
             TimeElapsedColumn(),
-            TextColumn("[dim]eta"),
-            TimeRemainingColumn(),
+            _OptionalETAColumn(),
             console=self._console,
             transient=False,
         )
