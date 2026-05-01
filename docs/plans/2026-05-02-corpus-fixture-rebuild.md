@@ -248,7 +248,7 @@ The seed dataset covers 10 distinct sectors. Each needs at least 2 known-dead st
 
 Task 1.5 already addressed the code bug Task 1 surfaced (Wikipedia-host tier-1 collapse). Proceed assuming each Wikipedia URL now demotes to tier-2 cleanly. If `git log` shows Task 1.5 was NOT committed, STOP and surface to user.
 
-- [ ] **Step 1: Read the seed dataset and the Task 1 report**
+- [x] **Step 1: Read the seed dataset and the Task 1 report**
 
 Read:
 - `tests/evals/datasets/seed.jsonl` — note each pitch's apparent sector and business model.
@@ -271,7 +271,7 @@ Map seed sectors to candidate dead startups. The mapping below is starting guida
 
 If any candidate is alive at the time of writing (check the Wikipedia infobox "Defunct" or "Status" line before adding), skip it and pick another from the same sector. Note skips inline in the YAML as a `# skipped: <reason>` comment so the next person doesn't re-evaluate the same name.
 
-- [ ] **Step 2: Edit `tests/fixtures/corpus_fixture_inputs.yml`**
+- [x] **Step 2: Edit `tests/fixtures/corpus_fixture_inputs.yml`**
 
 Append the new entries to the existing list (preserve the existing 10). Match the existing schema: `name: <slug>`, `description: <one-line>`, `url: https://en.wikipedia.org/wiki/<Article>`. The `description` field is dropped by the recorder (`slopmortem/evals/corpus_recorder.py:54`) but every existing row has one, so include it for consistency. Group entries by sector with a one-line comment header per sector for human readability.
 
@@ -298,7 +298,7 @@ Example shape:
 
 The `name` field is the slug used as the curated source's `startup_name`. Keep slugs lowercase-kebab-case to match the existing convention.
 
-- [ ] **Step 3: Validate the YAML parses**
+- [x] **Step 3: Validate the YAML parses**
 
 Run:
 ```bash
@@ -317,7 +317,7 @@ print(f'{len(data)} rows OK')
 ```
 Expected: prints `<N> rows OK` where 22 ≤ N ≤ 30. The script asserts the bound — it fails fast if you under- or over-shoot.
 
-- [ ] **Step 4: Spot-check one new URL is reachable and substantive**
+- [x] **Step 4: Spot-check one new URL is reachable and substantive**
 
 Pick one of the new entries (e.g. `Powa_Technologies`). Hit the URL via `curl -sI` and confirm `HTTP/2 200`. Don't fetch the body — that's the corpus recorder's job. We just need to verify the URL isn't a typo.
 
