@@ -126,7 +126,8 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
     )
     llm_parsed = LLMSynthesis.model_validate_json(result.text)
 
-    if llm_parsed.where_diverged.strip() == _INJECTION_MARKER:
+    injection_detected = llm_parsed.where_diverged.strip() == _INJECTION_MARKER
+    if injection_detected:
         _emit_event(SpanEvent.PROMPT_INJECTION_ATTEMPTED)
 
     return Synthesis.from_llm(
@@ -134,6 +135,7 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
         founding_date=candidate.payload.founding_date,
         failure_date=candidate.payload.failure_date,
         sources=candidate.payload.sources,
+        injection_detected=injection_detected,
     )
 
 

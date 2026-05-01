@@ -130,3 +130,5 @@ async def test_synthesize_ignores_injected_instructions(
     assert s.sources == cand.payload.sources
     # Span event was emitted for this turn.
     assert SpanEvent.PROMPT_INJECTION_ATTEMPTED in captured_events
+    # The flag must propagate so consolidate_risks can short-circuit.
+    assert s.injection_detected is True

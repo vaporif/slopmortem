@@ -147,6 +147,7 @@ class Synthesis(BaseModel):
     failure_causes: list[str]
     lessons_for_input: list[str]
     sources: list[str]
+    injection_detected: bool = False
 
     @classmethod
     def from_llm(
@@ -156,6 +157,7 @@ class Synthesis(BaseModel):
         founding_date: date | None,
         failure_date: date | None,
         sources: list[str],
+        injection_detected: bool = False,
     ) -> Synthesis:
         """Build a Synthesis from the LLM's output plus typed payload dates and sources."""
         lifespan = _months_between(founding_date, failure_date)
@@ -171,6 +173,7 @@ class Synthesis(BaseModel):
             failure_causes=llm_synth.failure_causes,
             lessons_for_input=llm_synth.lessons_for_input,
             sources=sources,
+            injection_detected=injection_detected,
         )
 
 
