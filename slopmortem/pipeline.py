@@ -18,10 +18,11 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from dateutil.relativedelta import relativedelta
 from lmnr import Laminar, observe
 
 from slopmortem.budget import BudgetExceededError
@@ -45,9 +46,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-_DAYS_PER_YEAR = 365
 
 
 class QueryPhase(StrEnum):
@@ -121,7 +119,7 @@ def cutoff_iso(years_filter: int | None) -> str | None:
     """
     if years_filter is None:
         return None
-    return (datetime.now(UTC) - timedelta(days=_DAYS_PER_YEAR * years_filter)).date().isoformat()
+    return (datetime.now(UTC) - relativedelta(years=years_filter)).date().isoformat()
 
 
 def _mean_similarity_score(scores: SimilarityScores) -> float:

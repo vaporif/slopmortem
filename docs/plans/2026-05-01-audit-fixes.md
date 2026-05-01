@@ -789,7 +789,7 @@ The function is `cutoff_iso` (public, no leading underscore — `pipeline.py:112
 
 **Steps:**
 
-- [ ] **Step 1: Add direct dep.**
+- [x] **Step 1: Add direct dep.**
 
 In `pyproject.toml:5-24`, add to the `dependencies` list:
 
@@ -799,7 +799,7 @@ In `pyproject.toml:5-24`, add to the `dependencies` list:
 
 It's already in `uv.lock` as a transitive — adding a direct constraint makes the use explicit. Run `uv sync` after.
 
-- [ ] **Step 2: Replace `timedelta(days=365 * years)` with `relativedelta(years=N)`.**
+- [x] **Step 2: Replace `timedelta(days=365 * years)` with `relativedelta(years=N)`.**
 
 In `slopmortem/pipeline.py`:
 
@@ -819,7 +819,7 @@ return (datetime.now(UTC) - relativedelta(years=years_filter)).date().isoformat(
 
 If `timedelta` is no longer used in this file after the change, remove the import.
 
-- [ ] **Step 3: Test.**
+- [x] **Step 3: Test.**
 
 ```python
 from slopmortem.pipeline import cutoff_iso
@@ -841,7 +841,7 @@ def test_cutoff_iso_none_passthrough():
 
 `pipeline.py` imports `datetime` as a name (`from datetime import UTC, datetime, timedelta` at line 20), so `monkeypatch.setattr("slopmortem.pipeline.datetime", ...)` rebinds the right symbol.
 
-- [ ] **Step 4: Verify.** `just test -k cutoff && just typecheck && just lint`.
+- [x] **Step 4: Verify.** `just test -k cutoff && just typecheck && just lint`.
 
 ---
 

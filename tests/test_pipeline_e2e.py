@@ -671,6 +671,25 @@ def testcutoff_iso_returns_iso_date_string() -> None:
     date.fromisoformat(out)
 
 
+def test_cutoff_iso_handles_leap_year_correctly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """relativedelta(years=4) from 2024-02-29 must land on 2020-02-29, not 2020-02-28."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    fixed_now = datetime(2024, 2, 29, 12, 0, 0, tzinfo=UTC)
+
+    class _Now:
+        @staticmethod
+        def now(tz: object) -> datetime:
+            return fixed_now
+
+    monkeypatch.setattr("slopmortem.pipeline.datetime", _Now)
+    assert cutoff_iso(years_filter=4) == "2020-02-29"
+
+
+def test_cutoff_iso_none_passthrough() -> None:
+    assert cutoff_iso(years_filter=None) is None
+
+
 def test_join_to_candidates_preserves_rerank_order() -> None:
     from slopmortem.models import (  # noqa: PLC0415
         PerspectiveScore,
