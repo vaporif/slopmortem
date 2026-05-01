@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from conftest import llm_canned_key
+from slopmortem import ingest as ingest_module
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.corpus.merge import MergeJournal
@@ -28,6 +29,8 @@ from tests.fakes.corpus import InMemoryCorpus
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    from slopmortem.corpus.chunk import Chunk
 
 _HAIKU = "anthropic/claude-haiku-4.5"
 _ENTRY_BODY = "Acme was a startup that sold widgets and ran out of money in 2021. " * 30
@@ -461,3 +464,120 @@ async def test_ingest_payload_sources_empty_when_url_missing(tmp_path, cfg):
     payload = corpus.points[0].payload
     assert payload["sources"] == []
     assert payload["provenance_id"] == "curated:Celsius Network"
+
+
+async def test_ingest_zero_chunks_skips_mark_complete(tmp_path, cfg, monkeypatch):
+    # Zero chunks must not produce a "complete" journal row: that combination
+    # is silent corpus drift.
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+    sources = [_ListSource(entries=[_entry()])]
+
+    # Stub the chunker to return [] without touching the tokenizer; we want
+    # the production guard to fire, not a real edge case.
+    def _no_chunks(_text: str, *, parent_canonical_id: str) -> list[Chunk]:
+        del parent_canonical_id
+        return []
+
+    monkeypatch.setattr(ingest_module, "chunk_markdown", _no_chunks)
+
+    result = await ingest(
+        sources=sources,
+        enrichers=[],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+
+    assert result.processed == 0
+    assert result.skipped_empty == 1
+    assert corpus.points == []
+    rows = await journal.fetch_all()
+    assert rows, "expected a pending journal row to exist"
+    assert all(r["merge_state"] != "complete" for r in rows)
+
+
+class _FailingDeleteCorpus(InMemoryCorpus):
+    """Re-merge variant whose ``delete_chunks_for_canonical`` always raises.
+
+    Other corpus methods stay inherited so the first ingest pass (which never
+    deletes) succeeds normally and seeds the journal for the second pass.
+    """
+
+    delete_calls: int = 0
+
+    @typing.override
+    async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
+        type(self).delete_calls += 1
+        msg = f"simulated qdrant transport error deleting {canonical_id}"
+        raise RuntimeError(msg)
+
+
+async def test_delete_failure_aborts_entry_marked_failed(tmp_path, cfg):
+    # Pass 1 seeds a complete row; pass 2 forces re-processing and the failing
+    # delete_chunks aborts the entry. Expected: result.failed counts it, no
+    # upsert lands, and the pass-1 row is untouched.
+    entry = _entry()
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+
+    # Pass 1: normal ingest, populates the journal as ``complete``.
+    await ingest(
+        sources=[_ListSource(entries=[entry])],
+        enrichers=[],
+        journal=journal,
+        corpus=InMemoryCorpus(),
+        llm=FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU),
+        embed_client=FakeEmbeddingClient(model=cfg.embed_model_id),
+        budget=Budget(cap_usd=cfg.max_cost_usd_per_ingest),
+        slop_classifier=FakeSlopClassifier(default_score=0.0),
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+    seeded = await journal.fetch_all()
+    assert seeded, "pass 1 should have seeded the journal"
+    canonical_id = seeded[0]["canonical_id"]
+
+    # Pass 2: re-process into the failing corpus. There are no real orphans
+    # to inspect (the corpus starts empty), so the test asserts on the abort
+    # itself: corpus.points stays empty and result.failed == 1.
+    failing = _FailingDeleteCorpus()
+    _FailingDeleteCorpus.delete_calls = 0
+    result = await ingest(
+        sources=[_ListSource(entries=[entry])],
+        enrichers=[],
+        journal=journal,
+        corpus=failing,
+        llm=FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU),
+        embed_client=FakeEmbeddingClient(model=cfg.embed_model_id),
+        budget=Budget(cap_usd=cfg.max_cost_usd_per_ingest),
+        slop_classifier=FakeSlopClassifier(default_score=0.0),
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+        force=True,
+    )
+
+    assert _FailingDeleteCorpus.delete_calls == 1
+    assert result.failed == 1
+    assert result.processed == 0
+    assert failing.points == []
+
+    # upsert_pending demoted the row before the delete; the failing delete
+    # aborts before mark_complete, so the row stays non-complete and reconcile
+    # picks it up on the next pass.
+    rows = await journal.fetch_by_key(canonical_id, entry.source, entry.source_id)
+    assert rows, "the journal row must still exist"
+    assert all(r["merge_state"] != "complete" for r in rows)

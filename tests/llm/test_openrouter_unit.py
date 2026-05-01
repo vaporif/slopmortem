@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel
 
-from slopmortem.budget import Budget
+from slopmortem.budget import Budget, BudgetExceededError
 from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.models import ToolSpec
 
@@ -133,3 +133,28 @@ async def test_cache_tokens_extracted(fake_sdk):
     assert r.cache_read_tokens == 80
     assert r.cache_creation_tokens == 20
     assert r.cost_usd == 0.01
+
+
+async def test_pre_call_gate_raises_when_budget_exhausted(fake_sdk):
+    # cap=0 leaves no remaining budget; the gate must fire before any SDK call.
+    c = OpenRouterClient(sdk=fake_sdk, budget=Budget(cap_usd=0.0))
+    with pytest.raises(BudgetExceededError, match="budget exhausted"):
+        await c.complete("hi")
+    assert fake_sdk.chat.completions.create.call_count == 0
+
+
+async def test_post_settle_raise_stops_subsequent_calls(fake_sdk):
+    # First call settles a cost that pushes spent over cap; settle raises out of
+    # complete(). The second call's pre-call gate then refuses to issue at all.
+    fake_sdk.chat.completions.create.return_value = _stub_response(
+        finish_reason="stop",
+        content="ok",
+        usage=_stub_usage(cost=2.0),
+    )
+    c = OpenRouterClient(sdk=fake_sdk, budget=Budget(cap_usd=1.0))
+    with pytest.raises(BudgetExceededError, match="spent"):
+        await c.complete("hi")
+    assert fake_sdk.chat.completions.create.call_count == 1
+    with pytest.raises(BudgetExceededError, match="exhausted"):
+        await c.complete("hi again")
+    assert fake_sdk.chat.completions.create.call_count == 1

@@ -152,7 +152,15 @@ def _render_footer(meta: PipelineMeta) -> str:
     )
 
 
-def _render_no_comparables_banner(threshold: float) -> str:
+def _render_no_comparables_banner(meta: PipelineMeta) -> str:
+    threshold = meta.min_similarity_score
+    dropped = meta.filtered_pre_synth + meta.filtered_post_synth
+    if dropped > 0:
+        return (
+            f"No comparables passed similarity threshold {threshold:.1f}. "
+            f"{dropped} candidate(s) were filtered out — try lowering "
+            f"min_similarity_score in slopmortem.toml."
+        )
     return (
         f"No comparables passed similarity threshold {threshold:.1f}. "
         "The pitch may be outside the corpus, or the threshold may be too strict "
@@ -181,7 +189,7 @@ def render(report: Report) -> str:
         "",
     ]
     if not report.candidates and not report.pipeline_meta.budget_exceeded:
-        sections.append(_render_no_comparables_banner(report.pipeline_meta.min_similarity_score))
+        sections.append(_render_no_comparables_banner(report.pipeline_meta))
         sections.append("")
     if report.top_risks.risks:
         sections.append(_render_top_risks(report.top_risks, report.candidates))

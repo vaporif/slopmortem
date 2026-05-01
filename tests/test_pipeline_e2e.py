@@ -421,6 +421,85 @@ async def test_run_query_forwards_sparse_encoder(monkeypatch: pytest.MonkeyPatch
     assert ctx.description in seen_calls
 
 
+async def test_run_query_marks_budget_exceeded_on_llm_overspend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LLM overspend (settle-side raise) truncates the run cleanly.
+
+    Companion to ``test_run_query_records_budget_exceeded``, which covers the
+    embedding/reserve path. The wrapper funnels each FakeLLMClient cost
+    through ``budget.settle`` so the first call pushes spent over cap.
+    """
+    candidates = [_candidate(f"cand-{i}") for i in range(6)]
+    cfg = _build_config(k_retrieve=6, n_synthesize=3)
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
+    fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
+    fake_corpus = _FakeCorpus(candidates=candidates)
+    # Cap sits just under the canned facet cost (0.001), so the first settle
+    # crosses the cap.
+    budget = Budget(cap_usd=0.0001)
+
+    @dataclass
+    class _SettlingFakeLLMClient:
+        """FakeLLMClient that routes each completion's cost through budget.settle."""
+
+        inner: FakeLLMClient
+        budget: Budget
+
+        async def complete(  # noqa: PLR0913 - mirrors LLMClient.complete signature
+            self,
+            prompt: str,
+            *,
+            system: str | None = None,
+            tools: list[Any] | None = None,
+            model: str | None = None,
+            cache: bool = False,
+            response_format: dict[str, Any] | None = None,
+            extra_body: dict[str, Any] | None = None,
+            max_tokens: int | None = None,
+        ) -> CompletionResult:
+            result = await self.inner.complete(
+                prompt,
+                system=system,
+                tools=tools,
+                model=model,
+                cache=cache,
+                response_format=response_format,
+                extra_body=extra_body,
+                max_tokens=max_tokens,
+            )
+            if result.cost_usd > 0.0:
+                await self.budget.settle("test:llm", result.cost_usd)
+            return result
+
+    settling_llm = _SettlingFakeLLMClient(
+        inner=FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL),
+        budget=budget,
+    )
+
+    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+
+    report = await run_query(
+        ctx,
+        llm=settling_llm,
+        embedding_client=fake_embed,
+        corpus=fake_corpus,
+        config=cfg,
+        budget=budget,
+    )
+
+    assert report.pipeline_meta.budget_exceeded is True
+    assert report.candidates == []
+    assert report.top_risks.risks == []
+    # The over-cap call's cost still got credited.
+    assert report.pipeline_meta.cost_usd_total > budget.cap_usd
+
+
 async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
     """BudgetExceededError mid-run sets ``budget_exceeded=True`` and returns cleanly."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
@@ -536,6 +615,25 @@ def testcutoff_iso_returns_iso_date_string() -> None:
     assert out is not None
     # Must be parseable as a date.
     date.fromisoformat(out)
+
+
+def test_cutoff_iso_handles_leap_year_correctly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """relativedelta(years=4) from 2024-02-29 must land on 2020-02-29, not 2020-02-28."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    fixed_now = datetime(2024, 2, 29, 12, 0, 0, tzinfo=UTC)
+
+    class _Now:
+        @staticmethod
+        def now(tz: object) -> datetime:
+            return fixed_now
+
+    monkeypatch.setattr("slopmortem.pipeline.datetime", _Now)
+    assert cutoff_iso(years_filter=4) == "2020-02-29"
+
+
+def test_cutoff_iso_none_passthrough() -> None:
+    assert cutoff_iso(years_filter=None) is None
 
 
 def test_join_to_candidates_preserves_rerank_order() -> None:
@@ -695,3 +793,200 @@ def test_filter_synth_by_min_similarity_drops_below_threshold() -> None:
     ]
     kept = _filter_synth_by_min_similarity(syntheses, threshold=4.0)
     assert [s.candidate_id for s in kept] == ["strong"]
+
+
+def _synth_payload_with_scores(
+    canonical_id: str, *, bm: float, mk: float, gtm: float, ss: float
+) -> str:
+    """Synth canned payload with caller-controlled perspective scores."""
+    return json.dumps(
+        {
+            "candidate_id": canonical_id,
+            "name": canonical_id,
+            "one_liner": "B2B fintech for SMB invoicing.",
+            "failure_date": "2023-01-01",
+            "lifespan_months": 60,
+            "similarity": {
+                "business_model": {"score": bm, "rationale": "x"},
+                "market": {"score": mk, "rationale": "x"},
+                "gtm": {"score": gtm, "rationale": "x"},
+                "stage_scale": {"score": ss, "rationale": "x"},
+            },
+            "why_similar": "Both target SMB invoicing.",
+            "where_diverged": "Pitch is web-first; analogue was mobile-only.",
+            "failure_causes": ["CAC > LTV"],
+            "lessons_for_input": ["target larger ACVs"],
+        }
+    )
+
+
+async def test_post_synth_filter_records_drop_on_pipeline_meta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Synth re-scores 2 of 3 candidates below threshold; meta records the drop."""
+    candidates = [_candidate(f"cand-{i}") for i in range(3)]
+    cfg = _build_config(k_retrieve=3, n_synthesize=3).model_copy(
+        update={"min_similarity_score": 4.5}
+    )
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+
+    # Build canned per-candidate synth replies: only cand-0 keeps a passing
+    # synth mean (5.5); cand-1 / cand-2 fall to 2.0 so the post-synth filter
+    # drops them. Rerank still emits 5.5 for all three so they all reach synth.
+    parsed_facets = Facets.model_validate_json(_facet_extract_payload())
+    facet_prompt = render_prompt("facet_extract", description=ctx.description)
+    rerank_prompt = render_prompt(
+        "llm_rerank",
+        pitch=ctx.description,
+        facets=parsed_facets.model_dump(),
+        top_n=cfg.N_synthesize,
+        candidates=[
+            {
+                "candidate_id": c.canonical_id,
+                "name": c.payload.name,
+                "summary": c.payload.summary,
+            }
+            for c in candidates
+        ],
+    )
+    canned: dict[tuple[str, str, str], FakeResponse | CompletionResult] = {
+        llm_canned_key("facet_extract", model=_FACET_MODEL, prompt=facet_prompt): FakeResponse(
+            text=_facet_extract_payload(), cost_usd=0.001
+        ),
+        llm_canned_key("llm_rerank", model=_RERANK_MODEL, prompt=rerank_prompt): FakeResponse(
+            text=_rerank_payload([c.canonical_id for c in candidates]), cost_usd=0.005
+        ),
+    }
+    synth_scores: dict[str, tuple[float, float, float, float]] = {
+        "cand-0": (7.0, 6.0, 5.0, 4.0),  # mean 5.5 — passes
+        "cand-1": (2.0, 2.0, 2.0, 2.0),  # mean 2.0 — dropped
+        "cand-2": (2.0, 2.0, 2.0, 2.0),  # mean 2.0 — dropped
+    }
+    for cand in candidates:
+        synth_prompt = render_prompt(
+            "synthesize", **synthesize_prompt_kwargs(cand, pitch=ctx.description)
+        )
+        bm, mk, gtm, ss = synth_scores[cand.canonical_id]
+        canned[llm_canned_key("synthesize", model=_SYNTH_MODEL, prompt=synth_prompt)] = (
+            FakeResponse(
+                text=_synth_payload_with_scores(cand.canonical_id, bm=bm, mk=mk, gtm=gtm, ss=ss),
+                cost_usd=0.01,
+                cache_creation_tokens=10,
+            )
+        )
+    # Only the surviving synth (cand-0) reaches consolidate.
+    consolidate_prompt = render_prompt(
+        "consolidate_risks",
+        pitch=ctx.description,
+        lessons=[
+            {
+                "candidate_id": "cand-0",
+                "candidate_name": "cand-0",
+                "lesson": "target larger ACVs",
+            }
+        ],
+        candidate_ids=["cand-0"],
+    )
+    canned[
+        llm_canned_key("consolidate_risks", model=_CONSOLIDATE_MODEL, prompt=consolidate_prompt)
+    ] = FakeResponse(
+        text=json.dumps(
+            {
+                "top_risks": [
+                    {
+                        "summary": "target larger ACVs",
+                        "applies_because": "pitch matches.",
+                        "raised_by": ["cand-0"],
+                        "severity": "medium",
+                    }
+                ],
+                "injection_detected": False,
+            }
+        ),
+        cost_usd=0.005,
+    )
+
+    fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
+    fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
+    fake_corpus = _FakeCorpus(candidates=candidates)
+    budget = Budget(cap_usd=2.0)
+
+    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+
+    report = await run_query(
+        ctx,
+        llm=fake_llm,
+        embedding_client=fake_embed,
+        corpus=fake_corpus,
+        config=cfg,
+        budget=budget,
+    )
+
+    assert report.pipeline_meta.filtered_post_synth == 2
+    assert len(report.candidates) == 1
+
+
+def test_render_banner_mentions_filter_drops() -> None:
+    """An empty candidates Report with post-synth drops renders the 'filtered out' banner."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from slopmortem.models import PipelineMeta, Report  # noqa: PLC0415
+    from slopmortem.render import render  # noqa: PLC0415
+
+    report = Report(
+        input=InputContext(name="newco", description="A B2B fintech for SMB invoicing"),
+        generated_at=datetime.now(UTC),
+        candidates=[],
+        pipeline_meta=PipelineMeta(
+            K_retrieve=6,
+            N_synthesize=3,
+            min_similarity_score=4.0,
+            models={"facet": "f", "rerank": "r", "synthesize": "s"},
+            cost_usd_total=0.0,
+            latency_ms_total=0,
+            trace_id=None,
+            budget_remaining_usd=2.0,
+            budget_exceeded=False,
+            filtered_pre_synth=0,
+            filtered_post_synth=3,
+        ),
+    )
+    rendered = render(report)
+    assert "filtered out" in rendered.lower()
+    assert "min_similarity" in rendered.lower()
+
+
+async def test_pipeline_logs_drops_at_info(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """min_similarity drops emit an INFO log on slopmortem.pipeline."""
+    import logging  # noqa: PLC0415
+
+    candidates = [_candidate(f"cand-{i}") for i in range(3)]
+    cfg = _build_config(k_retrieve=3, n_synthesize=3).model_copy(
+        update={"min_similarity_score": 9.5}  # above any rerank score → all drop pre-synth
+    )
+    ctx = InputContext(name="newco", description="A B2B fintech for SMB invoicing")
+    canned = _build_canned(
+        retrieved=candidates[: cfg.K_retrieve],
+        top_n=candidates[: cfg.N_synthesize],
+        ctx=ctx,
+    )
+    fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
+    fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
+    fake_corpus = _FakeCorpus(candidates=candidates)
+    budget = Budget(cap_usd=2.0)
+
+    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+
+    with caplog.at_level(logging.INFO, logger="slopmortem.pipeline"):
+        _ = await run_query(
+            ctx,
+            llm=fake_llm,
+            embedding_client=fake_embed,
+            corpus=fake_corpus,
+            config=cfg,
+            budget=budget,
+        )
+
+    assert any("min_similarity dropped" in r.message for r in caplog.records)
