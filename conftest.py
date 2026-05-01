@@ -56,6 +56,9 @@ def _scrub_body(body: bytes | str) -> bytes:
     return s.encode()
 
 
+# Cassettes use pytest-recording (vcrpy). Don't add respx alongside it. Both
+# patch the same httpx transport, whichever loads last wins, and you end up
+# with flakes in unrelated tests depending on fixture order.
 @pytest.fixture(scope="module")
 def vcr_config():
     def before_record_request(req):
