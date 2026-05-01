@@ -10,10 +10,10 @@ just query "We're building a US consumer crypto savings platform that pays high 
 
 ## Run
 
-- Synthesized: 5 / 5 candidates
-- Cost: $0.33
-- Latency: 127s
+- Synthesized: 4 / 5 candidates
+- Cost: $0.14
+- Latency: 104s
 - Trace: [Laminar](https://laminar.sh/shared/traces/55aecdaf-9ef2-5d49-83ca-cd7192da5a7c)
-- Top matches: Celsius Network, BlockFi, Voyager Digital, FTX, MF Global
+- Top matches: Celsius Network, BlockFi, Voyager Digital, FTX
 
 Full report: [`report.md`](report.md).
