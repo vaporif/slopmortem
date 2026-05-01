@@ -50,8 +50,8 @@ dev = [
 asyncio_mode = "auto"
 addopts = "-ra"
 markers = [
-  "requires_qdrant: integration test that requires a live Qdrant on localhost:6333",
-  "slow: test loads heavy assets (e.g., a ~550MB ONNX model). Excluded with -m 'not slow'.",
+  "requires_qdrant: needs a live Qdrant on localhost:6333",
+  "slow: loads heavy assets (e.g. the ~550MB ONNX model). Skip with -m 'not slow'.",
 ]
 
 [tool.ruff]
@@ -62,48 +62,46 @@ extend-exclude = ["external"]
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-  # Formatter conflicts (ruff format owns these)
+  # Owned by `ruff format`
   "W191",
   "E111", "E114", "E117",
   "D206", "D300",
   "Q000", "Q001", "Q002", "Q003",
   "COM812", "COM819",
   "ISC001", "ISC002",
-  # Mutually exclusive docstring rule pairs (must pick one)
-  "D203",  # conflicts with D211
-  "D213",  # conflicts with D212
-  # Practically unenforceable
-  "CPY001",  # missing copyright header on every file
-  # Deferred-work policy: TODOs must carry a tracked issue link (TD003 still
-  # enforces that), but the meta "you have a TODO, resolve it" warning is
-  # noise for items we have intentionally postponed.
+  # Mutually exclusive pairs — pick one
+  "D203",  # vs D211
+  "D213",  # vs D212
+  # Pointless to enforce
+  "CPY001",  # copyright header on every file
+  # TD003 still enforces "TODO needs an issue link"; the meta "you have a TODO"
+  # warning is noise for things we've parked deliberately.
   "FIX002",
-  # `Any` is used deliberately for SDK passthroughs and Jinja contexts;
-  # basedpyright's `reportAny` is the real gate (each site carries
-  # `# pyright: ignore[reportAny]` with rationale).
+  # `Any` is intentional for SDK passthroughs and Jinja contexts; basedpyright's
+  # `reportAny` is the real gate (each site carries `# pyright: ignore[reportAny]`).
   "ANN401",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
-  "S101",     # assert is fine in tests
-  "PLR2004",  # magic numbers fine in tests
-  "ANN",      # don't require annotations in tests
-  "D",        # don't require docstrings in tests
-  "SLF001",   # tests can poke private attrs
+  "S101",     # assert is the point in tests
+  "PLR2004",  # magic numbers OK in tests
+  "ANN",      # annotations not required
+  "D",        # docstrings not required
+  "SLF001",   # tests poke private attrs
   "ARG",      # unused fixture args are common
-  "INP001",   # tests dir doesn't need __init__.py
-  "ASYNC240", # blocking Path I/O is fine in async test setup/assertions
+  "INP001",   # tests/ is not a package
+  "ASYNC240", # blocking Path I/O is fine in async setup
 ]
 "conftest.py" = ["ANN", "D", "INP001"]
 "scripts/**" = [
-  "T201",     # CLI scripts print to stdout
-  "INP001",   # scripts dir is not a package
+  "T201",     # scripts print to stdout
+  "INP001",   # scripts/ is not a package
 ]
 
 [tool.ruff.lint.flake8-type-checking]
-# Pydantic needs annotation classes available at runtime for model_rebuild() /
-# json schema generation, so do not move their imports into TYPE_CHECKING.
+# Pydantic needs annotation classes at runtime for model_rebuild() / json schema
+# generation. Don't shuffle them into TYPE_CHECKING.
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
 runtime-evaluated-decorators = ["pydantic.validate_call"]
 
@@ -141,4 +139,4 @@ reportUnknownVariableType = false
 reportUnknownMemberType = false
 reportAny = false
 reportExplicitAny = false
-reportPrivateUsage = false  # tests poke private helpers; mirrors ruff's SLF001 exemption
+reportPrivateUsage = false  # tests poke private helpers; mirrors SLF001 above

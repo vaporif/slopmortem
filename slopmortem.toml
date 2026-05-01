@@ -1,62 +1,57 @@
-# How many candidates the dense+facet retriever pulls from Qdrant before
-# the LLM rerank trims to N_synthesize. Higher = more recall, more rerank
-# tokens. Must be >= N_synthesize (validated at load).
+# Candidates pulled from Qdrant before the LLM rerank trims to N_synthesize.
+# Higher = more recall, more rerank tokens. Must be >= N_synthesize.
 K_retrieve = 30
 
-# How many top-ranked candidates get full per-candidate post-mortem
-# synthesis (the expensive Sonnet calls). Each adds ~$0.05 to a query.
+# Top-ranked candidates that get full per-candidate synthesis (the expensive
+# Sonnet calls). Each one adds ~$0.05 to a query.
 N_synthesize = 5
 
-# Minimum mean perspective score (0-10) a candidate must hit to reach
-# synthesis. Cuts weak matches before paying synthesis cost. If nothing
-# clears the bar, the report renders an empty-state banner.
+# Mean perspective score (0-10) a candidate must hit to reach synthesis.
+# Cuts weak matches before paying the synthesis bill. If nothing clears it,
+# the report renders an empty-state banner.
 min_similarity_score = 4.0
 
-# Cap on parallel ingest workers (facet+summarize+slop_judge fan-out).
-# Anyio CapacityLimiter; raise for faster ingest, lower if you hit
-# OpenRouter rate limits.
+# Cap on parallel ingest workers (facet + summarize + slop_judge fan-out).
+# Anyio CapacityLimiter; raise for faster ingest, lower if OpenRouter rate-limits you.
 ingest_concurrency = 20
 
-# Per-non-"other" facet match boost added on top of the dense score in
-# Qdrant's formula query. Small by design: facets are a tiebreaker, not
-# the primary signal. See corpus/qdrant_store.py.
+# Per-non-"other" facet match boost added to the dense score in Qdrant's
+# formula query. Small on purpose — facets are a tiebreaker, not the
+# primary signal. See corpus/qdrant_store.py.
 facet_boost = 0.01
 
-# Reciprocal-rank-fusion k constant for blending dense + facet rankings
-# in retrieve. Larger k flattens rank differences; 60 is the standard RRF
-# default.
+# RRF k constant for blending dense + facet rankings. Larger k flattens
+# rank differences; 60 is the standard default.
 rrf_k = 60
 
-# Slop classifier threshold during ingest. Docs with slop_score above
-# this get routed to post_mortems/quarantine/ instead of canonical/.
-# Raise to be more permissive, lower to be stricter.
+# Slop classifier threshold during ingest. Above this, docs go to
+# post_mortems/quarantine/ instead of canonical/. Higher = more permissive.
 slop_threshold = 0.7
 
-# Hard token cap on the body text passed to facet/summarize/embed during
-# ingest. Long pages get truncated to keep per-doc cost bounded.
+# Hard token cap on body text passed to facet/summarize/embed during ingest.
+# Long pages get truncated so per-doc cost stays bounded.
 max_doc_tokens = 8000
 
-# Tier-3 entity-resolution calibration band (cosine similarity). Pairs
-# inside [0.65, 0.85] are ambiguous and trigger the Haiku tiebreaker;
-# above 0.85 auto-merge, below 0.65 auto-split. See
-# corpus/entity_resolution.py.
+# Tier-3 entity-resolution band (cosine similarity). Pairs in [0.65, 0.85]
+# trigger the Haiku tiebreaker; above 0.85 auto-merge, below 0.65 auto-split.
+# See corpus/entity_resolution.py.
 tier3_calibration_band = [0.65, 0.85]
 
-# Hard USD cap per query pipeline. Budget reserves+settles enforce it;
-# exceeding raises BudgetExceededError before another LLM call fires.
+# Hard USD cap per query. Budget reserves+settles enforce it; going over
+# raises BudgetExceededError before the next LLM call fires.
 max_cost_usd_per_query = 2.00
 
-# Hard USD cap per ingest run (covers facet, summarize, slop_judge,
-# tiebreaker, and embeddings combined).
+# Hard USD cap per ingest run (facet + summarize + slop_judge + tiebreaker
+# + embeddings combined).
 max_cost_usd_per_ingest = 15.00
 
-# OpenRouter base URL. Override only to point at a self-hosted
-# OpenAI-compatible router or a regional endpoint.
+# OpenRouter base URL. Override only for a self-hosted OpenAI-compatible
+# router or a regional endpoint.
 openrouter_base_url = "https://openrouter.ai/api/v1"
 
-# Per-stage model ids. Cheap stages (facet, summarize) use Haiku; the
-# reasoning stages (rerank, synthesize) use Sonnet. Any OpenRouter model
-# id works, but switching breaks recorded cassettes until re-recorded.
+# Per-stage models. Cheap stages (facet, summarize) use Haiku; reasoning
+# stages (rerank, synthesize) use Sonnet. Any OpenRouter model id works,
+# but switching invalidates recorded cassettes until re-recorded.
 model_facet = "anthropic/claude-haiku-4.5"
 model_summarize = "anthropic/claude-haiku-4.5"
 model_rerank = "anthropic/claude-sonnet-4.6"
@@ -64,8 +59,8 @@ model_synthesize = "anthropic/claude-sonnet-4.6"
 
 # Per-stage output token caps. Without these, OpenRouter holds upfront
 # credit for the model's full max-output ceiling (~64K on Claude), which
-# can fail with HTTP 402 on low-balance keys even though the actual
-# reply is much smaller. Sized to each stage's real output shape + slack.
+# can fail with HTTP 402 on low-balance keys even when the actual reply
+# is much smaller. Sized to each stage's real output shape plus slack.
 max_tokens_facet = 2000
 max_tokens_summarize = 1500
 max_tokens_rerank = 4000
@@ -74,40 +69,38 @@ max_tokens_slop_judge = 64
 max_tokens_tiebreaker = 256
 
 # Embedding provider. "fastembed" runs locally via ONNX (free, offline).
-# Switch to "openai" to use text-embedding-3-{small,large} via the
-# OPENAI_API_KEY. See README "Embedding provider".
+# "openai" uses text-embedding-3-{small,large} via OPENAI_API_KEY.
+# See README "Embedding provider".
 embedding_provider = "fastembed"
 
-# Embedding model id. For fastembed: nomic-ai/nomic-embed-text-v1.5
-# (768d). For openai: text-embedding-3-small / -large. Adding a new
-# OpenAI model also needs a row in EMBED_DIMS in
-# slopmortem/llm/openai_embeddings.py so Qdrant sizes the collection.
+# Embedding model id. fastembed: nomic-ai/nomic-embed-text-v1.5 (768d).
+# openai: text-embedding-3-small / -large. Adding a new OpenAI model
+# also needs a row in EMBED_DIMS in slopmortem/llm/openai_embeddings.py
+# so Qdrant sizes the collection correctly.
 embed_model_id = "nomic-ai/nomic-embed-text-v1.5"
 
 # OpenRouter retry policy on transient errors (5xx, 429, mid-stream
-# overloaded_error). Auth errors and 402 (insufficient credit) are
-# fatal: never retried. Backoff is exponential with 25% jitter.
+# overloaded_error). Auth errors and 402 (insufficient credit) are fatal
+# and never retried. Backoff is exponential with 25% jitter.
 retry_max_attempts = 3
 retry_initial_backoff = 1.0
 
 # Versioned tags baked into the Qdrant doc-fingerprint key alongside
 # embed_model_id. Bump either to invalidate the per-source skip cache
-# and force re-ingest after a taxonomy change or reliability-rank
-# rewrite. See ingest._fingerprint.
+# and force re-ingest after a taxonomy change or reliability-rank rewrite.
+# See ingest._fingerprint.
 taxonomy_version = "v1"
 reliability_rank_version = "v1"
 
-# Toggle the Tavily web-search tool inside the synthesize stage. When
-# true, each synthesis call may invoke tavily_search up to
-# tavily_calls_per_synthesis times to fill missing context. Requires
-# TAVILY_API_KEY.
+# Toggle the Tavily web-search tool inside synthesize. When true, each
+# synthesis call may invoke tavily_search up to tavily_calls_per_synthesis
+# times to fill missing context. Needs TAVILY_API_KEY.
 enable_tavily_synthesis = false
 
-# Toggle Laminar tracing (LMNR_PROJECT_API_KEY, LMNR_BASE_URL).
-# When false, all SpanEvent calls are no-ops.
+# Toggle Laminar tracing (LMNR_PROJECT_API_KEY, LMNR_BASE_URL). When false,
+# every SpanEvent call is a no-op.
 enable_tracing = false
 
-# When true, retrieval keeps only docs with a confirmed failure_date in
-# Corpus. Useful when you want post-mortems strictly from dead startups
-# and not still-alive cautionary tales.
+# When true, retrieval keeps only docs with a confirmed failure_date.
+# Useful when you want strictly dead startups, not still-alive cautionary tales.
 strict_deaths = false
