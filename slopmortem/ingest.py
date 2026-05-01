@@ -663,6 +663,19 @@ async def _facet_summarize_fanout(
     return await gather_resilient(*(_run(text) for _, text in entries))
 
 
+class ProcessOutcome(StrEnum):
+    """What _process_entry did with one entry.
+
+    Enum so the match in ingest() is exhaustive — a new variant nobody
+    handled fails typecheck instead of going silently uncounted.
+    """
+
+    PROCESSED = "processed"
+    SKIPPED = "skipped"
+    SKIPPED_EMPTY = "skipped_empty"
+    FAILED = "failed"
+
+
 async def _process_entry(  # noqa: PLR0913 - orchestration density is the contract
     entry: RawEntry,
     *,
@@ -678,17 +691,14 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     force: bool,
     span_events: list[str],
     sparse_encoder: SparseEncoder,
-) -> str:
+) -> ProcessOutcome:
     """Write raw + canonical + chunks for one resolved entry.
 
-    Returns:
-        One of ``"processed"``, ``"skipped"``, ``"skipped_empty"``, or
-        ``"failed"``. ``"skipped_empty"`` means chunking yielded zero chunks,
-        so ``mark_complete`` was deliberately skipped to avoid silent corpus
-        drift. ``"failed"`` means an in-flight write (currently only
-        ``delete_chunks_for_canonical`` on a re-merge) raised; the entry was
-        aborted before any upsert to keep prior orphans from being shadowed
-        by a fresh upsert layer.
+    SKIPPED_EMPTY: chunking yielded zero chunks, so we skip mark_complete
+    rather than journal an entry with no Qdrant points. FAILED: an in-flight
+    write raised (today: delete_chunks_for_canonical on a re-merge); we abort
+    the entry before any upsert so we don't shadow prior orphans with a fresh
+    upsert layer.
     """
     name = entry.source_id  # ingest's name extraction is best-effort in v1
     sector = fan.facets.sector
@@ -705,7 +715,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     )
     span_events.extend(res.span_events)
     if res.action in ("alias_blocked", "resolver_flipped"):
-        return "skipped"
+        return ProcessOutcome.SKIPPED
     canonical_id = res.canonical_id
 
     # v1 ingest only knows about THIS raw section. Merging with prior raw on
@@ -734,7 +744,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     if not force and existing:
         row = existing[0]
         if row.get("merge_state") == "complete" and row.get("skip_key") == skip_key:
-            return "skipped"
+            return ProcessOutcome.SKIPPED
 
     await journal.upsert_pending(
         canonical_id=canonical_id, source=entry.source, source_id=entry.source_id
@@ -793,7 +803,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
                 canonical_id,
                 exc,
             )
-            return "failed"
+            return ProcessOutcome.FAILED
     payload = _build_payload(
         facets=fan.facets,
         summary=fan.summary,
@@ -826,7 +836,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
             "ingest skipped mark_complete: zero chunks for canonical_id=%s",
             canonical_id,
         )
-        return "skipped_empty"
+        return ProcessOutcome.SKIPPED_EMPTY
 
     # mark_complete must run LAST: skip_key being set is the only signal a
     # later ingest uses to short-circuit this entry.
@@ -838,7 +848,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         merged_at=utcnow_iso(),
         content_hash=content_hash,
     )
-    return "processed"
+    return ProcessOutcome.PROCESSED
 
 
 @observe(
@@ -1122,14 +1132,15 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
                 f"FATAL {type(exc).__name__} on {entry.source}:{entry.source_id}: {exc}",
             )
             raise
-        if outcome == "processed":
-            result.processed += 1
-        elif outcome == "skipped":
-            result.skipped += 1
-        elif outcome == "skipped_empty":
-            result.skipped_empty += 1
-        elif outcome == "failed":
-            result.failed += 1
+        match outcome:
+            case ProcessOutcome.PROCESSED:
+                result.processed += 1
+            case ProcessOutcome.SKIPPED:
+                result.skipped += 1
+            case ProcessOutcome.SKIPPED_EMPTY:
+                result.skipped_empty += 1
+            case ProcessOutcome.FAILED:
+                result.failed += 1
         progress.advance_phase(IngestPhase.WRITE)
     progress.end_phase(IngestPhase.WRITE)
 
