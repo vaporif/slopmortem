@@ -15,6 +15,10 @@ from typing import TYPE_CHECKING, Any
 
 from qdrant_client.models import (
     Distance,
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    MatchValue,
     Modifier,
     SparseIndexParams,
     SparseVectorParams,
@@ -315,12 +319,6 @@ class QdrantCorpus:
 
     async def has_chunks(self, canonical_id: str) -> bool:
         """Return whether at least one chunk point exists for *canonical_id*."""
-        from qdrant_client.models import (  # noqa: PLC0415 — keep top-level imports lean
-            FieldCondition,
-            Filter,
-            MatchValue,
-        )
-
         records, _ = await self._client.scroll(
             collection_name=self._collection,
             scroll_filter=Filter(
@@ -344,13 +342,6 @@ class QdrantCorpus:
         transport/auth failures; the caller (``ingest._process_entry``) decides
         whether to abort the entry or proceed.
         """
-        from qdrant_client.http.models import (  # noqa: PLC0415 — keep top-level imports lean
-            FieldCondition,
-            Filter,
-            FilterSelector,
-            MatchValue,
-        )
-
         selector = FilterSelector(
             filter=Filter(
                 must=[

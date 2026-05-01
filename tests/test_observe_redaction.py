@@ -301,9 +301,9 @@ async def test_no_corpus_body_in_laminar_spans(monkeypatch: pytest.MonkeyPatch) 
     # active span processor on the underlying TracerProvider with one backed by
     # InMemorySpanExporter. This is the only intercept point exposed by
     # lmnr-python at this version; cf. module docstring.
-    # The try/finally must wrap initialize itself: if the processor swap raises
-    # (e.g. internal SDK shape changes), Laminar would otherwise stay initialized
-    # and leak a real trace_id into subsequent tests in the same xdist worker.
+    # initialize() must sit inside the try: if the processor swap below
+    # raises, Laminar would otherwise stay initialized and leak a real
+    # trace_id into other tests on the same xdist worker.
     try:
         Laminar.initialize(
             project_api_key="test-key",

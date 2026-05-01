@@ -157,5 +157,4 @@ async def test_post_settle_raise_stops_subsequent_calls(fake_sdk):
     assert fake_sdk.chat.completions.create.call_count == 1
     with pytest.raises(BudgetExceededError, match="exhausted"):
         await c.complete("hi again")
-    # Second call never reached the SDK.
     assert fake_sdk.chat.completions.create.call_count == 1

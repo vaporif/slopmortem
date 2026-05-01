@@ -25,7 +25,7 @@ type FrontMatter = dict[str, object]
 def _render(body: str, front_matter: FrontMatter) -> str:
     """Render YAML front-matter and body into a single markdown string."""
     post = frontmatter.Post(body)
-    post.metadata = dict(front_matter)
+    post.metadata = front_matter
     return frontmatter.dumps(post)
 
 

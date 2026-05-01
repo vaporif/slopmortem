@@ -7,7 +7,6 @@ detects ``_INJECTION_MARKER``, ``consolidate_risks`` must return empty
 
 from __future__ import annotations
 
-import json
 from datetime import date
 
 import pytest
@@ -75,22 +74,8 @@ async def test_all_clean_runs_consolidator(
         _synthesis(candidate_id="c1", name="Co1", lessons=["lesson 1"]),
         _synthesis(candidate_id="c2", name="Co2", lessons=["lesson 2"]),
     ]
-    payload = json.dumps(
-        {
-            "top_risks": [
-                {
-                    "summary": "Risk 1",
-                    "applies_because": "applies because",
-                    "raised_by": ["c1"],
-                    "severity": "medium",
-                }
-            ],
-            "injection_detected": False,
-        }
-    )
-    # Use empty canned to drive a NoCannedResponseError if the LLM is reached;
-    # we expect it to BE reached here, so capture the error and confirm a call
-    # was issued. (Avoids re-rendering the prompt for a key we don't need.)
+    # Empty canned dict: the consolidator runs but raises NoCannedResponseError.
+    # We assert on that raise rather than re-rendering a real prompt key.
     fake_llm = FakeLLMClient(canned={}, default_model=_MODEL)
     with pytest.raises(NoCannedResponseError):
         _ = await consolidate_risks(
@@ -101,9 +86,8 @@ async def test_all_clean_runs_consolidator(
             model=_MODEL,
             max_tokens=512,
         )
-    assert len(fake_llm.calls) == 1  # consolidator was invoked
+    assert len(fake_llm.calls) == 1
     assert SpanEvent.PROMPT_INJECTION_ATTEMPTED not in captured_events
-    del payload  # silence ruff F841 — kept for documentation of expected shape
 
 
 async def test_one_tainted_synthesis_short_circuits(
@@ -123,7 +107,7 @@ async def test_one_tainted_synthesis_short_circuits(
     )
 
     assert result == TopRisks(risks=[], injection_detected=True)
-    assert len(fake_llm.calls) == 0  # short-circuit before LLM
+    assert len(fake_llm.calls) == 0
     assert captured_events == [SpanEvent.PROMPT_INJECTION_ATTEMPTED]
 
 

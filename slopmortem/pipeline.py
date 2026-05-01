@@ -153,7 +153,6 @@ def _filter_synth_by_min_similarity(
 
 
 def _log_min_similarity_drop(*, dropped: int, total: int, stage: str, threshold: float) -> None:
-    """Emit one INFO line when ``dropped > 0``; no-op otherwise."""
     if dropped <= 0:
         return
     logger.info(
@@ -174,9 +173,8 @@ def _select_top_n(
 ) -> tuple[list[Candidate], int]:
     """Apply min-similarity, join to candidates, cap at N. Returns (top_n, dropped_count).
 
-    Reranker is contracted to return exactly ``n_synthesize`` ranked rows
-    (see llm_rerank), so any shortfall in the returned list is the
-    min_similarity filter dropping rows.
+    The reranker always returns exactly ``n_synthesize`` rows, so any
+    shortfall here is the min_similarity filter dropping rows.
     """
     survivors = _filter_by_min_similarity(ranked, threshold)
     _log_min_similarity_drop(
@@ -365,9 +363,8 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             stage="post-synth",
             threshold=config.min_similarity_score,
         )
-        # Consolidate runs inside the try so successful runs get full top-risks.
-        # A budget-exceeded run skips it and falls through to the default-empty
-        # TopRisks above, keeping the truncated-run shape minimal.
+        # Inside the try so a budget-exceeded run falls through to the default
+        # empty TopRisks instead of consolidating a partial set.
         top_risks = await consolidate_risks(
             successes,
             pitch=input_ctx.description,

@@ -776,10 +776,10 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     if existing:
         try:
             await corpus.delete_chunks_for_canonical(canonical_id)
-        except Exception as exc:  # noqa: BLE001 — qdrant-client raises a wide range of transport/auth/validation errors; recovery is the same for all.
-            # Failed delete on re-merge: re-upserting on top of orphans would
-            # leak higher-index chunks from a longer prior body. Abort entry,
-            # let reconcile catch the drift on a later pass.
+        except Exception as exc:  # noqa: BLE001 — qdrant-client raises many transport/auth/validation shapes; recovery is the same for all.
+            # If we re-upsert on top of orphans, longer prior bodies leak their
+            # higher-index chunks into the merged result. Abort the entry and
+            # let reconcile pick up the drift on a later pass.
             Laminar.event(
                 name=SpanEvent.INGEST_ENTRY_FAILED.value,
                 attributes={
@@ -815,9 +815,9 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         sparse_encoder=sparse_encoder,
     )
     if chunks_written == 0:
-        # Don't mark_complete: a "complete" journal row with no Qdrant points
-        # is silent corpus drift. Reconcile drift class (a) catches this
-        # retroactively; surface it now so the operator sees it.
+        # A "complete" row with zero Qdrant points is silent corpus drift, so
+        # leave the row pending and surface the empty chunk count to the
+        # operator. Reconcile catches the same class (a) drift retroactively.
         Laminar.event(
             name=SpanEvent.INGEST_ENTRY_EMPTY_CHUNKS.value,
             attributes={"canonical_id": canonical_id},

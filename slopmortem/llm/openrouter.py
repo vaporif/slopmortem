@@ -112,9 +112,9 @@ class OpenRouterClient:
         max_tokens: int | None = None,
     ) -> CompletionResult:
         """Run a chat completion, including the tool-call loop and transient-error retries."""
-        # Pre-call gate: cheap O(1) check so a runaway loop stops issuing calls
-        # once the budget is exhausted. Tail overshoot from concurrent in-flight
-        # calls is bounded by N_synthesize x per-call cost (see settle comment below).
+        # Cheap pre-call gate so a runaway loop stops issuing calls once the
+        # budget is exhausted. Concurrent fan-out can still tail-overshoot by
+        # up to N_synthesize x per-call cost.
         if self._budget.remaining <= 0.0:
             msg = f"budget exhausted: remaining {self._budget.remaining:.4f}"
             raise BudgetExceededError(msg)
@@ -197,11 +197,9 @@ class OpenRouterClient:
             raise RuntimeError(msg)
         finally:
             if cost > 0.0:
-                # OpenRouter returns the cost on response.usage.cost; we settle that figure
-                # without a prior reserve (true cost is unknown until usage lands). Budget.settle
-                # now raises when spent_usd > cap_usd, and the pre-call gate above stops further
-                # calls. Tail overshoot from concurrent fan-out is bounded by
-                # N_synthesize x per-call cost.
+                # True cost lands on response.usage.cost, so we settle without
+                # a prior reserve. settle() raises if spent crosses the cap;
+                # the pre-call gate above stops the next call.
                 await self._budget.settle("openrouter:complete", cost)
 
     @staticmethod

@@ -475,13 +475,11 @@ async def test_run_query_forwards_sparse_encoder(monkeypatch: pytest.MonkeyPatch
 async def test_run_query_marks_budget_exceeded_on_llm_overspend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A settle-side BudgetExceededError (LLM overspend) truncates the run cleanly.
+    """LLM overspend (settle-side raise) truncates the run cleanly.
 
-    Mirrors the embedding/reserve path covered by ``test_run_query_records_budget_exceeded``
-    but exercises the post-settle raise added in
-    ``slopmortem.budget.Budget.settle``. The wrapper wires FakeLLMClient
-    completions through ``budget.settle`` so the first call's cost pushes
-    spent over cap and the pipeline's BudgetExceededError handler runs.
+    Companion to ``test_run_query_records_budget_exceeded``, which covers the
+    embedding/reserve path. The wrapper funnels each FakeLLMClient cost
+    through ``budget.settle`` so the first call pushes spent over cap.
     """
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
     cfg = _build_config(k_retrieve=6, n_synthesize=3)
@@ -493,13 +491,13 @@ async def test_run_query_marks_budget_exceeded_on_llm_overspend(
     )
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
     fake_corpus = _FakeCorpus(candidates=candidates)
-    # Cap is positive but well under the canned facet cost (0.001), so the
-    # first settle pushes spent_usd over cap and raises.
+    # Cap sits just under the canned facet cost (0.001), so the first settle
+    # crosses the cap.
     budget = Budget(cap_usd=0.0001)
 
     @dataclass
     class _SettlingFakeLLMClient:
-        """FakeLLMClient wrapper that funnels each completion's cost through budget.settle."""
+        """FakeLLMClient that routes each completion's cost through budget.settle."""
 
         inner: FakeLLMClient
         budget: Budget
@@ -547,10 +545,9 @@ async def test_run_query_marks_budget_exceeded_on_llm_overspend(
     )
 
     assert report.pipeline_meta.budget_exceeded is True
-    # Truncated-run shape: no synthesis candidates, empty top risks, no crash.
     assert report.candidates == []
     assert report.top_risks.risks == []
-    # The cost from the call that pushed us over still landed.
+    # The over-cap call's cost still got credited.
     assert report.pipeline_meta.cost_usd_total > budget.cap_usd
 
 

@@ -467,8 +467,8 @@ async def test_ingest_payload_sources_empty_when_url_missing(tmp_path, cfg):
 
 
 async def test_ingest_zero_chunks_skips_mark_complete(tmp_path, cfg, monkeypatch):
-    # When chunking yields zero chunks, mark_complete must NOT run: a "complete"
-    # journal row with no Qdrant points is silent corpus drift.
+    # Zero chunks must not produce a "complete" journal row: that combination
+    # is silent corpus drift.
     journal = MergeJournal(tmp_path / "j.sqlite")
     await journal.init()
     corpus = InMemoryCorpus()
@@ -478,8 +478,8 @@ async def test_ingest_zero_chunks_skips_mark_complete(tmp_path, cfg, monkeypatch
     classifier = FakeSlopClassifier(default_score=0.0)
     sources = [_ListSource(entries=[_entry()])]
 
-    # Force the chunker to return [] without altering tokenizer behavior; the
-    # production guard is what's under test here.
+    # Stub the chunker to return [] without touching the tokenizer; we want
+    # the production guard to fire, not a real edge case.
     def _no_chunks(_text: str, *, parent_canonical_id: str) -> list[Chunk]:
         del parent_canonical_id
         return []
@@ -525,10 +525,9 @@ class _FailingDeleteCorpus(InMemoryCorpus):
 
 
 async def test_delete_failure_aborts_entry_marked_failed(tmp_path, cfg):
-    # Re-merge path: ingest pass 1 lands a complete row for the entry; pass 2
-    # forces re-processing; delete_chunks raises. Contract: the entry is
-    # tallied under ``result.failed`` and no new upsert lands (no orphan
-    # shadowing). The pre-existing complete row from pass 1 is unchanged.
+    # Pass 1 seeds a complete row; pass 2 forces re-processing and the failing
+    # delete_chunks aborts the entry. Expected: result.failed counts it, no
+    # upsert lands, and the pass-1 row is untouched.
     entry = _entry()
     journal = MergeJournal(tmp_path / "j.sqlite")
     await journal.init()
@@ -551,10 +550,9 @@ async def test_delete_failure_aborts_entry_marked_failed(tmp_path, cfg):
     assert seeded, "pass 1 should have seeded the journal"
     canonical_id = seeded[0]["canonical_id"]
 
-    # Pass 2: force re-processing into the failing corpus. _FailingDeleteCorpus
-    # has zero stored points, so even after the delete blows up there are no
-    # orphans to inspect — the assertion is that the entry never reaches
-    # upsert (corpus.points stays empty) and the run reports failed=1.
+    # Pass 2: re-process into the failing corpus. There are no real orphans
+    # to inspect (the corpus starts empty), so the test asserts on the abort
+    # itself: corpus.points stays empty and result.failed == 1.
     failing = _FailingDeleteCorpus()
     _FailingDeleteCorpus.delete_calls = 0
     result = await ingest(
@@ -575,12 +573,11 @@ async def test_delete_failure_aborts_entry_marked_failed(tmp_path, cfg):
     assert _FailingDeleteCorpus.delete_calls == 1
     assert result.failed == 1
     assert result.processed == 0
-    assert failing.points == []  # never reached the upsert layer
+    assert failing.points == []
 
-    # ``upsert_pending`` demotes the row to ``pending`` before the delete
-    # attempt; the failing delete then aborts before ``mark_complete``. Net
-    # result: the row exists but is not in ``complete`` state — exactly the
-    # signal reconcile uses to retry on a later pass.
+    # upsert_pending demoted the row before the delete; the failing delete
+    # aborts before mark_complete, so the row stays non-complete and reconcile
+    # picks it up on the next pass.
     rows = await journal.fetch_by_key(canonical_id, entry.source, entry.source_id)
     assert rows, "the journal row must still exist"
     assert all(r["merge_state"] != "complete" for r in rows)

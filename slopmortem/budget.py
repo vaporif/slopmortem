@@ -39,10 +39,9 @@ class Budget:
     async def settle(self, reservation_id: str, actual_usd: float) -> None:
         """Drop the reservation, credit *actual_usd*, raise if spent exceeds cap.
 
-        Raising after the fact still bounds total spend: the call that pushed over
-        is paid for, but no further call gets past the pre-call gate or a future
-        reserve(). Concurrent fan-out can briefly run with multiple in-flight
-        calls past the cap; this is documented and accepted.
+        The call that crossed the cap is already paid for; raising here just
+        stops the next one. Concurrent fan-out can briefly run with multiple
+        in-flight calls past the cap.
         """
         async with self.lock:
             self.reserved.pop(reservation_id, None)
