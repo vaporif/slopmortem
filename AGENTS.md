@@ -4,7 +4,7 @@ Project-specific conventions for AI coding agents. Read this before touching cod
 
 ## What this project is
 
-Local CLI that takes a startup pitch and returns a "premortem" — dead/struggling startups that tried something similar, plus consolidated risks. Pipeline: `ingest` (sources → slop classify → entity-resolve → Qdrant) and `query` (facet → retrieve → rerank → synthesize → consolidate_risks). Python 3.13+, async via `anyio`, Pydantic v2.
+Local CLI that takes a startup pitch and returns a "slopmortem" — dead/struggling startups that tried something similar, plus consolidated risks. Pipeline: `ingest` (sources → slop classify → entity-resolve → Qdrant) and `query` (facet → retrieve → rerank → synthesize → consolidate_risks). Python 3.13+, async via `anyio`, Pydantic v2.
 
 ## Commands
 

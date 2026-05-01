@@ -1,4 +1,4 @@
-# Premortem report for (unnamed)
+# Slopmortem report for (unnamed)
 
 Pitch: We're building a US consumer crypto savings platform that pays high yield on customer deposits by lending them to institutional borrowers and market makers. Web + mobile, no account fees, tiered interest rates by lock-up duration. Already custodying M of customer assets in stablecoins and BTC.
 
