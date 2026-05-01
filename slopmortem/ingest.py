@@ -112,8 +112,8 @@ _PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_c
 
 
 @runtime_checkable
-class Corpus(Protocol):
-    """Narrow corpus surface ingest depends on; production is :class:`QdrantCorpus`."""
+class IngestCorpus(Protocol):
+    """Write-side corpus surface ingest depends on; production is :class:`QdrantCorpus`."""
 
     async def upsert_chunk(self, point: object) -> None:
         """Upsert one chunk point into the underlying store."""
@@ -214,28 +214,6 @@ class _Point:
     id: str
     vector: dict[str, object]
     payload: dict[str, object]
-
-
-@dataclass
-class InMemoryCorpus:
-    """In-memory :class:`Corpus` impl used by ingest tests; not used in production."""
-
-    points: list[_Point] = field(default_factory=list)
-
-    async def upsert_chunk(self, point: object) -> None:
-        """Append the point to the in-memory list. Always succeeds."""
-        if not isinstance(point, _Point):
-            msg = f"InMemoryCorpus expects _Point, got {type(point).__name__}"
-            raise TypeError(msg)
-        self.points.append(point)
-
-    async def has_chunks(self, canonical_id: str) -> bool:
-        """Return whether any point has the given parent canonical id."""
-        return any(p.payload.get("canonical_id") == canonical_id for p in self.points)
-
-    async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
-        """Drop every point whose payload references *canonical_id*."""
-        self.points = [p for p in self.points if p.payload.get("canonical_id") != canonical_id]
 
 
 @dataclass
@@ -588,7 +566,7 @@ async def _embed_and_upsert(  # noqa: PLR0913 - every dependency is required at 
     canonical_id: str,
     body: str,
     payload: CandidatePayload,
-    corpus: Corpus,
+    corpus: IngestCorpus,
     embed_client: EmbeddingClient,
     embed_model_id: str,
     sparse_encoder: SparseEncoder,
@@ -668,7 +646,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     body: str,
     fan: _FanoutResult,
     journal: MergeJournal,
-    corpus: Corpus,
+    corpus: IngestCorpus,
     embed_client: EmbeddingClient,
     llm: LLMClient,
     config: Config,
@@ -823,7 +801,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     sources: Sequence[Source],
     enrichers: Sequence[Enricher],
     journal: MergeJournal,
-    corpus: Corpus,
+    corpus: IngestCorpus,
     llm: LLMClient,
     embed_client: EmbeddingClient,
     budget: Budget,  # noqa: ARG001 - consumed by LLM/embed clients at construction time
@@ -843,7 +821,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             log and the run continues.
         enrichers: Optional pre-classifier enrichers (e.g. wayback fallback).
         journal: SQLite merge journal — pending/complete writers and quarantine.
-        corpus: :class:`Corpus` write surface. Production is :class:`QdrantCorpus`.
+        corpus: :class:`IngestCorpus` write surface. Production is :class:`QdrantCorpus`.
         llm: LLM client for facet_extract + summarize_for_rerank.
         embed_client: Dense embedding client. Vector dim is read at the
             client level; ingest never hardcodes dimensions.

@@ -100,8 +100,7 @@ if TYPE_CHECKING:
     from slopmortem.corpus.merge import MergeJournal
     from slopmortem.corpus.sources.base import Enricher, Source
     from slopmortem.corpus.store import Corpus
-    from slopmortem.ingest import Corpus as IngestCorpus
-    from slopmortem.ingest import SlopClassifier
+    from slopmortem.ingest import IngestCorpus, SlopClassifier
     from slopmortem.llm.client import LLMClient
     from slopmortem.llm.embedding_client import EmbeddingClient
     from slopmortem.models import Report

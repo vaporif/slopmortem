@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
-from conftest import llm_canned_key
+from conftest import FakeCorpus, llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
@@ -245,57 +245,6 @@ def _build_canned(
     return canned
 
 
-@dataclass
-class _FakeCorpus:
-    """In-memory :class:`Corpus` for pipeline tests; no Qdrant, no fastembed."""
-
-    candidates: list[Candidate]
-    queries: list[dict[str, object]] = field(default_factory=list)
-
-    async def query(  # noqa: PLR0913 - Protocol contract dictates the signature
-        self,
-        *,
-        dense: list[float],
-        sparse: dict[int, float],
-        facets: Facets,
-        cutoff_iso: str | None,
-        strict_deaths: bool,
-        k_retrieve: int,
-    ) -> list[Candidate]:
-        self.queries.append(
-            {
-                "dense_dim": len(dense),
-                "sparse_keys": list(sparse.keys()),
-                "facets": facets.model_dump(),
-                "cutoff_iso": cutoff_iso,
-                "strict_deaths": strict_deaths,
-                "k_retrieve": k_retrieve,
-            }
-        )
-        return list(self.candidates[:k_retrieve])
-
-    async def get_post_mortem(self, canonical_id: str) -> str:
-        for c in self.candidates:
-            if c.canonical_id == canonical_id:
-                return c.payload.body
-        msg = f"unknown canonical_id {canonical_id!r}"
-        raise KeyError(msg)
-
-    async def search_corpus(
-        self, q: str, facets: dict[str, str] | None = None
-    ) -> list[dict[str, Any]]:
-        del q, facets
-        return [
-            {
-                "canonical_id": c.canonical_id,
-                "name": c.payload.name,
-                "summary": c.payload.summary,
-                "score": c.score,
-            }
-            for c in self.candidates
-        ]
-
-
 def _no_op_sparse_encoder(_t: str) -> dict[int, float]:
     return {1: 1.0}
 
@@ -356,7 +305,7 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     )
     fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
-    fake_corpus = _FakeCorpus(candidates=candidates)
+    fake_corpus = FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
     # Override retrieve's default sparse encoder to avoid loading fastembed.
@@ -439,7 +388,7 @@ async def test_run_query_forwards_sparse_encoder(monkeypatch: pytest.MonkeyPatch
     )
     fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
-    fake_corpus = _FakeCorpus(candidates=candidates)
+    fake_corpus = FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
     seen_calls: list[str] = []
@@ -484,7 +433,7 @@ async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch
     )
     fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
-    fake_corpus = _FakeCorpus(candidates=candidates)
+    fake_corpus = FakeCorpus(candidates=candidates)
     # Cap at 0.0 so any LLM call's cost reservation exceeds the budget.
     budget = Budget(cap_usd=0.0)
 
@@ -557,7 +506,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
 
     slow_llm = _SlowFakeLLMClient(inner=FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL))
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
-    fake_corpus = _FakeCorpus(candidates=candidates)
+    fake_corpus = FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
@@ -697,7 +646,7 @@ async def test_run_query_zero_passes_threshold(monkeypatch: pytest.MonkeyPatch) 
     )
     fake_llm = FakeLLMClient(canned=canned, default_model=_SYNTH_MODEL)
     fake_embed = FakeEmbeddingClient(model=_EMBED_MODEL)
-    fake_corpus = _FakeCorpus(candidates=candidates)
+    fake_corpus = FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
     monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)

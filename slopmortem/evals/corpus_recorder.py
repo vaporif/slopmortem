@@ -42,7 +42,7 @@ from slopmortem.llm.openrouter import OpenRouterClient
 
 if TYPE_CHECKING:
     from slopmortem.corpus.sources.base import Enricher
-    from slopmortem.ingest import Corpus as IngestCorpus
+    from slopmortem.ingest import IngestCorpus
     from slopmortem.llm.embedding_client import EmbeddingClient
 
 _DEFAULT_MAX_COST_USD = 1.5

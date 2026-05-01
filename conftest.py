@@ -1,9 +1,12 @@
 import re
+from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 
 from slopmortem.llm.cassettes import llm_cassette_key
 from slopmortem.llm.prompts import prompt_template_sha
+from slopmortem.models import Candidate, Facets
 
 
 def llm_canned_key(
@@ -16,6 +19,57 @@ def llm_canned_key(
     """Build the 3-tuple key the same way `FakeLLMClient` does internally."""
     tsha = prompt_template_sha(template_name)
     return llm_cassette_key(prompt=prompt, system=system, template_sha=tsha, model=model)
+
+
+@dataclass
+class FakeCorpus:
+    """In-memory read-side :class:`Corpus` for pipeline tests; no Qdrant, no fastembed."""
+
+    candidates: list[Candidate]
+    queries: list[dict[str, object]] = field(default_factory=list)
+
+    async def query(  # noqa: PLR0913 - Protocol contract dictates the signature
+        self,
+        *,
+        dense: list[float],
+        sparse: dict[int, float],
+        facets: Facets,
+        cutoff_iso: str | None,
+        strict_deaths: bool,
+        k_retrieve: int,
+    ) -> list[Candidate]:
+        self.queries.append(
+            {
+                "dense_dim": len(dense),
+                "sparse_keys": list(sparse.keys()),
+                "facets": facets.model_dump(),
+                "cutoff_iso": cutoff_iso,
+                "strict_deaths": strict_deaths,
+                "k_retrieve": k_retrieve,
+            }
+        )
+        return list(self.candidates[:k_retrieve])
+
+    async def get_post_mortem(self, canonical_id: str) -> str:
+        for c in self.candidates:
+            if c.canonical_id == canonical_id:
+                return c.payload.body
+        msg = f"unknown canonical_id {canonical_id!r}"
+        raise KeyError(msg)
+
+    async def search_corpus(
+        self, q: str, facets: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        del q, facets
+        return [
+            {
+                "canonical_id": c.canonical_id,
+                "name": c.payload.name,
+                "summary": c.payload.summary,
+                "score": c.score,
+            }
+            for c in self.candidates
+        ]
 
 
 SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [

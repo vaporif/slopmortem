@@ -265,8 +265,7 @@ def _build_canned(
 class _EvalCorpus:
     """In-memory :class:`Corpus` for the deterministic eval runner.
 
-    Mirrors the ``_FakeCorpus`` from ``tests/test_pipeline_e2e.py``. Adds
-    :meth:`lookup_payload` so the runner can extract per-candidate source
+    Adds :meth:`lookup_payload` so the runner can extract per-candidate source
     hosts for the ``all_sources_in_allowed_domains`` assertion. The Corpus
     Protocol intentionally does not expose payload-by-id.
     """

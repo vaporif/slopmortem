@@ -17,7 +17,6 @@ from slopmortem.config import Config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.ingest import (
     FakeSlopClassifier,
-    InMemoryCorpus,
     ingest,
 )
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
@@ -25,6 +24,7 @@ from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.llm.prompts import render_prompt
 from slopmortem.models import RawEntry
 from slopmortem.tracing.events import SpanEvent
+from tests.fakes.corpus import InMemoryCorpus
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

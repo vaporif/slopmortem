@@ -9,10 +9,11 @@ import pytest
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.corpus.merge import MergeJournal
-from slopmortem.ingest import FakeSlopClassifier, InMemoryCorpus, ingest
+from slopmortem.ingest import FakeSlopClassifier, ingest
 from slopmortem.llm.fake import FakeLLMClient, FakeResponse
 from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 from slopmortem.models import RawEntry
+from tests.fakes.corpus import InMemoryCorpus
 
 _HAIKU = "anthropic/claude-haiku-4.5"
 
