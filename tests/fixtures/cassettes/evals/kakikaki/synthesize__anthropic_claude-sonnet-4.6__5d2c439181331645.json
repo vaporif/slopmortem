@@ -1,0 +1,21 @@
+{
+  "key": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "prompt_hash": "5d2c439181331645",
+    "template_sha": "5d6cef413150ca6a"
+  },
+  "request_debug": {
+    "prompt_preview": "You rerank dead-startup candidates for a slopmortem pipeline. Given a fresh pitch and K candidates retrieved by hybrid search, score each candidate from four perspectives, then return ONLY the top 5 ranked from most to least relevant.\n\nPerspectives (each scored 0-10 with a one-sentence rationale):\n- business_model: how similar are the revenue, pricing, and customer-relationship shapes?\n- market: how similar are the target buyers, market size, and demand drivers?\n- gtm: how similar are the go-to-",
+    "response_format_present": true,
+    "system_preview": "",
+    "tools_present": []
+  },
+  "response": {
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 2344,
+    "cost_usd": 0.0112122,
+    "stop_reason": "stop",
+    "text": "{\"ranked\":[{\"candidate_id\":\"quibi::media_content\",\"perspective_scores\":{\"business_model\":{\"score\":3,\"rationale\":\"Quibi was a B2C subscription streaming platform, not a marketplace or transaction-fee model, though it did target consumers with short-form video content.\"},\"market\":{\"score\":3,\"rationale\":\"Quibi targeted broad US mobile consumers for entertainment, not APAC beauty enthusiasts seeking 1:1 influencer consults.\"},\"gtm\":{\"score\":2,\"rationale\":\"Quibi used traditional media/studio distribution and app-store launch, not influencer-driven marketplace onboarding in APAC.\"},\"stage_scale\":{\"score\":3,\"rationale\":\"Quibi was a heavily funded ($1.75B) late-stage venture at failure, far larger in scale than a niche beauty marketplace would be.\"}},\"rationale\":\"Quibi is tangentially related as a B2C video product that failed, but its business model (subscription streaming), market (broad US entertainment), and scale are fundamentally different from a beauty influencer 1:1 consult marketplace.\"},{\"candidate_id\":\"wikipedia.org\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Pebble was a hardware manufacturer selling consumer smartwatches, with no marketplace or transaction-fee model.\"},\"market\":{\"score\":1,\"rationale\":\"Pebble targeted general consumer tech buyers globally, with no overlap with APAC beauty influencer audiences.\"},\"gtm\":{\"score\":2,\"rationale\":\"Pebble used crowdfunding and retail channels, entirely unlike an influencer-to-fan marketplace GTM.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Pebble shipped ~2 million units and raised significant capital, operating at a much larger and different scale than a niche marketplace.\"}},\"rationale\":\"Pebble is a consumer hardware company with almost no dimensional overlap with a B2C beauty influencer video consult marketplace; sector, model, market, and GTM are all mismatched.\"},{\"candidate_id\":\"blockbuster::retail_ecommerce\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Blockbuster was a physical and later online video rental/retail business, not a marketplace charging transaction fees between creators and consumers.\"},\"market\":{\"score\":1,\"rationale\":\"Blockbuster targeted mass-market home entertainment consumers in the US, with no relevance to APAC beauty influencers or their fans.\"},\"gtm\":{\"score\":1,\"rationale\":\"Blockbuster's GTM was brick-and-mortar retail and DVD-by-mail, entirely unrelated to influencer marketplace dynamics.\"},\"stage_scale\":{\"score\":1,\"rationale\":\"Blockbuster was a 9,000-store chain with billions in revenue at failure, orders of magnitude larger than a startup marketplace.\"}},\"rationale\":\"Blockbuster shares essentially no meaningful similarity with a B2C beauty influencer video consult marketplace across any of the four perspectives.\"}]}"
+  },
+  "schema_version": "1.0"
+}

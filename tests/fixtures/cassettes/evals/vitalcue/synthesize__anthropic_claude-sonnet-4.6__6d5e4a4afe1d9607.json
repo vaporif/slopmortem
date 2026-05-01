@@ -1,0 +1,21 @@
+{
+  "key": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "prompt_hash": "6d5e4a4afe1d9607",
+    "template_sha": "5d6cef413150ca6a"
+  },
+  "request_debug": {
+    "prompt_preview": "You rerank dead-startup candidates for a slopmortem pipeline. Given a fresh pitch and K candidates retrieved by hybrid search, score each candidate from four perspectives, then return ONLY the top 5 ranked from most to least relevant.\n\nPerspectives (each scored 0-10 with a one-sentence rationale):\n- business_model: how similar are the revenue, pricing, and customer-relationship shapes?\n- market: how similar are the target buyers, market size, and demand drivers?\n- gtm: how similar are the go-to-",
+    "response_format_present": true,
+    "system_preview": "",
+    "tools_present": []
+  },
+  "response": {
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 2337,
+    "cost_usd": 0.0121701,
+    "stop_reason": "stop",
+    "text": "{\"ranked\":[{\"candidate_id\":\"quibi::media_content\",\"perspective_scores\":{\"business_model\":{\"score\":4,\"rationale\":\"Both used a direct-to-consumer monthly subscription model for a mobile app, but Quibi's product was entertainment content rather than health/chronic illness management.\"},\"market\":{\"score\":1,\"rationale\":\"Quibi targeted general consumers seeking short-form entertainment, whereas the pitch targets chronic-illness patients in Germany and France\u2014completely different buyer profiles and demand drivers.\"},\"gtm\":{\"score\":3,\"rationale\":\"Both relied on direct app-store downloads and subscription sign-ups as the primary GTM motion, though Quibi spent heavily on media/studio partnerships with no health channel overlap.\"},\"stage_scale\":{\"score\":3,\"rationale\":\"Quibi failed at significant scale with $1.75B raised and hundreds of thousands of subscribers, which is likely far larger than an early-stage EU healthtech app.\"}},\"rationale\":\"Quibi shares the B2C mobile subscription shape but is otherwise a poor analog\u2014different market (entertainment vs. chronic illness), different geography, different demand drivers, and vastly different scale.\"},{\"candidate_id\":\"blockbuster::retail_ecommerce\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Blockbuster was a brick-and-mortar video rental and later DVD-by-mail business, fundamentally different from a SaaS-style consumer health subscription app.\"},\"market\":{\"score\":1,\"rationale\":\"Blockbuster served general consumers seeking video entertainment in the US, with no overlap with chronic-illness patients in EU healthcare markets.\"},\"gtm\":{\"score\":1,\"rationale\":\"Blockbuster's GTM relied on physical retail stores and mail-order logistics, entirely unlike a mobile app with direct digital distribution.\"},\"stage_scale\":{\"score\":1,\"rationale\":\"Blockbuster failed as a massive multi-billion-dollar incumbent retailer, incomparable in stage or scale to an early-stage healthtech startup.\"}},\"rationale\":\"Blockbuster shares virtually no meaningful similarity with the pitch across any dimension\u2014different business model, market, GTM, and scale\u2014making it a very weak analog.\"},{\"candidate_id\":\"wikipedia.org\",\"perspective_scores\":{\"business_model\":{\"score\":2,\"rationale\":\"Pebble sold hardware devices at one-time purchase prices via crowdfunding and retail, which is structurally different from a recurring subscription health app model.\"},\"market\":{\"score\":2,\"rationale\":\"Pebble targeted tech-enthusiast consumers globally interested in wearables, not chronic-illness patients in Germany and France seeking health management.\"},\"gtm\":{\"score\":2,\"rationale\":\"Pebble's GTM was crowdfunding-driven hardware retail, very different from direct digital subscription sign-up for a health app.\"},\"stage_scale\":{\"score\":3,\"rationale\":\"Pebble shipped ~2 million units before insolvency, a modest consumer tech scale that is somewhat closer to an early-growth consumer app than Blockbuster or Quibi.\"}},\"rationale\":\"Pebble shares only a broad 'consumer mobile-adjacent tech' category with the pitch; its hardware business model, non-health market, and crowdfunding GTM make it a weak analog for a chronic-illness subscription healthtech app.\"}]}"
+  },
+  "schema_version": "1.0"
+}

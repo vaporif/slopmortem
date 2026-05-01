@@ -1,0 +1,21 @@
+{
+  "key": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "prompt_hash": "a99345acced9af88",
+    "template_sha": "5d6cef413150ca6a"
+  },
+  "request_debug": {
+    "prompt_preview": "You rerank dead-startup candidates for a slopmortem pipeline. Given a fresh pitch and K candidates retrieved by hybrid search, score each candidate from four perspectives, then return ONLY the top 5 ranked from most to least relevant.\n\nPerspectives (each scored 0-10 with a one-sentence rationale):\n- business_model: how similar are the revenue, pricing, and customer-relationship shapes?\n- market: how similar are the target buyers, market size, and demand drivers?\n- gtm: how similar are the go-to-",
+    "response_format_present": true,
+    "system_preview": "",
+    "tools_present": []
+  },
+  "response": {
+    "cache_creation_tokens": 2358,
+    "cache_read_tokens": 0,
+    "cost_usd": 0.0190215,
+    "stop_reason": "stop",
+    "text": "{\"ranked\":[{\"candidate_id\":\"quibi::media_content\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Quibi was a B2C consumer subscription streaming platform, entirely unlike a B2B SaaS per-driver logistics tool.\"},\"market\":{\"score\":1,\"rationale\":\"Quibi targeted general consumers for entertainment, with no overlap with US regional 3PL logistics operators.\"},\"gtm\":{\"score\":1,\"rationale\":\"Quibi used mass-market consumer app distribution and studio partnerships, not B2B sales to SMB logistics companies.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Quibi was heavily funded at $1.75B and operated at consumer scale, far removed from an SMB-focused logistics SaaS startup.\"}},\"rationale\":\"Quibi shares virtually no similarity with the pitch \u2014 different sector, business model, customer type, and GTM motion. Only marginal relevance as a failed subscription-based startup.\"},{\"candidate_id\":\"blockbuster::retail_ecommerce\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Blockbuster was a retail video rental chain with some subscription experiments, not a B2B SaaS product with per-driver pricing.\"},\"market\":{\"score\":1,\"rationale\":\"Blockbuster served consumer entertainment markets, with no connection to logistics, 3PLs, or supply chain SMBs.\"},\"gtm\":{\"score\":1,\"rationale\":\"Blockbuster relied on physical retail stores and later DVD-by-mail, completely unlike B2B SaaS sales to logistics operators.\"},\"stage_scale\":{\"score\":1,\"rationale\":\"Blockbuster was a multi-billion dollar brick-and-mortar retail giant, not an early-stage B2B SaaS startup.\"}},\"rationale\":\"Blockbuster has essentially no similarity to the pitch across all dimensions \u2014 different sector, model, market, GTM, and scale.\"},{\"candidate_id\":\"wikipedia.org\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Pebble was a B2C hardware company selling smartwatches via Kickstarter and retail, not a B2B SaaS subscription service.\"},\"market\":{\"score\":1,\"rationale\":\"Pebble targeted consumer wearables buyers, with no overlap with the logistics/3PL SMB market.\"},\"gtm\":{\"score\":1,\"rationale\":\"Pebble used crowdfunding and consumer retail channels, entirely unlike B2B SaaS sales to regional logistics companies.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Pebble shipped ~2 million units before insolvency, representing a consumer hardware scale rather than an early B2B SaaS stage.\"}},\"rationale\":\"Pebble shares no meaningful similarity to the pitch \u2014 it is a consumer hardware company with no relevance to B2B logistics SaaS.\"}]}"
+  },
+  "schema_version": "1.0"
+}

@@ -1,0 +1,21 @@
+{
+  "key": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "prompt_hash": "3cdbe2482971c222",
+    "template_sha": "5d6cef413150ca6a"
+  },
+  "request_debug": {
+    "prompt_preview": "You rerank dead-startup candidates for a slopmortem pipeline. Given a fresh pitch and K candidates retrieved by hybrid search, score each candidate from four perspectives, then return ONLY the top 5 ranked from most to least relevant.\n\nPerspectives (each scored 0-10 with a one-sentence rationale):\n- business_model: how similar are the revenue, pricing, and customer-relationship shapes?\n- market: how similar are the target buyers, market size, and demand drivers?\n- gtm: how similar are the go-to-",
+    "response_format_present": true,
+    "system_preview": "",
+    "tools_present": []
+  },
+  "response": {
+    "cache_creation_tokens": 2339,
+    "cache_read_tokens": 0,
+    "cost_usd": 0.01901025,
+    "stop_reason": "stop",
+    "text": "{\"ranked\":[{\"candidate_id\":\"wikipedia.org\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Pebble sold consumer hardware via one-time purchase/Kickstarter, completely unlike a B2B SaaS subscription CLI/control plane product.\"},\"market\":{\"score\":1,\"rationale\":\"Pebble targeted consumer smartwatch buyers, not developers or enterprise cloud teams.\"},\"gtm\":{\"score\":1,\"rationale\":\"Pebble used crowdfunding and retail consumer channels, no overlap with developer-focused B2B SaaS distribution.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Pebble reached significant consumer scale (~2M units) before failing, whereas the pitch targets an early-stage devtools SaaS.\"}},\"rationale\":\"Pebble is a consumer hardware company with no meaningful overlap in business model, market, GTM, or stage relative to a developer-focused B2B SaaS preview environment tool.\"},{\"candidate_id\":\"quibi::media_content\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Quibi was a B2C subscription media streaming service, entirely unlike a B2B SaaS developer tooling platform.\"},\"market\":{\"score\":1,\"rationale\":\"Quibi targeted mobile consumers seeking short-form entertainment, not developers or cloud engineering teams.\"},\"gtm\":{\"score\":1,\"rationale\":\"Quibi relied on mass-market app distribution and content marketing, with no overlap to developer-focused CLI or SaaS sales motions.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Quibi failed after massive funding (~$1.75B) and a high-profile launch, a very different scale profile from an early devtools SaaS.\"}},\"rationale\":\"Quibi is a consumer media platform with essentially no similarity to a developer-focused B2B SaaS preview environment product across any evaluated dimension.\"},{\"candidate_id\":\"blockbuster::retail_ecommerce\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Blockbuster was a physical/digital video rental and retail business, bearing no resemblance to a B2B SaaS subscription model.\"},\"market\":{\"score\":1,\"rationale\":\"Blockbuster served mass-market consumer entertainment, not developer or enterprise cloud infrastructure buyers.\"},\"gtm\":{\"score\":1,\"rationale\":\"Blockbuster relied on brick-and-mortar retail and DVD-by-mail, with no parallel to developer-focused SaaS GTM motions.\"},\"stage_scale\":{\"score\":1,\"rationale\":\"Blockbuster was a massive legacy enterprise with thousands of stores and billions in revenue, entirely incomparable in scale to an early-stage devtools SaaS.\"}},\"rationale\":\"Blockbuster is a consumer retail/media company with no meaningful similarity to the pitch on any dimension; included only because it is one of the available candidates.\"}]}"
+  },
+  "schema_version": "1.0"
+}

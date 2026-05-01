@@ -1,0 +1,21 @@
+{
+  "key": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "prompt_hash": "071f68ad0f09cf4f",
+    "template_sha": "5d6cef413150ca6a"
+  },
+  "request_debug": {
+    "prompt_preview": "You rerank dead-startup candidates for a slopmortem pipeline. Given a fresh pitch and K candidates retrieved by hybrid search, score each candidate from four perspectives, then return ONLY the top 5 ranked from most to least relevant.\n\nPerspectives (each scored 0-10 with a one-sentence rationale):\n- business_model: how similar are the revenue, pricing, and customer-relationship shapes?\n- market: how similar are the target buyers, market size, and demand drivers?\n- gtm: how similar are the go-to-",
+    "response_format_present": true,
+    "system_preview": "",
+    "tools_present": []
+  },
+  "response": {
+    "cache_creation_tokens": 2354,
+    "cache_read_tokens": 0,
+    "cost_usd": 0.0192915,
+    "stop_reason": "stop",
+    "text": "{\"ranked\":[{\"candidate_id\":\"blockbuster::retail_ecommerce\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Blockbuster was a physical retail video rental chain with no SaaS, per-seat, or transaction-based pricing model.\"},\"market\":{\"score\":1,\"rationale\":\"Blockbuster targeted mass-market consumers for home entertainment, entirely unlike mid-market B2B finance controllers.\"},\"gtm\":{\"score\":1,\"rationale\":\"Blockbuster relied on brick-and-mortar retail stores and later DVD-by-mail, with no enterprise or SaaS go-to-market motion.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Blockbuster failed at massive enterprise/franchise scale, far beyond a typical mid-market SaaS startup stage.\"}},\"rationale\":\"Blockbuster shares only the broadest 'tech-adjacent' context and has virtually no overlap with a B2B SaaS accounting automation platform in business model, market, GTM, or scale.\"},{\"candidate_id\":\"wikipedia.org\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Pebble was a hardware consumer electronics company selling physical smartwatches, with no SaaS or recurring per-seat revenue model.\"},\"market\":{\"score\":1,\"rationale\":\"Pebble targeted individual consumers purchasing wearables, completely unlike mid-market B2B finance controllers.\"},\"gtm\":{\"score\":1,\"rationale\":\"Pebble used Kickstarter crowdfunding and retail distribution, with no enterprise sales or B2B SaaS channel motion.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Pebble shipped ~2 million hardware units before insolvency, a consumer hardware scale with no parallel to B2B SaaS mid-market.\"}},\"rationale\":\"Pebble is a consumer hardware company with no meaningful overlap to a B2B SaaS accounting automation platform on any scored dimension.\"},{\"candidate_id\":\"quibi::media_content\",\"perspective_scores\":{\"business_model\":{\"score\":1,\"rationale\":\"Quibi was a B2C subscription streaming service for short-form video content, not a B2B SaaS per-seat or usage-metered platform.\"},\"market\":{\"score\":1,\"rationale\":\"Quibi targeted mobile consumer entertainment audiences, not mid-market B2B finance or accounting departments.\"},\"gtm\":{\"score\":1,\"rationale\":\"Quibi used mass-market consumer app distribution and media partnerships, not enterprise or channel SaaS sales motions.\"},\"stage_scale\":{\"score\":2,\"rationale\":\"Quibi raised $1.75B and failed after 8 months at launch scale; while an early-stage failure, the context is entirely B2C media.\"}},\"rationale\":\"Quibi shares no meaningful similarity to a B2B SaaS accounting automation product; it was a B2C media platform with a fundamentally different model, market, and GTM.\"}]}"
+  },
+  "schema_version": "1.0"
+}
