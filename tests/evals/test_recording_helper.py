@@ -111,9 +111,6 @@ class _FakeSink:
     def error(self, phase: RecordPhase, message: str) -> None:
         self.errors.append((phase, message))
 
-    def cost_update(self, spent_usd: float, max_usd: float) -> None:
-        del spent_usd, max_usd
-
 
 def test_aggregate_bridge_funnels_inner_advances_to_rows() -> None:
     """Every inner phase advance becomes one tick on the shared ROWS bar."""

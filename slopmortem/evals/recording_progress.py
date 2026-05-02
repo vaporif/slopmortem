@@ -1,12 +1,10 @@
 """Progress Protocol for the eval cassette recorder.
 
-The recorder runs many rows under a hard $ cap, so the display only carries
-two phase tasks: ``ROWS`` (per-input outer loop) and ``COST`` (synthetic
-spend meter mutated via ``cost_update``). Inner ``run_query`` phases —
-facet/embed/rerank/synthesize — collapse onto the ``ROWS`` task as a
-transient status suffix via :class:`_QueryProgressBridge` in
-``recording_helper``; that keeps the screen stable across rows instead of
-showing four sub-bars that reset on every iteration.
+One phase task: ``ROWS`` (per-input outer loop). Inner ``run_query`` phases —
+facet/embed/rerank/synthesize — collapse onto it as transient status suffix
+ticks via :class:`_AggregateProgressBridge` in ``recording_helper``. Live
+spend is surfaced through per-row log lines and the post-run footer panel,
+not a dedicated bar.
 """
 
 from __future__ import annotations
@@ -16,20 +14,9 @@ from typing import Protocol, runtime_checkable
 
 
 class RecordPhase(StrEnum):
-    """Phase keys driven by :func:`record_cassettes_for_inputs`.
-
-    ``ROWS`` is the per-input outer loop; the bridge appends a transient
-    status suffix (e.g. ``synthesizing post-mortems 1/2 — warming prompt
-    cache``) so the current sub-step is visible without dedicated tasks.
-
-    ``COST`` is synthetic — never emitted as a pipeline event. It exists to
-    give :class:`RichRecordProgress` a phase task to mutate via
-    ``cost_update`` so the spend ceiling reads as a filling bar inside the
-    same Progress widget.
-    """
+    """Phase keys driven by :func:`record_cassettes_for_inputs`."""
 
     ROWS = "rows"
-    COST = "cost"
 
 
 @runtime_checkable
@@ -38,8 +25,7 @@ class RecordProgress(Protocol):
 
     Methods are no-op-safe. :class:`NullRecordProgress` is the default so the
     recorder stays decoupled from any UI library; the runner wires a Rich
-    implementation. Mirrors :class:`slopmortem.pipeline.QueryProgress` plus
-    one extra ``cost_update`` for the spend meter.
+    implementation. Mirrors :class:`slopmortem.pipeline.QueryProgress`.
     """
 
     def start_phase(self, phase: RecordPhase, total: int | None) -> None:
@@ -59,9 +45,6 @@ class RecordProgress(Protocol):
 
     def error(self, phase: RecordPhase, message: str) -> None:
         """Record an error against *phase*."""
-
-    def cost_update(self, spent_usd: float, max_usd: float) -> None:
-        """Surface running USD spend against the configured ceiling."""
 
 
 class NullRecordProgress:
@@ -83,7 +66,4 @@ class NullRecordProgress:
         """No-op."""
 
     def error(self, phase: RecordPhase, message: str) -> None:
-        """No-op."""
-
-    def cost_update(self, spent_usd: float, max_usd: float) -> None:
         """No-op."""

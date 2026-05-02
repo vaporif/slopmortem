@@ -169,7 +169,6 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
     bar: RecordProgress = progress if progress is not None else NullRecordProgress()
     ticks_per_row = _FIXED_TICKS_PER_ROW + config.N_synthesize
     bar.start_phase(RecordPhase.ROWS, total=len(inputs) * ticks_per_row)
-    bar.cost_update(0.0, max_cost_usd)
     running_cost = 0.0
     rows_succeeded = 0
     cassettes_written = 0
@@ -177,7 +176,6 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
     def _on_cost(delta: float) -> None:
         nonlocal running_cost
         running_cost += delta
-        bar.cost_update(running_cost, max_cost_usd)
 
     with _tavily_off(config) as cfg:
         async with setup_ephemeral_qdrant(
