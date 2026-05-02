@@ -29,8 +29,7 @@ _TAXONOMY_PATH = Path(__file__).resolve().parent / "corpus" / "taxonomy.yml"
 @cache
 def _load_taxonomy() -> dict[str, frozenset[str]]:
     """Load ``taxonomy.yml`` once, returning each closed-enum field as a frozenset."""
-    # yaml.safe_load is loosely typed; narrow at the dict boundary, same as
-    # slopmortem.corpus.sources.curated.
+    # yaml.safe_load is loosely typed; narrow at the dict boundary.
     raw = cast(
         "dict[str, list[Any]]",  # pyright: ignore[reportExplicitAny]
         yaml.safe_load(_TAXONOMY_PATH.read_text()),
