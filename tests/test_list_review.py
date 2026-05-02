@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from typer.testing import CliRunner
 
 from slopmortem.cli import app
-from slopmortem.corpus.merge import MergeJournal
+from slopmortem.corpus import MergeJournal
 from slopmortem.models import PendingReviewRow
 
 if TYPE_CHECKING:
