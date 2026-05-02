@@ -102,7 +102,7 @@ async def test_search_corpus_returns_hits(fixture_corpus):
 
 # Per-synthesis Tavily budget gate (spec line 1005).
 from slopmortem.config import Config  # noqa: E402
-from slopmortem.llm.tools import synthesis_tools  # noqa: E402
+from slopmortem.llm import synthesis_tools  # noqa: E402
 
 
 async def test_tavily_calls_under_cap_pass_through(monkeypatch):

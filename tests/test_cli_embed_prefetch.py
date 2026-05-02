@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from slopmortem.budget import Budget
 from slopmortem.cli import app
-from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
+from slopmortem.llm import FastEmbedEmbeddingClient
 
 if TYPE_CHECKING:
     import pytest
