@@ -119,26 +119,17 @@ _PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_c
 class Corpus(Protocol):
     """Narrow corpus surface ingest depends on; production is :class:`QdrantCorpus`."""
 
-    async def upsert_chunk(self, point: object) -> None:
-        """Upsert one chunk point into the underlying store."""
-        ...
+    async def upsert_chunk(self, point: object) -> None: ...
 
-    async def has_chunks(self, canonical_id: str) -> bool:
-        """Return whether at least one chunk exists for *canonical_id*."""
-        ...
+    async def has_chunks(self, canonical_id: str) -> bool: ...
 
     async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
-        """Drop every chunk point for *canonical_id*, used before a re-merge upsert."""
+        # Called before a re-merge upsert.
         ...
 
 
 class IngestPhase(StrEnum):
-    """Phase keys used by :class:`IngestProgress`.
-
-    StrEnum over bare strings: closed-set typing, IDE autocomplete, and
-    exhaustiveness checks. Typos like ``"fanout"`` for ``"fan_out"`` fail at
-    parse time instead of silently no-op'ing.
-    """
+    """Phase keys used by :class:`IngestProgress`. Closed enum so typos fail at parse."""
 
     GATHER = "gather"
     CLASSIFY = "classify"
