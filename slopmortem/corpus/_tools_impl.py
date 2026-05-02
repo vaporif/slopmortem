@@ -92,22 +92,12 @@ _corpus: Corpus | None = None
 
 
 def _set_corpus(c: Corpus) -> None:
-    """Bind the module-level :class:`Corpus` used by ``_get_post_mortem`` / ``_search_corpus``.
-
-    Called once at CLI startup so tool functions stay plain ``async def``.
-    Tests pass a fake and reset to ``None`` in teardown.
-    """
     global _corpus  # noqa: PLW0603 — the module-level binding is the public init surface
     _corpus = c
 
 
 def set_query_corpus(c: Corpus) -> None:
-    """Bind the corpus the query-side LLM tools should call into.
-
-    Public re-export of the module-private ``_set_corpus``. Required so
-    callers (``cli.py``, ``evals/runner.py``, ``evals/recording_helper.py``)
-    can avoid reaching past the ``corpus`` package façade.
-    """
+    """Public re-export of :func:`_set_corpus` so callers avoid reaching past the ``corpus`` façade."""
     _set_corpus(c)
 
 
@@ -148,14 +138,7 @@ async def _search_corpus(
 
 
 def _tavily_api_key() -> str:
-    """Return ``TAVILY_API_KEY`` from the environment, or raise.
-
-    Read at call time (rather than from :class:`Config`) because the tool
-    callables are passed bare to OpenRouter's function-calling surface and
-    the existing ``_set_corpus`` indirection would not extend cleanly to a
-    second binding. ``TAVILY_API_KEY`` is the documented surface in the
-    spec (Auth, Synthesis tool registry).
-    """
+    """Read ``TAVILY_API_KEY`` at call time — tool callables are passed bare to OpenRouter and can't carry config."""
     key = os.environ.get("TAVILY_API_KEY", "")
     if not key:
         msg = "TAVILY_API_KEY not set; --tavily-synthesis path is unavailable"
@@ -164,12 +147,7 @@ def _tavily_api_key() -> str:
 
 
 async def tavily_search_async(q: str, limit: int = 5) -> str:
-    r"""Search the live web via Tavily and return a text summary for the LLM.
-
-    Reads ``TAVILY_API_KEY`` from the environment at call time. Returns a
-    newline-joined ``- title — url\n  snippet`` listing, capped at
-    *limit* results, or ``"(no results)"`` if Tavily returned an empty set.
-    """
+    """Search Tavily; return ``- title — url\\n  snippet`` lines or ``"(no results)"``."""
     resp = await safe_post(
         _TAVILY_SEARCH_URL,
         json={"api_key": _tavily_api_key(), "query": q, "max_results": limit},
@@ -189,12 +167,7 @@ async def tavily_search_async(q: str, limit: int = 5) -> str:
 
 
 async def tavily_extract_async(url: str) -> str:
-    """Fetch and extract the readable text of a single URL via Tavily.
-
-    Reads ``TAVILY_API_KEY`` from the environment at call time. Returns
-    the first result's ``raw_content`` string, or ``""`` if Tavily
-    returned no results.
-    """
+    """Fetch and extract one URL via Tavily; ``""`` when no results."""
     resp = await safe_post(
         TAVILY_EXTRACT_URL,
         json={"api_key": _tavily_api_key(), "urls": [url]},
