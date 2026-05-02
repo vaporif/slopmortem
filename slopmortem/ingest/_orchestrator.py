@@ -48,17 +48,9 @@ from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 from anyio import to_thread
 from lmnr import Laminar, observe
 
-from slopmortem._time import utcnow_iso
 from slopmortem.corpus import (
-    CHUNK_STRATEGY_VERSION,
-    Section,
-    combined_hash,
-    combined_text,
     extract_clean,
-    resolve_entity,
     safe_path,
-    write_canonical_atomic,
-    write_raw_atomic,
 )
 from slopmortem.ingest._warm_cache import cache_read_ratio_event, cache_warm
 from slopmortem.llm import prompt_template_sha, render_prompt
@@ -318,15 +310,15 @@ def _content_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _text_id_for(canonical_id: str) -> str:
+def _text_id_for(canonical_id: str) -> str:  # pyright: ignore[reportUnusedFunction]  -- imported by _fan_out.py and _journal_writes.py
     return hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:16]
 
 
-def _reliability_for(source: str) -> int:
+def _reliability_for(source: str) -> int:  # pyright: ignore[reportUnusedFunction]  -- imported by _journal_writes.py
     return _RELIABILITY_RANK.get(source, 9)
 
 
-def _skip_key(  # noqa: PLR0913 - the contract tuple is wide
+def _skip_key(  # noqa: PLR0913 - the contract tuple is wide  # pyright: ignore[reportUnusedFunction]  -- imported by _journal_writes.py
     *,
     content_hash: str,
     facet_sha: str,
@@ -459,7 +451,7 @@ async def _gather_entries(
     return out, failures
 
 
-def _build_payload(  # noqa: PLR0913 - payload assembly takes every store-time field
+def _build_payload(  # noqa: PLR0913 - payload assembly takes every store-time field  # pyright: ignore[reportUnusedFunction]  -- imported by _journal_writes.py
     *,
     facets: Facets,
     summary: str,
@@ -498,198 +490,13 @@ def _date_from_year(year: int):  # noqa: ANN202 - narrow internal helper
 
 
 from slopmortem.ingest._fan_out import (  # noqa: E402  -- runtime circular import; placed after the names _fan_out imports back from this module
-    _embed_and_upsert,
     _facet_summarize_fanout,
     _FanoutResult,
 )
-
-
-class ProcessOutcome(StrEnum):
-    """What _process_entry did with one entry.
-
-    Enum so the match in ingest() is exhaustive — a new variant nobody
-    handled fails typecheck instead of going silently uncounted.
-    """
-
-    PROCESSED = "processed"
-    SKIPPED = "skipped"
-    SKIPPED_EMPTY = "skipped_empty"
-    FAILED = "failed"
-
-
-async def _process_entry(  # noqa: PLR0913 - orchestration density is the contract
-    entry: RawEntry,
-    *,
-    body: str,
-    fan: _FanoutResult,
-    journal: MergeJournal,
-    corpus: Corpus,
-    embed_client: EmbeddingClient,
-    llm: LLMClient,
-    config: Config,
-    post_mortems_root: Path,
-    slop_score: float,
-    force: bool,
-    span_events: list[str],
-    sparse_encoder: SparseEncoder,
-) -> ProcessOutcome:
-    """Write raw + canonical + chunks for one resolved entry.
-
-    SKIPPED_EMPTY: chunking yielded zero chunks, so we skip mark_complete
-    rather than journal an entry with no Qdrant points. FAILED: an in-flight
-    write raised (today: delete_chunks_for_canonical on a re-merge); we abort
-    the entry before any upsert so we don't shadow prior orphans with a fresh
-    upsert layer.
-    """
-    name = entry.source_id  # ingest's name extraction is best-effort in v1
-    sector = fan.facets.sector
-    res = await resolve_entity(
-        entry,
-        journal=journal,
-        embed_client=embed_client,
-        name=name,
-        sector=sector,
-        founding_year=fan.facets.founding_year,
-        llm_client=llm,
-        haiku_model_id=config.model_facet,
-        tiebreaker_max_tokens=config.max_tokens_tiebreaker,
-    )
-    span_events.extend(res.span_events)
-    if res.action in ("alias_blocked", "resolver_flipped"):
-        return ProcessOutcome.SKIPPED
-    canonical_id = res.canonical_id
-
-    # v1 ingest only knows about THIS raw section. Merging with prior raw on
-    # disk happens via the read-back path in reconcile / multi-source ingest.
-    section = Section(
-        text=body,
-        reliability_rank=_reliability_for(entry.source),
-        source_id=entry.source_id,
-        source=entry.source,
-    )
-    merged = combined_text([section])
-    content_hash = combined_hash([section])
-
-    skip_key = _skip_key(
-        content_hash=content_hash,
-        facet_sha=prompt_template_sha("facet_extract"),
-        summarize_sha=prompt_template_sha("summarize"),
-        haiku_model_id=config.model_facet,
-        embed_model_id=config.embed_model_id,
-        chunk_strategy=CHUNK_STRATEGY_VERSION,
-        taxonomy_version=config.taxonomy_version,
-        reliability_rank_version=config.reliability_rank_version,
-    )
-
-    existing = await journal.fetch_by_key(canonical_id, entry.source, entry.source_id)
-    if not force and existing:
-        row = existing[0]
-        if row.get("merge_state") == "complete" and row.get("skip_key") == skip_key:
-            return ProcessOutcome.SKIPPED
-
-    await journal.upsert_pending(
-        canonical_id=canonical_id, source=entry.source, source_id=entry.source_id
-    )
-
-    text_id = _text_id_for(canonical_id)
-    await write_raw_atomic(
-        post_mortems_root,
-        text_id,
-        entry.source,
-        body,
-        front_matter={
-            "canonical_id": canonical_id,
-            "source": entry.source,
-            "source_id": entry.source_id,
-            "content_hash": content_hash,
-            "facet_prompt_hash": prompt_template_sha("facet_extract"),
-            "embed_model_id": config.embed_model_id,
-            "chunk_strategy_version": CHUNK_STRATEGY_VERSION,
-            "taxonomy_version": config.taxonomy_version,
-        },
-    )
-
-    await write_canonical_atomic(
-        post_mortems_root,
-        text_id,
-        merged,
-        front_matter={
-            "canonical_id": canonical_id,
-            "combined_hash": content_hash,
-            "skip_key": skip_key,
-            "merged_at": utcnow_iso(),
-            "source_ids": [f"{entry.source}:{entry.source_id}"],
-        },
-    )
-
-    # Delete then re-upsert all chunk points for this canonical_id so prior-run
-    # orphans don't pile up.
-    if existing:
-        try:
-            await corpus.delete_chunks_for_canonical(canonical_id)
-        except Exception as exc:  # noqa: BLE001 — qdrant-client raises many transport/auth/validation shapes; recovery is the same for all.
-            # If we re-upsert on top of orphans, longer prior bodies leak their
-            # higher-index chunks into the merged result. Abort the entry and
-            # let reconcile pick up the drift on a later pass.
-            Laminar.event(
-                name=SpanEvent.INGEST_ENTRY_FAILED.value,
-                attributes={
-                    "canonical_id": canonical_id,
-                    "stage": "delete_chunks",
-                    "error": str(exc),
-                },
-            )
-            logger.warning(
-                "ingest aborted entry: delete_chunks_for_canonical failed for %s: %s",
-                canonical_id,
-                exc,
-            )
-            return ProcessOutcome.FAILED
-    payload = _build_payload(
-        facets=fan.facets,
-        summary=fan.summary,
-        body=merged,
-        slop_score=slop_score,
-        sources_seen=[entry.url] if entry.url else [],
-        provenance_id=f"{entry.source}:{entry.source_id}",
-        text_id=text_id,
-        name=name,
-        provenance=entry.source,
-    )
-    chunks_written = await _embed_and_upsert(
-        canonical_id=canonical_id,
-        body=merged,
-        payload=payload,
-        corpus=corpus,
-        embed_client=embed_client,
-        embed_model_id=config.embed_model_id,
-        sparse_encoder=sparse_encoder,
-    )
-    if chunks_written == 0:
-        # A "complete" row with zero Qdrant points is silent corpus drift, so
-        # leave the row pending and surface the empty chunk count to the
-        # operator. Reconcile catches the same class (a) drift retroactively.
-        Laminar.event(
-            name=SpanEvent.INGEST_ENTRY_EMPTY_CHUNKS.value,
-            attributes={"canonical_id": canonical_id},
-        )
-        logger.warning(
-            "ingest skipped mark_complete: zero chunks for canonical_id=%s",
-            canonical_id,
-        )
-        return ProcessOutcome.SKIPPED_EMPTY
-
-    # mark_complete must run LAST: skip_key being set is the only signal a
-    # later ingest uses to short-circuit this entry.
-    await journal.mark_complete(
-        canonical_id=canonical_id,
-        source=entry.source,
-        source_id=entry.source_id,
-        skip_key=skip_key,
-        merged_at=utcnow_iso(),
-        content_hash=content_hash,
-    )
-    return ProcessOutcome.PROCESSED
+from slopmortem.ingest._journal_writes import (  # noqa: E402  -- runtime circular import; placed after the helpers _journal_writes imports back from this module
+    ProcessOutcome,
+    _process_entry,
+)
 
 
 @observe(

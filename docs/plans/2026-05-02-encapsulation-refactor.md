@@ -917,7 +917,7 @@ Expected: green.
 - Create: `tests/ingest/test_journal_writes.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the journal-write block**
+- [x] **Step 1: Identify the journal-write block**
 
 The actual order from the spec (line numbers from the original `ingest.py`, verify in `_orchestrator.py`):
 
@@ -930,7 +930,7 @@ The actual order from the spec (line numbers from the original `ingest.py`, veri
 
 Locate these in `_orchestrator.py` (line numbers will have shifted due to T2.2 and T2.3).
 
-- [ ] **Step 2: Write a failing test for the (Qdrant-upsert → mark_complete) gap**
+- [x] **Step 2: Write a failing test for the (Qdrant-upsert → mark_complete) gap**
 
 Write `tests/ingest/test_journal_writes.py` (skeleton):
 
@@ -985,21 +985,21 @@ Use `InMemoryCorpus` (already in `_orchestrator.py`) as the corpus-side base, su
 
 Do NOT introduce a brand-new `InMemoryJournal` class for this task — it would need to mirror the full `MergeJournal` API (15+ methods) and drift from it on schema changes. The two journal helpers in this test file (corpus subclass + crash-injection wrapper, if needed) belong in this file, not in `slopmortem/`.
 
-- [ ] **Step 3: Run tests; expect them to fail with NotImplementedError or with assertion errors against the current code**
+- [x] **Step 3: Run tests; expect them to fail with NotImplementedError or with assertion errors against the current code**
 
 Run: `pytest tests/ingest/test_journal_writes.py -v`
 Expected: 4 tests fail (either with `NotImplementedError` if you left placeholders, or with assertion failures because the journal write order in `_orchestrator.py` has not yet been extracted — that's fine; the test will continue passing after the move since extraction is behavior-preserving).
 
-- [ ] **Step 4: Implement the test bodies**
+- [x] **Step 4: Implement the test bodies**
 
 Replace each `raise NotImplementedError` with the actual arrange/act/assert. Helper that subclasses `InMemoryCorpus` and `MergeJournal` to inject crashes belongs in this test file.
 
-- [ ] **Step 5: Run tests; expect 4 passes against current `_orchestrator.py`**
+- [x] **Step 5: Run tests; expect 4 passes against current `_orchestrator.py`**
 
 Run: `pytest tests/ingest/test_journal_writes.py -v`
 Expected: 4 passing tests. If any fail, the orchestrator's current write sequence violates the invariant — stop and report to operator before proceeding.
 
-- [ ] **Step 6: Extract the journal-write block to `_journal_writes.py`**
+- [x] **Step 6: Extract the journal-write block to `_journal_writes.py`**
 
 Create `slopmortem/ingest/_journal_writes.py`:
 
@@ -1028,7 +1028,7 @@ from __future__ import annotations
 
 Update `_orchestrator.py` to call into the extracted module.
 
-- [ ] **Step 7: Re-run the new tests AND the full gate**
+- [x] **Step 7: Re-run the new tests AND the full gate**
 
 Run: `pytest tests/ingest/test_journal_writes.py -v && just test && just lint && just typecheck && just smoke && just eval`
 Expected: 4 new tests pass post-extraction; full gate green.
