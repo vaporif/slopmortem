@@ -23,10 +23,14 @@ _SEED_SECTORS: dict[str, str] = {
     "yume-tutor": "edtech",
     "helixthread": "biotech",
     "smolpark": "social_communication",
-    "lastmile-iq": "logistics_supply_chain",
     "shardbright": "gaming",
     # kakikaki = b2c marketplace; could plausibly map to media_content,
     # social_communication, or retail_ecommerce — too ambiguous to assert on.
+    # lastmile-iq = B2B fleet-dispatch SaaS. The closest fixture entries
+    # (webvan, kozmo-com, boo-com) all classified as retail_ecommerce because
+    # they were 90s/00s e-commerce delivery, not fleet-routing software. No
+    # clean logistics_supply_chain match exists on Wikipedia — too ambiguous
+    # to assert on.
 }
 
 
@@ -53,7 +57,7 @@ def _fixture_sectors() -> set[str]:
 
 def test_seed_dataset_unchanged() -> None:
     """Guard the _SEED_SECTORS map against silent seed-dataset edits."""
-    expected = set(_SEED_SECTORS) | {"kakikaki"}
+    expected = set(_SEED_SECTORS) | {"kakikaki", "lastmile-iq"}
     assert _seed_names() == expected, "seed.jsonl drifted; update _SEED_SECTORS in this test"
 
 
