@@ -456,9 +456,8 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
 
     Sqlite or LLM exceptions propagate after the journal transaction rolls back.
     """
-    # tier-3 cache and founding-year cache live in the same sqlite file as the
-    # merge journal. No public accessor on purpose — merge.py is read-only
-    # from this side.
+    # tier-3 + founding-year caches share the merge journal's sqlite file. No
+    # public accessor on purpose — merge.py is read-only from this side.
     db_path = journal._db  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
     await to_thread.run_sync(_ensure_tier3_table_sync, db_path)
 
@@ -482,7 +481,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     candidate_id = domain
     use_tier2 = is_platform or not domain
 
-    # Recycled-domain check: same registrable_domain + founding_year delta > 10.
+    # Recycled-domain check: same domain + founding_year delta > 10 → demote.
     if not use_tier2 and founding_year is not None:
         cached_year = await to_thread.run_sync(_read_founding_year_sync, db_path, domain)
         if (
@@ -491,8 +490,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         ):
             use_tier2 = True
 
-    # Parent/subsidiary suffix-delta: tier-1 hit, but the existing canonical's
-    # name differs from the new name only by a corporate suffix.
+    # Suffix-delta: tier-1 hit but new name differs only by a corporate suffix.
     if not use_tier2 and await _is_parent_subsidiary_suspect(journal, domain, name):
         use_tier2 = True
         span_events.append(SpanEvent.PARENT_SUBSIDIARY_SUSPECTED.value)
@@ -500,8 +498,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     if use_tier2:
         candidate_id = _tier2_canonical(name, sector)
 
-    # Tier-3 fuzzy matching only fires when on a tier-2 id and an existing
-    # tier-2 sibling is journal-resident under the same sector.
     candidate_id = await _maybe_tier3_collapse(
         db_path=db_path,
         journal=journal,
@@ -534,10 +530,9 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         )
 
     if founding_year is not None and _looks_tier1(candidate_id):
-        # Ideally the cache key would include content_sha256, but the merged
-        # content doesn't exist yet at resolve time. The entry's source_id
-        # works as a per-row dedup key — v1's cache only needs *some* entry
-        # per (registrable_domain, *) for the delta check.
+        # Ideally cache key would include content_sha256, but the merged content
+        # doesn't exist at resolve time. v1 only needs *some* entry per domain
+        # for the delta check, so source_id stands in as a per-row dedup key.
         await to_thread.run_sync(
             _write_founding_year_sync,
             db_path,
@@ -568,12 +563,7 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
     is_tier2: bool,
     tiebreaker_max_tokens: int | None = None,
 ) -> str:
-    """Run tier-3 fuzzy matching against existing canonicals; return the (possibly merged) id.
-
-    Only fires when ``is_tier2`` is True and at least one tier-2 canonical
-    is journal-resident under the same sector. A tier-3 ``same`` collapses
-    *candidate_id* onto the existing canonical's id.
-    """
+    """Only fires when ``is_tier2`` is True and a same-sector tier-2 sibling exists; ``same`` collapses onto it."""
     if not is_tier2:
         return candidate_id
     rows = await journal.fetch_all()

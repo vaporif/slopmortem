@@ -1,9 +1,6 @@
-"""Consolidate-risks stage: LLM-driven applicability filter and paraphrase merge.
-
-One Sonnet call sees the pitch plus every per-candidate lesson and returns up
-to 10 risks that genuinely apply to the pitch — each with a canonical summary,
-the comparables that raised it, an `applies_because` line quoting a concrete
-pitch element, and a severity bucket.
+"""Consolidate-risks stage: one Sonnet call sees the pitch plus every per-candidate
+lesson and returns up to 10 risks that apply, each with a severity bucket and the
+comparables that raised it.
 """
 
 from __future__ import annotations
@@ -31,7 +28,6 @@ _SEVERITY_RANK: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
 
 
 def _emit_event(event: SpanEvent) -> None:
-    """Emit event as a Laminar span event when tracing is initialized."""
     if Laminar.is_initialized():
         Laminar.event(name=str(event))
 
@@ -45,9 +41,8 @@ async def consolidate_risks(  # noqa: PLR0913 — every dep is required wiring a
     model: str,
     max_tokens: int,
 ) -> TopRisks:
-    """LLM-driven applicability filter + paraphrase merge over per-candidate lessons.
-
-    Returns an empty :class:`TopRisks` when ``syntheses`` is empty.
+    """Returns an empty :class:`TopRisks` when ``syntheses`` is empty or when any
+    upstream synthesis flagged an injection attempt.
     """
     if not syntheses:
         return TopRisks()

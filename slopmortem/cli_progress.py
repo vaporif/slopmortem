@@ -76,8 +76,10 @@ class OptionalMofNCompleteColumn(MofNCompleteColumn):
 
 
 class OptionalETAColumn(TimeRemainingColumn):
-    """Suppresses ETA on finished tasks (Rich keeps painting ``0:00`` which reads as
-    "still computing") and on single-shot phases (no meaningful remaining-time estimate).
+    """Suppress ETA on finished or single-shot phases.
+
+    Rich keeps painting ``0:00`` on finished tasks (reads as "still computing"),
+    and single-shot phases have no meaningful remaining-time estimate.
     """
 
     @override
@@ -149,7 +151,11 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         return f"{styled} [bold red]({n} {noun})[/bold red]"
 
     def start_phase(self, phase: PhaseT, total: int | None) -> None:
-        """Phases with ``total`` ``None`` or ``<= 1`` pulse instead of flashing 0->1; ``end_phase`` snaps them to filled."""
+        """Start or restart a phase task.
+
+        Phases with ``total`` ``None`` or ``<= 1`` pulse instead of flashing
+        0->1; ``end_phase`` snaps them to filled.
+        """
         bar_total = total if total and total > 1 else None
         if phase in self._tasks:
             self._progress.reset(self._tasks[phase], total=bar_total)
@@ -163,7 +169,9 @@ class RichPhaseProgress[PhaseT: StrEnum]:
             self._progress.advance(tid, n)
 
     def end_phase(self, phase: PhaseT) -> None:
-        """For indeterminate phases (``total is None``), freeze the bar at
+        """Snap the bar to filled.
+
+        For indeterminate phases (``total is None``), freeze the bar at
         ``total = max(completed, 1)``. Otherwise fill to ``total``.
         """
         tid = self._tasks.get(phase)

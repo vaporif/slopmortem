@@ -37,10 +37,8 @@ async def cache_warm(
     seed_text: str,
     max_tokens: int | None = None,
 ) -> tuple[bool, int, list[str]]:
-    """Run one serial summarize call to warm the prompt cache.
-
-    Returns ``(warmed, cache_creation_tokens, span_events)``. ``warmed`` is
-    True when ``cache_creation_tokens > 0`` (cache actually got written).
+    """One serial summarize call to warm the prompt cache. ``warmed`` is True
+    iff ``cache_creation_tokens > 0`` (cache actually got written).
     """
     span: list[str] = []
     try:
@@ -65,10 +63,8 @@ async def cache_warm(
 
 
 def cache_read_ratio_event(fanout: Sequence[_CacheRatioResult]) -> str | None:
-    """Return :attr:`SpanEvent.CACHE_READ_RATIO_LOW` if the first-N probe dips below threshold.
-
-    Only the first :data:`_CACHE_READ_RATIO_PROBE_N` results contribute. When
-    no tokens flowed (denom == 0) or the probe is empty, returns ``None``.
+    """Probes only the first :data:`_CACHE_READ_RATIO_PROBE_N` results; returns
+    ``None`` when no tokens flowed or the probe is empty.
     """
     probe = list(fanout)[:_CACHE_READ_RATIO_PROBE_N]
     if not probe:

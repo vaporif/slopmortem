@@ -1,4 +1,4 @@
-"""Facet-extract stage: one LLM call returning a strict-mode :class:`Facets` JSON object."""
+"""Facet-extract stage: one strict-mode JSON LLM call → :class:`Facets`."""
 
 from __future__ import annotations
 

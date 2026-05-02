@@ -1,8 +1,4 @@
-"""Init guard for the laminar tracer. Refuses non-loopback endpoints by default.
-
-Also exposes helpers for run-identity attributes on root spans:
-:func:`mint_run_id` and :func:`git_sha`.
-"""
+"""Init guard for the Laminar tracer. Refuses non-loopback endpoints by default."""
 
 from __future__ import annotations
 
@@ -39,7 +35,6 @@ def _all_loopback(addrs: list[str]) -> bool:
 
 
 def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> None:
-    # Refuse non-loopback endpoints by default.
     if not base_url:
         return
     host = urlparse(base_url).hostname

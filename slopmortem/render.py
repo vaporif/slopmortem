@@ -21,11 +21,9 @@ if TYPE_CHECKING:
         TopRisks,
     )
 
-# ``[txt](url)``: inline markdown link. Must NOT be greedy across lines.
+# Inline link must NOT be greedy across lines.
 _INLINE_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-# ``[txt][ref]``: reference-style link.
 _REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]+\]")
-# ``![alt](url)``: image markdown.
 _IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 
 
@@ -91,7 +89,6 @@ def _render_candidate(syn: Synthesis) -> str:
         "",
         "Sources:",
         "",
-        # Sources render as plain text, one per line. No `[]()` wrapping.
         "\n".join(syn.sources),
     ]
     return "\n".join(parts)
@@ -153,11 +150,9 @@ def _render_no_comparables_banner(meta: PipelineMeta) -> str:
 
 
 def render(report: Report) -> str:
-    """Render *report* as a markdown string. Pure function, no I/O.
-
-    Inline links, reference-style links, and image markdown are stripped
-    from every prose field. Sources go out as plain URLs, one per line, so
-    no clickable autolink reaches a markdown viewer.
+    """Inline links, reference-style links, and image markdown are stripped from
+    every prose field. Sources go out as plain URLs, one per line, so no
+    clickable autolink reaches a markdown viewer.
     """
     sections: list[str] = [
         f"# Slopmortem report for {report.input.name}",

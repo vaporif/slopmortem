@@ -33,7 +33,11 @@ def collapse_alias_components(
     candidates: list[Candidate],
     edges: Iterable[AliasEdge],
 ) -> list[Candidate]:
-    """*candidates* must arrive in descending-score order — the head of each component becomes the representative."""
+    """Collapse alias-equivalent candidates to the highest-score representative.
+
+    *candidates* must arrive in descending-score order — the head of each
+    component becomes the representative.
+    """
     if not candidates:
         return []
     parents: dict[str, str] = {c.canonical_id: c.canonical_id for c in candidates}

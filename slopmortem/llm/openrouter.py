@@ -189,9 +189,9 @@ class OpenRouterClient:
             raise RuntimeError(msg)
         finally:
             if cost > 0.0:
-                # True cost lands on response.usage.cost, so we settle without
-                # a prior reserve. settle() raises if spent crosses the cap;
-                # the pre-call gate above stops the next call.
+                # True cost lands on response.usage.cost — settle without a
+                # prior reserve. settle() raises if spent crosses the cap; the
+                # pre-call gate above stops the next call.
                 await self._budget.settle("openrouter:complete", cost)
 
     @staticmethod
@@ -203,19 +203,17 @@ class OpenRouterClient:
     async def _call_with_retry(self, **kw: Any) -> Any:  # pyright: ignore[reportExplicitAny]
         """Call SDK with retry/backoff on transient errors.
 
-        A finish_reason='error' chunk with error.code='overloaded_error' is
-        treated as transient: raise MidStreamError, catch here, retry. Auth
-        (401/403), 402 (insufficient credits), 503 (no provider), and
-        non-overloaded mid-stream errors are fatal — re-raised immediately.
+        Mid-stream ``error.code='overloaded_error'`` is transient. Auth
+        (401/403), 402 (no credits), 503 (no provider), and non-overloaded
+        mid-stream errors are fatal — re-raised immediately.
         """
         sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
         for attempt in range(self._max_retries + 1):
             try:
                 resp = await sdk.chat.completions.create(**kw)
-                # Inspect for the mid-stream error signal even on a non-streaming
-                # response. The SDK normalizes the final SSE chunk into the same
-                # ChatCompletion object whose choices[0].finish_reason='error'
-                # carries the upstream error payload.
+                # Even non-streaming responses surface the final SSE chunk's
+                # mid-stream error here: choices[0].finish_reason=='error'
+                # with the upstream payload on choices[0].error.
                 if resp.choices and resp.choices[0].finish_reason == "error":
                     err = getattr(resp.choices[0], "error", None) or {"code": "unknown"}
                     raise MidStreamError(err)  # noqa: TRY301 - caught locally to drive retry loop
@@ -280,9 +278,8 @@ class OpenRouterClient:
                 raise RuntimeError(msg)
 
     def _emit(self, _event: SpanEvent) -> None:
-        # No-op hook so tests can patch it to observe emissions. The active
-        # emit path lives in stages.synthesize._emit_event; this client stays
-        # silent until something needs it to participate.
+        # No-op hook so tests can patch it to observe emissions. Active emit
+        # path lives in stages.synthesize._emit_event.
         return
 
 
@@ -305,11 +302,7 @@ def _tc_id(tc: object) -> str:
 
 
 def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
-    """Render the assistant turn that requested tool calls.
-
-    Builds the payload the next API call replays so the model sees its own
-    prior tool-call request alongside the tool's response.
-    """
+    """Render the assistant turn that requested tool calls (replayed with the tool response)."""
     tcs = [
         {
             "id": _tc_id(tc),
@@ -329,12 +322,7 @@ def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore
 
 
 def is_transient_http(exc: BaseException) -> bool:
-    """Classify openai SDK exceptions as transient or fatal.
-
-    Duck-types attributes so this works against the SDK's exception hierarchy
-    (RateLimitError, APIStatusError, APIConnectionError, APITimeoutError, ...)
-    without importing internals.
-    """
+    """Classify openai SDK exceptions as transient or fatal (duck-typed; no SDK internals imported)."""
     name = type(exc).__name__
     if name in ("APIConnectionError", "APITimeoutError", "RateLimitError"):
         return True
