@@ -567,8 +567,8 @@ def _run_record(
     from slopmortem.config import load_config  # noqa: PLC0415
     from slopmortem.evals import recording_helper  # noqa: PLC0415
     from slopmortem.evals.recording_progress import NullRecordProgress  # noqa: PLC0415
-    from slopmortem.evals.render import RichRecordProgress  # noqa: PLC0415
     from slopmortem.evals.render import (  # noqa: PLC0415
+        RichRecordProgress,
         _render_record_footer,  # pyright: ignore[reportPrivateUsage]
     )
 
