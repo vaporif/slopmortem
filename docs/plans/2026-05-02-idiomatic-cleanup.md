@@ -189,7 +189,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
 **Steps:**
 
-- [ ] **Step 1: Annotate three test functions.**
+- [x] **Step 1: Annotate three test functions.**
 
   At `tests/llm/test_embedder_factory.py:12,19,27`, change:
 
@@ -209,11 +209,11 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   Verify `import pytest` is already present at the top of the file (it is needed for `pytest.MonkeyPatch`); add if missing.
 
-- [ ] **Step 2: Verify.**
+- [x] **Step 2: Verify.**
 
   Run `just test -k test_embedder_factory` and `just typecheck`. Both green.
 
-- [ ] **Step 3: Commit.** Subject: `cleanup: annotate test_embedder_factory.py`.
+- [x] **Step 3: Commit.** Subject: `cleanup: annotate test_embedder_factory.py`.
 
 ---
 
