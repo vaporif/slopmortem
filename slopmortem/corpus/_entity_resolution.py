@@ -57,7 +57,7 @@ _CORPORATE_HIERARCHY_YAML = (
     Path(__file__).resolve().parent / "sources" / "corporate_hierarchy_overrides.yml"
 )
 
-# Suffix-delta detection: corporate suffixes that indicate parent/subsidiary disambiguation.
+# Corporate suffixes that flag parent/subsidiary disambiguation.
 _CORPORATE_SUFFIXES = (
     "holdings",
     "group",
@@ -78,11 +78,10 @@ _CORPORATE_SUFFIXES = (
 )
 _CORPORATE_SUFFIXES_RE = re.compile(rf"\s+({'|'.join(_CORPORATE_SUFFIXES)})\b\.?$", re.IGNORECASE)
 
-# Founding-year delta: more than this many years apart → demote (recycled domain).
+# Founding-year delta beyond this demotes tier-1 to tier-2 (recycled domain).
 _RECYCLED_DOMAIN_YEAR_DELTA = 10
 
-# Tier-3 calibration band: similarity in this range triggers the Haiku
-# tiebreaker. Values outside the band auto-decide.
+# Similarity inside this band triggers the Haiku tiebreaker; outside auto-decides.
 _DEFAULT_TIER3_BAND: tuple[float, float] = (0.65, 0.85)
 
 _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
@@ -90,11 +89,7 @@ _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
 
 @dataclass(frozen=True, slots=True)
 class ResolveResult:
-    """Outcome of a :func:`resolve_entity` call.
-
-    For ``resolver_flipped``, ``canonical_id`` is the NEW id and intentionally
-    NOT written here — the repair pass owns the rebind.
-    """
+    """For ``resolver_flipped``, ``canonical_id`` is the NEW id and intentionally not written here — the repair pass owns the rebind."""
 
     canonical_id: str
     action: Literal["create", "merge", "resolver_flipped", "alias_blocked"]
@@ -153,11 +148,7 @@ def _normalize_name(name: str) -> str:
 
 
 def _strip_corporate_suffix(name: str) -> tuple[str, str | None]:
-    """Return ``(stem, suffix_or_None)``.
-
-    The stem is the corporate-suffix-stripped, lowercase, whitespace-collapsed
-    name. Used by the suffix-delta heuristic.
-    """
+    """Return ``(normalized_stem, suffix_or_None)`` for the suffix-delta heuristic."""
     match = _CORPORATE_SUFFIXES_RE.search(name)
     suffix = match.group(1).lower() if match else None
     stem = re.sub(r"\s+", " ", _CORPORATE_SUFFIXES_RE.sub("", name).strip().lower())
@@ -165,7 +156,6 @@ def _strip_corporate_suffix(name: str) -> tuple[str, str | None]:
 
 
 def _tier2_canonical(name: str, sector: str) -> str:
-    """Tier-2 canonical: ``{normalized_name}::{sector}``."""
     return f"{_normalize_name(name)}::{sector.lower()}"
 
 
@@ -181,7 +171,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def _pair_key(canonical_a: str, canonical_b: str) -> str:
-    """Tier-3 cache key: lex-sorted pair joined by a U+0001 SOH separator."""
+    """Lex-sorted pair joined by U+0001 SOH so ``(A, B)`` and ``(B, A)`` collapse."""
     lo, hi = sorted((canonical_a, canonical_b))
     return f"{lo}{hi}"
 
@@ -344,16 +334,13 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
     haiku_model_id: str,
     max_tokens: int | None = None,
 ) -> tuple[str, str]:
-    """Return ``(decision, rationale)`` where decision is 'same' or 'different'.
-
-    Auto-decides outside the band; calls the Haiku tiebreaker (with caching) inside.
-    """
+    """Auto-decide outside the band; cached Haiku tiebreaker inside."""
     if similarity >= band[1]:
         return "same", "auto: similarity above upper band"
     if similarity <= band[0]:
         return "different", "auto: similarity below lower band"
     if llm_client is None:
-        # In-band but no LLM available: conservative, do NOT collapse.
+        # In-band, no LLM: conservative, do NOT collapse.
         return "different", "no llm: defaulting to different inside calibration band"
     pk = _pair_key(canonical_existing, canonical_new)
     tiebreaker_hash = prompt_template_sha(_TIEBREAKER_PROMPT_NAME)
@@ -387,7 +374,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
         tiebreaker_hash,
         now_iso,
     )
-    # Also write a pending_review row for the offline `--list-review` queue.
+    # Mirror to pending_review for the offline `--list-review` queue.
     section_heads = json.dumps(
         {
             "existing": section_head_existing[:200],
@@ -407,7 +394,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
 
 
 def _parse_tiebreaker_response(text: str) -> tuple[str, str]:
-    """Parse the Haiku tiebreaker JSON response. Falls back conservatively."""
+    """Falls back to ``different`` on any parse failure."""
     try:
         payload = cast("dict[str, Any]", json.loads(text))  # pyright: ignore[reportExplicitAny]
     except json.JSONDecodeError:
@@ -420,7 +407,6 @@ def _parse_tiebreaker_response(text: str) -> tuple[str, str]:
 
 
 def _looks_tier1(canonical_id: str) -> bool:
-    """True for plain-domain canonicals (no ``::`` separator)."""
     return "::" not in canonical_id
 
 

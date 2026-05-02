@@ -1,10 +1,7 @@
 # pyright: reportAny=false
 """Top-level ``ingest()`` orchestration.
 
-Pipeline overview lives in ``docs/architecture.md`` and the load-bearing
-invariants are in CLAUDE.md. Per-stage logic is split across sibling
-modules (``_warm_cache``, ``_fan_out``, ``_journal_writes``, ``_slop_gate``)
-so the package's dependency graph stays acyclic.
+Pipeline overview: ``docs/architecture.md``; load-bearing invariants: CLAUDE.md.
 """
 
 from __future__ import annotations
@@ -61,7 +58,6 @@ logger = logging.getLogger(__name__)
 
 
 def _emit_collected_events(result: IngestResult) -> None:
-    """Replay the run's accumulated span events to Laminar on the parent span."""
     if not Laminar.is_initialized():
         return
     for name in result.span_events:
@@ -69,9 +65,7 @@ def _emit_collected_events(result: IngestResult) -> None:
 
 
 def _record_error(result: IngestResult, entry_label: str, exc: BaseException) -> None:
-    """Index the per-entry exception onto the active Laminar span.
-
-    Without this, swallowed per-entry exceptions only surface in stderr; the
+    """Without this, swallowed per-entry exceptions only surface in stderr; the
     parent ingest span returns OK and INGEST_ENTRY_FAILED carries no payload.
     """
     if not Laminar.is_initialized():
@@ -101,11 +95,10 @@ async def _classify_phase(  # noqa: PLR0913 - one phase, every dep at this seam
     progress: IngestProgress,
     result: IngestResult,
 ) -> list[tuple[RawEntry, str]]:
-    """Enrich → extract body → slop-gate; return the survivors as (entry, body).
+    """Enrich → extract body → slop-gate; return survivors as ``(entry, body)``.
 
-    Mutates ``result`` counters (``seen``, ``errors``, ``skipped``,
-    ``quarantined``) and ``result.span_events``. Per-entry failures log
-    and continue; only the run-level orchestrator can short-circuit.
+    Per-entry failures log and continue; only the run-level orchestrator can
+    short-circuit. Mutates ``result`` counters and ``result.span_events``.
     """
     progress.start_phase(IngestPhase.CLASSIFY, total=len(entries))
     keepers: list[tuple[RawEntry, str]] = []
@@ -172,11 +165,9 @@ async def _write_phase(  # noqa: PLR0913 - one phase, every dep at this seam
     progress: IngestProgress,
     result: IngestResult,
 ) -> None:
-    """Per-entry write: resolve, journal, disk, qdrant, mark_complete.
+    """Per-entry: resolve → journal → disk → qdrant → mark_complete.
 
-    Mutates ``result`` counters (``errors``, ``processed``, ``skipped``,
-    ``skipped_empty``, ``failed``) and ``result.span_events``. Per-entry
-    failures isolate; ``BaseException`` (cancel / system-exit) re-raises
+    Per-entry failures isolate; ``BaseException`` (cancel / system-exit) re-raises
     after surfacing which entry triggered it.
     """
     progress.start_phase(IngestPhase.WRITE, total=len(keepers))
@@ -306,8 +297,6 @@ async def ingest(  # noqa: PLR0913 - orchestration takes every dependency.
             }
         )
 
-    # Tests stub this with a dict-returning lambda so the ~150 MB ONNX model
-    # never loads under pytest.
     if sparse_encoder is None:
         from slopmortem.corpus._embed_sparse import encode as _encode_sparse  # noqa: PLC0415
 

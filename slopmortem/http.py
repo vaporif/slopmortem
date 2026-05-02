@@ -59,8 +59,8 @@ def _resolve_all(host: str) -> list[str]:
 
 
 def _resolve_and_validate(url: str) -> str:
-    # Returns the parsed host for the ``Host`` header. Shared by safe_get and
-    # safe_post so one code path enforces the SSRF policy.
+    # One enforcement path for both safe_get and safe_post; returns the parsed
+    # host for the ``Host`` header.
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         msg = f"refusing non-http(s) scheme: {parsed.scheme!r}"

@@ -1,8 +1,4 @@
-"""Provider-dispatch factory for the configured :class:`EmbeddingClient`.
-
-Lives outside ``cli.py`` because the eval recorder builds the same wiring and
-should not pull in CLI-only deps via a private import.
-"""
+"""Provider-dispatch factory for ``EmbeddingClient``; shared by CLI and eval recorder."""
 
 from __future__ import annotations
 
@@ -20,11 +16,7 @@ if TYPE_CHECKING:
 
 
 def make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
-    """Build the embedding client for the configured provider.
-
-    Raises ``ValueError`` on an unknown provider so misconfig fails loud at
-    startup rather than at first embed call.
-    """
+    """Build the embedding client; unknown provider raises ``ValueError`` at startup."""
     provider = config.embedding_provider
     if provider == "fastembed":
         return FastEmbedEmbeddingClient(

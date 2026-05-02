@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class FastEmbedEmbeddingClient:
-    """ONNX-backed EmbeddingClient that runs locally and settles zero against the budget."""
+    """Local ONNX EmbeddingClient; settles 0.0 against the budget for contract symmetry."""
 
     def __init__(
         self,
@@ -43,13 +43,12 @@ class FastEmbedEmbeddingClient:
         return EMBED_DIMS[self.model]
 
     async def prefetch(self) -> None:
-        # Force the ONNX model to load now (e.g. CI cache warm); otherwise
-        # lazy on first embed.
+        # Eager load for CI cache warm; otherwise lazy on first embed.
         await self._ensure_loaded()
 
     async def _ensure_loaded(self) -> TextEmbedding:
-        # Lock-and-double-check so concurrent embed() calls (ingest fans out to
-        # ingest_concurrency callers) don't each load a separate ~550MB model.
+        # Lock + double-check so concurrent embed() callers don't each load a
+        # separate ~550MB model.
         if self._te is not None:
             return self._te
         async with self._load_lock:
@@ -83,7 +82,6 @@ class FastEmbedEmbeddingClient:
             raise RuntimeError(msg) from exc
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        # Budget reserve/settle 0.0 for contract symmetry with paid clients.
         if model is not None and model != self.model:
             msg = (
                 f"FastEmbedEmbeddingClient was constructed with {self.model!r}; "
@@ -103,9 +101,9 @@ class FastEmbedEmbeddingClient:
 
     @staticmethod
     def _embed_sync(te: TextEmbedding, texts: list[str]) -> tuple[list[list[float]], int]:
-        # L2-normalize before return so cosine == dot in Qdrant. fastembed
-        # routes nomic-embed-text-v1.5 through PooledEmbedding (mean pooling,
-        # no normalization), so the normalize happens here.
+        # L2-normalize so cosine == dot in Qdrant. fastembed routes
+        # nomic-embed-text-v1.5 through PooledEmbedding (mean pooling, no
+        # normalization), so we do it here.
         vectors: list[list[float]] = []
         for v in te.embed(texts):
             arr = np.asarray(v, dtype=np.float32)

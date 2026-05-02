@@ -29,11 +29,9 @@ if TYPE_CHECKING:
 
 
 class _StackedBar:
-    """Render *bar* ``height`` times on consecutive rows.
-
-    Rich's :class:`ProgressBar` yields segments without a trailing newline, so
-    a ``Group`` of N bars renders inline. Drop explicit ``Segment.line``
-    between copies to stack them vertically.
+    """Rich's ``ProgressBar`` yields segments without a trailing newline, so a
+    ``Group`` of N bars renders inline. Explicit ``Segment.line`` between
+    copies stacks them vertically.
     """
 
     def __init__(self, bar: ProgressBar, height: int) -> None:
@@ -51,12 +49,7 @@ class _StackedBar:
 
 
 class ThickBarColumn(BarColumn):
-    """:class:`BarColumn` whose bar spans ``height`` terminal rows.
-
-    Rich bars are one row tall. The :class:`_StackedBar` wrapper repeats the
-    bar so it reads as a chunkier marker without changing layout; adjacent
-    columns auto-pad to the tallest cell in the row.
-    """
+    """Bar spanning ``height`` terminal rows; adjacent columns auto-pad to the tallest cell."""
 
     height = 1
 
@@ -68,12 +61,7 @@ class ThickBarColumn(BarColumn):
 
 
 class OptionalMofNCompleteColumn(MofNCompleteColumn):
-    """:class:`MofNCompleteColumn` that hides for single-shot phases.
-
-    Tasks with ``total <= 1`` carry no useful count; the bar's pulse-then-fill
-    already conveys done vs not-done. Returning empty text drops the cell and
-    avoids ``0/1 → 1/1`` noise.
-    """
+    """Hides ``M of N`` for single-shot phases; the pulse-then-fill bar already conveys done vs not-done."""
 
     @override
     def render(self, task: Task) -> Text:
@@ -83,12 +71,8 @@ class OptionalMofNCompleteColumn(MofNCompleteColumn):
 
 
 class OptionalETAColumn(TimeRemainingColumn):
-    """Renders ``eta <remaining>`` while running, hides otherwise.
-
-    Suppressed when the task is finished (Rich's default keeps painting
-    ``0:00``, which reads as "still computing, 0s left") and when the task
-    has no granular total. Single-shot phases pulse, so a remaining-time
-    estimate is meaningless.
+    """Suppresses ETA on finished tasks (Rich keeps painting ``0:00`` which reads as
+    "still computing") and on single-shot phases (no meaningful remaining-time estimate).
     """
 
     @override
@@ -101,8 +85,7 @@ class OptionalETAColumn(TimeRemainingColumn):
 class RichPhaseProgress[PhaseT: StrEnum]:
     """Rich-backed phase progress shared by ingest, query, and recording pipelines.
 
-    One :class:`rich.progress.Progress` with a task per phase. Tasks are
-    created lazily so unreached phases don't render empty bars, and a red
+    Tasks are created lazily so unreached phases don't render empty bars; a red
     error-count badge gets appended to the description on per-phase failures.
     """
 
@@ -161,12 +144,7 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         return f"{styled} [bold red]({n} {noun})[/bold red]"
 
     def start_phase(self, phase: PhaseT, total: int | None) -> None:
-        """Create or reset the bar for *phase* with the expected ``total``.
-
-        Phases with no granular progress (``total`` is ``None`` or ``<= 1``)
-        pulse instead of flashing 0→1. ``end_phase`` snaps them to filled on
-        completion.
-        """
+        """Phases with ``total`` ``None`` or ``<= 1`` pulse instead of flashing 0->1; ``end_phase`` snaps them to filled."""
         bar_total = total if total and total > 1 else None
         if phase in self._tasks:
             self._progress.reset(self._tasks[phase], total=bar_total)
@@ -175,15 +153,12 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         self._tasks[phase] = self._progress.add_task(self._label(phase), total=bar_total)
 
     def advance_phase(self, phase: PhaseT, n: int = 1) -> None:
-        """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
         tid = self._tasks.get(phase)
         if tid is not None:
             self._progress.advance(tid, n)
 
     def end_phase(self, phase: PhaseT) -> None:
-        """Complete *phase*'s bar and stop its spinner.
-
-        For indeterminate phases (``total is None``), freeze the bar at
+        """For indeterminate phases (``total is None``), freeze the bar at
         ``total = max(completed, 1)``. Otherwise fill to ``total``.
         """
         tid = self._tasks.get(phase)

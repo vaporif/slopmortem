@@ -57,8 +57,6 @@ logger = logging.getLogger(__name__)
 
 
 class ProcessOutcome(StrEnum):
-    """Closed enum so the ``match`` in ingest() is exhaustive at typecheck."""
-
     PROCESSED = "processed"
     SKIPPED = "skipped"
     SKIPPED_EMPTY = "skipped_empty"
@@ -81,12 +79,10 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     span_events: list[str],
     sparse_encoder: SparseEncoder,
 ) -> ProcessOutcome:
-    """Write raw + canonical + chunks for one resolved entry.
-
-    SKIPPED_EMPTY: chunking yielded zero chunks, so mark_complete is skipped
-    rather than journalling an entry with no Qdrant points. FAILED: a write
-    raised (today only delete_chunks_for_canonical on a re-merge); we abort
-    before any upsert so we don't shadow prior orphans with a fresh layer.
+    """SKIPPED_EMPTY: zero chunks → skip mark_complete rather than journalling
+    a row with no Qdrant points. FAILED: a write raised (today only
+    delete_chunks_for_canonical on a re-merge); abort before any upsert so we
+    don't shadow prior orphans with a fresh layer.
     """
     name = entry.source_id  # ingest's name extraction is best-effort in v1
     sector = fan.facets.sector

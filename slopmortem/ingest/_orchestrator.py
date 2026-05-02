@@ -1,8 +1,7 @@
 # pyright: reportAny=false
 """Shared types, protocols, dataclasses, and pure helpers for the ingest package.
 
-Leaf of the package's import graph: imports nothing from sibling ``slopmortem.ingest``
-modules and is imported by all of them.
+Leaf of the package's import graph: imports nothing from sibling ingest modules.
 """
 
 from __future__ import annotations
@@ -63,7 +62,7 @@ _RELIABILITY_RANK: Final[dict[str, int]] = {
 
 @runtime_checkable
 class Corpus(Protocol):
-    """Narrow corpus surface ingest depends on; production is :class:`QdrantCorpus`."""
+    """Narrow corpus surface ingest depends on; prod impl is :class:`QdrantCorpus`."""
 
     async def upsert_chunk(self, point: object) -> None: ...
 
@@ -73,8 +72,6 @@ class Corpus(Protocol):
 
 
 class IngestPhase(StrEnum):
-    """Phase keys used by :class:`IngestProgress`. Closed enum so typos fail at parse."""
-
     GATHER = "gather"
     CLASSIFY = "classify"
     CACHE_WARM = "cache_warm"
@@ -95,11 +92,8 @@ INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 
 @runtime_checkable
 class IngestProgress(Protocol):
-    """Phase-level progress hooks for ``slopmortem ingest``.
-
-    Default :class:`NullProgress` keeps the orchestrator decoupled from any UI
-    library; the CLI wires a Rich impl. ``log`` is for neutral status lines,
-    ``error`` for failures (impl paints those red).
+    """Phase-level progress hooks. Default :class:`NullProgress` keeps the
+    orchestrator decoupled from any UI library; the CLI wires a Rich impl.
     """
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None:
@@ -115,7 +109,7 @@ class IngestProgress(Protocol):
 
 
 class NullProgress:
-    """No-op :class:`IngestProgress` used when no display surface is attached."""
+    """No-op :class:`IngestProgress` for when no display surface is attached."""
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None: ...
 
@@ -137,7 +131,7 @@ class SlopClassifier(Protocol):
 
 @dataclass
 class _Point:
-    """Tiny stand-in for a Qdrant point. Production builds qdrant_client.models.PointStruct."""
+    """Stand-in for a Qdrant point; prod uses ``qdrant_client.models.PointStruct``."""
 
     id: str
     vector: dict[str, object]
@@ -146,7 +140,7 @@ class _Point:
 
 @dataclass
 class InMemoryCorpus:
-    """In-memory :class:`Corpus` impl used by ingest tests; not used in production."""
+    """In-memory :class:`Corpus` for tests; not used in production."""
 
     points: list[_Point] = field(default_factory=list)
 
@@ -165,7 +159,7 @@ class InMemoryCorpus:
 
 @dataclass
 class FakeSlopClassifier:
-    """Deterministic test :class:`SlopClassifier`. ``scores`` overrides per text key prefix."""
+    """Deterministic test :class:`SlopClassifier`; ``scores`` overrides by text-key prefix."""
 
     default_score: float = 0.0
     scores: dict[str, float] = field(default_factory=dict)
@@ -179,14 +173,12 @@ class FakeSlopClassifier:
 
 @dataclass
 class HaikuSlopClassifier:
-    """Asks Haiku whether a text describes a dead company.
+    """Asks Haiku whether a text describes a dead company; returns 0.0 if yes,
+    else 1.0 (above the default ``slop_threshold=0.7``, so quarantines).
 
-    Returns 0.0 when Haiku says yes, else 1.0 (above the default
-    ``slop_threshold=0.7``, so the entry quarantines).
-
-    ``char_limit=6000`` is sized so the demise narrative falls inside the
-    window for long obituaries (Sun, WeWork). Tighter 1500-char caps caused
-    false-negative quarantines.
+    ``char_limit=6000`` so the demise narrative falls inside the window for long
+    obituaries (Sun, WeWork). Tighter 1500-char caps caused false-negative
+    quarantines.
     """
 
     llm: LLMClient
@@ -230,8 +222,6 @@ class HaikuSlopClassifier:
 
 @dataclass
 class IngestResult:
-    """Roll-up of one ingest run for the operator and CI."""
-
     seen: int = 0
     processed: int = 0
     quarantined: int = 0
@@ -275,9 +265,7 @@ def _skip_key(  # noqa: PLR0913 - the contract tuple is wide  # pyright: ignore[
 
 
 def _truncate_to_tokens(text: str, max_tokens: int) -> str:
-    """Clip *text* to at most *max_tokens* under cl100k_base.
-
-    Anthropic's tokenizer isn't published; cl100k_base agrees to within ~10%
+    """Anthropic's tokenizer isn't published; cl100k_base agrees within ~10%
     on English prose, well inside the truncation budget's headroom.
     """
     if max_tokens <= 0:
@@ -292,9 +280,7 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
 
 
 def _entry_summary_text(entry: RawEntry, *, max_tokens: int) -> str:  # pyright: ignore[reportUnusedFunction]  -- imported by _ingest.py
-    """Return the entry's body text for slop / facet / summarize.
-
-    Clipped to *max_tokens* to bound LLM input cost on long-tail articles
+    """Clipped to *max_tokens* to bound LLM input cost on long-tail articles
     (Wikipedia entries can run 60KB+ after trafilatura).
     """
     if entry.markdown_text:
@@ -318,12 +304,11 @@ async def _gather_entries(  # pyright: ignore[reportUnusedFunction]  -- imported
     limit: int | None = None,
     progress: IngestProgress | None = None,
 ) -> tuple[list[RawEntry], int]:
-    """Collect entries from every source. Per-source failures are logged and counted.
+    """Per-source failures are logged and counted, never abort the run.
 
-    When *limit* is set, gather stops as soon as ``len(out) >= limit``: sources
-    beyond the cap aren't started, and an in-progress source breaks out of its
-    async iterator. So ``--limit`` is a real fast-path knob for smoke tests, not
-    just a post-gather slice.
+    ``--limit`` is a real fast-path knob, not a post-gather slice: sources
+    beyond the cap aren't started, and in-progress sources break out of their
+    async iterator on the next yield.
     """
     out: list[RawEntry] = []
     failures = 0
@@ -361,7 +346,6 @@ def _build_payload(  # noqa: PLR0913 - payload assembly takes every store-time f
     name: str,
     provenance: str,
 ) -> CandidatePayload:
-    """Build the :class:`CandidatePayload` written into every chunk point."""
     founding_year = facets.founding_year
     failure_year = facets.failure_year
     return CandidatePayload(

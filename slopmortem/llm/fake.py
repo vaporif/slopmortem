@@ -15,15 +15,13 @@ if TYPE_CHECKING:
 class NoCannedResponseError(BaseException):
     """No canned reply for ``(template_sha, model, prompt_hash)``.
 
-    Inherits ``BaseException`` so the resilient fan-out wrappers (which
-    catch ``Exception``) can't swallow a fixture miss as a dropped candidate.
+    Inherits ``BaseException`` so resilient fan-out wrappers (which catch
+    ``Exception``) can't swallow a fixture miss as a dropped candidate.
     """
 
 
 @dataclass
 class FakeResponse:
-    """Canned response that FakeLLMClient turns into a CompletionResult when called."""
-
     text: str
     stop_reason: str = "stop"
     cost_usd: float = 0.0
@@ -56,12 +54,11 @@ class _Call:
 
 @dataclass
 class FakeLLMClient:
-    """In-memory LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
+    """LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
 
     Template SHA arrives via ``extra_body['prompt_template_sha']`` so any
-    change to prompt text invalidates the fixture key. ``prompt_hash`` comes
-    from :func:`slopmortem.llm.cassettes.llm_cassette_key`; tests can pin it
-    explicitly via ``extra_body['prompt_hash']``.
+    prompt change invalidates the fixture key. Tests can pin ``prompt_hash``
+    via ``extra_body['prompt_hash']`` instead of letting it derive.
     """
 
     canned: Mapping[tuple[str, str, str], FakeResponse | CompletionResult]
@@ -90,8 +87,6 @@ class FakeLLMClient:
                 f"none supplied for model {eff_model!r}"
             )
             raise NoCannedResponseError(msg)
-        # Compute prompt_hash from prompt+system; tests can pin a specific
-        # hash by setting extra_body["prompt_hash"].
         prompt_hash: str
         if extra_body and "prompt_hash" in extra_body:
             prompt_hash = str(extra_body["prompt_hash"])  # pyright: ignore[reportAny]

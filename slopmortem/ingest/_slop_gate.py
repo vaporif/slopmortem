@@ -48,10 +48,8 @@ async def classify_one(
     pre_vetted_sources: frozenset[str] = _PRE_VETTED_SOURCES,
     on_error: Callable[[Exception], None],
 ) -> float:
-    """Return the slop score for *entry*; 0.0 for pre-vetted sources or failures.
-
-    Classifier exceptions are swallowed (never abort a run on a classifier
-    hiccup) and reported via *on_error* for the caller's progress / logging.
+    """Returns 0.0 for pre-vetted sources or on classifier failure (failures are
+    reported via *on_error* and never abort the run).
     """
     if entry.source in pre_vetted_sources:
         return 0.0

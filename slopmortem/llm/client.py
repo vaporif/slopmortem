@@ -11,8 +11,6 @@ if TYPE_CHECKING:
 
 @dataclass
 class CompletionResult:
-    """One completion turn: text, stop reason, optional Pydantic model, and cost/cache stats."""
-
     text: str
     stop_reason: str
     parsed: BaseModel | None = None
@@ -23,9 +21,7 @@ class CompletionResult:
 
 @runtime_checkable
 class LLMClient(Protocol):
-    """Async chat-completion contract that real and fake LLM backends implement."""
-
-    # ``Any`` here is intentional: tools/response_format/extra_body are SDK passthroughs.
+    # ``Any`` is intentional: tools/response_format/extra_body are SDK passthroughs.
     async def complete(  # noqa: PLR0913 - mirrors OpenAI chat.create
         self,
         prompt: str,
@@ -37,6 +33,4 @@ class LLMClient(Protocol):
         response_format: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
-    ) -> CompletionResult:
-        # Implementations may handle tool calls and retries internally.
-        ...
+    ) -> CompletionResult: ...

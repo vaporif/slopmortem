@@ -84,11 +84,9 @@ async def _facet_summarize_fanout(
     config: Config,
     progress: IngestProgress | None = None,
 ) -> list[_FanoutResult | Exception]:
-    """Run facet+summarize concurrently under ``ingest_concurrency`` capacity.
-
-    Returns one :class:`_FanoutResult` per entry in order, or the exception
-    that aborted that entry. Facet and summarize for the same entry run
-    sequentially so two LLM calls never share one limiter slot.
+    """Facet and summarize for the same entry run sequentially so two LLM calls
+    never share one limiter slot. Returns one :class:`_FanoutResult` per entry
+    in order, or the exception that aborted it.
     """
     limiter = anyio.CapacityLimiter(config.ingest_concurrency)
     bar = progress or NullProgress()

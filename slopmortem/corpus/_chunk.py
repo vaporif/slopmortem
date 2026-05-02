@@ -1,8 +1,8 @@
 """Heading-aware token-window chunker for canonical post-mortem markdown.
 
-768-token windows, 128-token overlap, tokenized with ``tiktoken``'s
-``cl100k_base``. If a ``#`` heading falls within the next 96 tokens after the
-window start, the boundary jumps to it so chunks don't start mid-paragraph.
+768-token windows, 128-token overlap, ``cl100k_base`` tokenizer. If a ``#``
+heading falls within the next 96 tokens after the window start, the boundary
+jumps to it so chunks don't start mid-paragraph.
 """
 
 from __future__ import annotations
@@ -22,8 +22,6 @@ HEADING_SEARCH_TOKENS: Final[int] = 96
 
 
 class Chunk(BaseModel):
-    """One chunk fed to the embedder and stored as a single Qdrant point."""
-
     text: str
     parent_canonical_id: str
     chunk_idx: int
@@ -32,8 +30,6 @@ class Chunk(BaseModel):
 
 def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[int]:
     """Return token indices where a ``#`` heading line starts."""
-    # Decode once and find newline-prefixed '#'. O(N) instead of re-encoding
-    # the whole doc once per offset.
     offsets: list[int] = []
     text = enc.decode(tokens)
     cur = 0
@@ -50,7 +46,6 @@ def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[in
     char_to_token.sort()
 
     def char_to_token_idx(char_idx: int) -> int:
-        # Largest prefix length <= char_idx. Linear scan; len/32 entries.
         chosen = 0
         for cl, ti in char_to_token:
             if cl <= char_idx:
@@ -63,7 +58,6 @@ def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[in
         idx = text.find("\n#", cur)
         if idx == -1:
             break
-        # Heading starts at idx + 1; skip the leading newline.
         offsets.append(char_to_token_idx(idx + 1))
         cur = idx + 1
     # A heading at the very start of the doc has no leading newline.
@@ -73,16 +67,7 @@ def _heading_token_offsets(enc: tiktoken.Encoding, tokens: list[int]) -> list[in
 
 
 def chunk_markdown(text: str, *, parent_canonical_id: str) -> list[Chunk]:
-    """Split *text* into 768-token windows with 128-token overlap, heading-aware.
-
-    Args:
-        text: The full canonical post-mortem markdown body.
-        parent_canonical_id: The canonical_id stored on every emitted chunk.
-
-    Returns:
-        A list of :class:`Chunk` objects in document order with monotonic
-        ``chunk_idx``.
-    """
+    """Split *text* into 768-token windows with 128-token overlap, heading-aware."""
     enc = tiktoken.get_encoding("cl100k_base")
     tokens = enc.encode(text)
     if not tokens:
@@ -103,9 +88,7 @@ def chunk_markdown(text: str, *, parent_canonical_id: str) -> list[Chunk]:
     chunk_idx = 0
     while start < len(tokens):
         end = min(start + WINDOW_TOKENS, len(tokens))
-        # If a heading sits within HEADING_SEARCH_TOKENS after start, snap
-        # forward so the chunk begins at the heading. Skip on the first chunk
-        # (start == 0) — the doc's opening tokens always come first.
+        # Skip on the first chunk — the doc's opening tokens always come first.
         if start > 0:
             for h in headings:
                 if start < h <= start + HEADING_SEARCH_TOKENS and h < end:

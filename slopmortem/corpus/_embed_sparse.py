@@ -2,8 +2,8 @@
 """BM25 sparse embedder wrapping :mod:`fastembed`.
 
 The Qdrant collection needs ``Modifier.IDF`` — without it sparse retrieval
-falls back to raw token-frequency matching. Model loads lazily so ONNX
-startup doesn't dominate test collection.
+falls back to raw token-frequency. Model loads lazily so the ONNX download
+doesn't dominate test collection.
 """
 
 from __future__ import annotations

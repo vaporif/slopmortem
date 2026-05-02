@@ -1,8 +1,7 @@
 """Union-find over alias edges to dedupe canonicals belonging to one lifecycle.
 
 M&A, rebrand, or pivot leaves two canonicals for one lifecycle; the ``aliases``
-SQLite table (see :mod:`slopmortem.corpus._merge`) records the lineage edges.
-Pure Python, no I/O — callers pass edges in.
+table records the lineage edges. Pure Python, no I/O — callers pass edges in.
 """
 
 from __future__ import annotations
@@ -34,11 +33,7 @@ def collapse_alias_components(
     candidates: list[Candidate],
     edges: Iterable[AliasEdge],
 ) -> list[Candidate]:
-    """Collapse alias-connected candidates to one representative per component.
-
-    *candidates* must arrive in descending-score order — the head of each
-    component becomes the representative.
-    """
+    """*candidates* must arrive in descending-score order — the head of each component becomes the representative."""
     if not candidates:
         return []
     parents: dict[str, str] = {c.canonical_id: c.canonical_id for c in candidates}
@@ -46,8 +41,7 @@ def collapse_alias_components(
 
     for edge in edges:
         a, b = edge.canonical_id, edge.target_canonical_id
-        # Only union when both endpoints are in the result set. An edge to a
-        # canonical that wasn't retrieved has nothing to dedupe against.
+        # An edge to a canonical that wasn't retrieved has nothing to dedupe against.
         if a in cand_ids and b in cand_ids:
             _union(parents, a, b)
 
@@ -57,7 +51,6 @@ def collapse_alias_components(
 
     out: list[Candidate] = []
     for group in by_root.values():
-        # Input order is descending score, so the head is the rep.
         rep = group[0]
         if len(group) == 1:
             out.append(rep)

@@ -1,12 +1,8 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-"""Async OpenRouter / OpenAI-compatible chat client.
+"""Async OpenRouter / OpenAI-compatible chat client; retries, tool-call loop, cache control.
 
-Handles retries, the tool-call loop, and cache control.
-
-The vendor SDK is loosely typed (`object` / `Any` payloads with duck-typed
-attributes), so this file silences `reportAny` / `reportUnknown*` at the
-boundary. Explicit `Any` in annotations is still gated per-site via
-`reportExplicitAny` ignores.
+Vendor SDK is duck-typed at the boundary; reportAny / reportUnknown* are
+silenced file-wide, reportExplicitAny stays per-site.
 """
 
 from __future__ import annotations
@@ -35,20 +31,18 @@ _HTTP_TOO_MANY_REQUESTS = 429
 
 
 class MidStreamError(Exception):
-    """Raised when an SSE chunk arrives at HTTP 200 with finish_reason='error'.
+    """SSE chunk arrived at HTTP 200 with finish_reason='error'.
 
     Carries the raw error payload so the retry layer can decide whether
-    error.code is transient (e.g. ``overloaded_error``) or fatal.
+    ``error.code`` is transient (e.g. ``overloaded_error``) or fatal.
     """
 
     def __init__(self, error: object) -> None:
-        """Wrap *error* (the OpenRouter SSE error payload) as an exception."""
         super().__init__(str(error))
         self.error = error or {}
 
     @property
     def code(self) -> str:
-        """Return the upstream error.code string (empty if not present)."""
         if isinstance(self.error, dict):
             return str(self.error.get("code", ""))
         return str(getattr(self.error, "code", ""))
@@ -63,9 +57,8 @@ async def gather_with_limit[T](
 ) -> list[T | Exception]:
     """Run *coros* concurrently with at most *limit* in flight.
 
-    Wraps :func:`slopmortem.concurrency.gather_resilient` behind an
-    ``anyio.CapacityLimiter`` so callers can cap parallel OpenRouter calls at
-    ``config.ingest_concurrency`` without rewriting the bookkeeping.
+    Wraps ``gather_resilient`` behind a ``CapacityLimiter`` so callers can cap
+    parallel OpenRouter calls at ``config.ingest_concurrency``.
     """
     limiter = anyio.CapacityLimiter(limit)
 
@@ -90,7 +83,6 @@ class OpenRouterClient:
         initial_backoff: float = 1.0,
         sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
-        """Bind an SDK instance, budget, and tunable retry/tool-loop knobs."""
         self._sdk = sdk
         self._budget = budget
         self._default_model = model

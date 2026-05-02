@@ -23,11 +23,9 @@ class _EmbedCall:
 class FakeEmbeddingClient:
     """Deterministic in-memory EmbeddingClient for tests.
 
-    When ``canned`` is None (default) vectors come from sha256(text), so the
-    same input always produces the same vector across runs and processes.
-    When ``canned`` is supplied, lookups are strict on
-    ``(model, text_hash)`` (matching :func:`embed_cassette_key`); a miss
-    raises :class:`NoCannedEmbeddingError`.
+    With ``canned=None`` vectors come from sha256(text) — same input, same
+    vector across runs and processes. With ``canned`` supplied, lookups are
+    strict on ``(model, text_hash)`` and a miss raises ``NoCannedEmbeddingError``.
     """
 
     def __init__(
@@ -75,11 +73,7 @@ class FakeEmbeddingClient:
 
 
 def _sha_vector(text: str, dim: int) -> list[float]:
-    """Expand sha256(text) into ``dim`` floats in [-1, 1].
-
-    Repeats the hash with a counter suffix until there are enough bytes,
-    then maps each byte to a float in [-1, 1].
-    """
+    """Expand sha256(text) into ``dim`` floats in [-1, 1] (counter-suffixed rehash for length)."""
     out: list[int] = []
     counter = 0
     while len(out) < dim:
