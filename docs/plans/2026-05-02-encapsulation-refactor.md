@@ -241,13 +241,13 @@ If all three pass, this task is verification-only — no edit, no commit.
 - Modify: `slopmortem/corpus/__init__.py`
 - Modify: `slopmortem/corpus/tools_impl.py` (add public `set_query_corpus` wrapper)
 
-- [ ] **Step 1: Enumerate outside callers of `slopmortem.corpus.*`**
+- [x] **Step 1: Enumerate outside callers of `slopmortem.corpus.*`**
 
 Run: `grep -rnE "^from slopmortem\.corpus\." slopmortem/ tests/ | grep -v "^slopmortem/corpus/"`
 
 Capture the output as the verification snapshot. Any submodule with at least one outside caller is a candidate for re-export. Submodules with no outside callers stay private.
 
-- [ ] **Step 2: Add a public `set_query_corpus` wrapper to `tools_impl.py`**
+- [x] **Step 2: Add a public `set_query_corpus` wrapper to `tools_impl.py`**
 
 Read `slopmortem/corpus/tools_impl.py`. The existing private function is `def _set_corpus(c: Corpus) -> None:` at `tools_impl.py:104`. `Corpus` is imported from `slopmortem.corpus.store` under `TYPE_CHECKING`. Append a public wrapper that mirrors the same typed signature — do NOT widen to `object`, basedpyright strict (`reportAny="error"`) will reject it:
 
@@ -264,11 +264,11 @@ def set_query_corpus(c: Corpus) -> None:
 
 If the underlying signature changes after this plan is written (different param name or type), mirror it verbatim. Keep the parameter name aligned so positional and keyword callers both work.
 
-- [ ] **Step 3: Expand `corpus/__init__.py` with the verified re-export list**
+- [x] **Step 3: Expand `corpus/__init__.py` with the verified re-export list**
 
 Edit `slopmortem/corpus/__init__.py`. Use the explicit `from … import X as X` form so basedpyright is satisfied. Add re-exports for: `entity_resolution.resolve_entity`, `paths.safe_path`, `extract.extract_clean`, `reclassify.reclassify_quarantined`, `merge_text.Section`, `merge_text.combined_hash`, `merge_text.combined_text`, `tools_impl.set_query_corpus`, and `tools_impl.TAVILY_EXTRACT_URL` if and only if step 1's grep showed it has an outside caller. Convert existing bare imports to the `as X` form too.
 
-- [ ] **Step 4: Persist the verification result as a header comment**
+- [x] **Step 4: Persist the verification result as a header comment**
 
 Prepend a comment block to `slopmortem/corpus/__init__.py`:
 
@@ -280,7 +280,7 @@ Prepend a comment block to `slopmortem/corpus/__init__.py`:
 
 Fill in actual results from step 1 for: `store`, `summarize`, `alias_graph`, `embed_sparse`, `merge_text`, `tools_impl`. Use today's date.
 
-- [ ] **Step 5: Run typecheck and smoke**
+- [x] **Step 5: Run typecheck and smoke**
 
 Run: `just typecheck && just smoke`
 Expected: green. `lint-imports` still passes (no contracts yet).
