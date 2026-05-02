@@ -28,7 +28,6 @@ def _get_model() -> SparseTextEmbedding:
 
 
 def encode(text: str) -> dict[int, float]:
-    """Return a sparse vector as a ``{token_id: weight}`` dict for *text*."""
     model = _get_model()
     [emb] = list(model.embed([text]))
     return dict(zip(emb.indices.tolist(), emb.values.tolist(), strict=True))

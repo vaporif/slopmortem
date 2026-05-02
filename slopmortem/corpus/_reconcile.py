@@ -39,10 +39,10 @@ from typing import TYPE_CHECKING, Final, Protocol
 from anyio import to_thread
 from pydantic import BaseModel, Field
 
-from slopmortem.corpus.disk import read_front_matter
+from slopmortem.corpus._disk import read_front_matter
 
 if TYPE_CHECKING:
-    from slopmortem.corpus.merge import MergeJournal
+    from slopmortem.corpus._merge import MergeJournal
 
 
 DRIFT_CLASSES: Final[tuple[str, ...]] = ("a", "b", "c", "d", "e", "f")

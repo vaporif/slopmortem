@@ -85,9 +85,7 @@ from slopmortem.evals.cassettes import (
     load_row_fakes,
 )
 from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant
-from slopmortem.llm.cassettes import NoCannedEmbeddingError
-from slopmortem.llm.fake import NoCannedResponseError
-from slopmortem.llm.openai_embeddings import EMBED_DIMS
+from slopmortem.llm import EMBED_DIMS, NoCannedEmbeddingError, NoCannedResponseError
 from slopmortem.models import (
     InputContext,
     Synthesis,
@@ -308,11 +306,11 @@ async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, d
     from slopmortem.cli import (  # noqa: PLC0415
         _build_deps,  # pyright: ignore[reportPrivateUsage]
     )
-    from slopmortem.corpus.tools_impl import _set_corpus  # noqa: PLC0415
+    from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
 
     cfg = load_config()
     llm, embedder, corpus, budget = _build_deps(cfg)
-    _set_corpus(corpus)
+    set_query_corpus(corpus)
 
     results: dict[str, dict[str, object]] = {}
     for ctx, rid in zip(rows, row_ids, strict=True):

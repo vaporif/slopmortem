@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
-from slopmortem.corpus.sources.wayback import WaybackEnricher
+from slopmortem.corpus.sources import WaybackEnricher
 from slopmortem.models import RawEntry
 
 if TYPE_CHECKING:

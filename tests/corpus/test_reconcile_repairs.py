@@ -5,9 +5,12 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
-from slopmortem.corpus.disk import write_canonical_atomic, write_raw_atomic
-from slopmortem.corpus.merge import MergeJournal
-from slopmortem.corpus.reconcile import reconcile
+from slopmortem.corpus import (
+    MergeJournal,
+    reconcile,
+    write_canonical_atomic,
+    write_raw_atomic,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path

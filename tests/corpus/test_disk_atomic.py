@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from slopmortem.corpus.disk import (
+from slopmortem.corpus import (
     read_canonical,
     write_canonical_atomic,
     write_raw_atomic,

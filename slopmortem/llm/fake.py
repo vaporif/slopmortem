@@ -38,7 +38,6 @@ class FakeResponse:
     cache_creation_tokens: int | None = None
 
     def to_completion(self) -> CompletionResult:
-        """Convert this fixture into a CompletionResult."""
         return CompletionResult(
             text=self.text,
             stop_reason=self.stop_reason,
@@ -91,7 +90,6 @@ class FakeLLMClient:
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
     ) -> CompletionResult:
-        """Look up a canned response keyed by ``(prompt_template_sha, model, prompt_hash)``."""
         eff_model = model or self.default_model
         template_sha: str | None = None
         if extra_body and "prompt_template_sha" in extra_body:

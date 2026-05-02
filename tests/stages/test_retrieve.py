@@ -14,11 +14,10 @@ from typing import TYPE_CHECKING
 import pytest
 import pytest_asyncio
 
-from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.openai_embeddings import EMBED_DIMS
+from slopmortem.corpus import QdrantCorpus, ensure_collection
+from slopmortem.llm import EMBED_DIMS, FakeEmbeddingClient
 from slopmortem.models import CandidatePayload, Facets
-from slopmortem.stages.retrieve import retrieve
+from slopmortem.stages import retrieve
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

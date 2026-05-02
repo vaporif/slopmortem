@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slopmortem.corpus.paths import safe_path
+from slopmortem.corpus import safe_path
 
 if TYPE_CHECKING:
     from pathlib import Path

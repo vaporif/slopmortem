@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from qdrant_client import AsyncQdrantClient
 
-from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
+from slopmortem.corpus import QdrantCorpus, ensure_collection
 from slopmortem.evals.corpus_fixture import restore_jsonl_to_collection
 
 if TYPE_CHECKING:
@@ -36,23 +36,9 @@ async def setup_ephemeral_qdrant(
     Collection name embeds ``pid + uuid4`` so a leak from ``kill -9`` is
     identifiable and droppable manually. No startup sweep — a prefix-wide
     sweep is unsafe under pytest-xdist (a sibling worker's still-active
-    collection would get dropped).
-
-    Args:
-        fixture_path: JSONL file produced by
-            :func:`slopmortem.evals.corpus_fixture.dump_collection_to_jsonl`.
-        qdrant_url: Base URL of a live Qdrant service.
-        collection_prefix: Prefix for the ephemeral collection name.
-        post_mortems_root: Optional on-disk root for the canonical markdown
-            tree. Defaults to ``/tmp/slopmortem_eval`` when ``None``. Only
-            consulted by ``QdrantCorpus.get_post_mortem``, which the recording
-            path doesn't exercise.
-        dim: Dense vector dimensionality. Defaults to 768
-            (``nomic-ai/nomic-embed-text-v1.5``); callers using a different
-            embedder must pass the matching dim.
-
-    Yields:
-        A :class:`QdrantCorpus` bound to the freshly-populated collection.
+    collection would get dropped). ``post_mortems_root`` defaults to
+    ``/tmp/slopmortem_eval`` and is only used by ``get_post_mortem``, which
+    the recording path doesn't exercise.
     """
     name = f"{collection_prefix}{os.getpid()}_{uuid.uuid4().hex}"
     client = AsyncQdrantClient(url=qdrant_url)

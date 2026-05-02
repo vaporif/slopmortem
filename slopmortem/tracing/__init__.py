@@ -14,9 +14,11 @@ from urllib.parse import urlparse
 
 from uuid_extensions import uuid7str
 
+from slopmortem.tracing.events import SpanEvent as SpanEvent
+
 
 class TracingGuardError(RuntimeError):
-    """Raised when ``init_tracing`` refuses a tracer endpoint on policy grounds."""
+    pass
 
 
 PRIVATE_HOST_ALLOWLIST: set[str] = set()
@@ -37,7 +39,7 @@ def _all_loopback(addrs: list[str]) -> bool:
 
 
 def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> None:
-    """Validate *base_url* before letting the tracer phone home."""
+    # Refuse non-loopback endpoints by default.
     if not base_url:
         return
     host = urlparse(base_url).hostname
@@ -55,13 +57,12 @@ def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> 
 
 
 def mint_run_id() -> str:
-    """Return a fresh time-ordered run id (uuid7 hex, 32 chars, no hyphens)."""
     return uuid7str().replace("-", "")
 
 
 @functools.cache
 def git_sha() -> str | None:
-    """Return ``HEAD`` short sha, or ``None`` outside a git checkout. Memoized per process."""
+    # Memoized per process; returns None outside a git checkout.
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607 — git on PATH is fine.

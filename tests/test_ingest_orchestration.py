@@ -15,22 +15,20 @@ from conftest import llm_canned_key
 from slopmortem import ingest as ingest_module
 from slopmortem.budget import Budget
 from slopmortem.config import Config
-from slopmortem.corpus.merge import MergeJournal
+from slopmortem.corpus import MergeJournal
 from slopmortem.ingest import (
     FakeSlopClassifier,
     InMemoryCorpus,
     ingest,
 )
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import RawEntry
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from slopmortem.corpus.chunk import Chunk
+    from slopmortem.corpus import Chunk
 
 _HAIKU = "anthropic/claude-haiku-4.5"
 _ENTRY_BODY = "Acme was a startup that sold widgets and ran out of money in 2021. " * 30

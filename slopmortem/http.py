@@ -22,7 +22,7 @@ _BLOCKED_IMDS_HOSTS = frozenset(
 
 
 class SSRFBlockedError(RuntimeError):
-    """Raised when ``safe_get`` / ``safe_post`` refuse a URL on SSRF-policy grounds."""
+    """``safe_get`` / ``safe_post`` refused a URL on SSRF-policy grounds."""
 
 
 def _is_blocked_address(addr: str) -> bool:
@@ -59,17 +59,8 @@ def _resolve_all(host: str) -> list[str]:
 
 
 def _resolve_and_validate(url: str) -> str:
-    """Validate *url*'s scheme, host, and resolved addresses against the SSRF policy.
-
-    Returns the original *url*'s host (for the ``Host`` header). Raises
-    :class:`SSRFBlockedError` on any policy failure: non-http(s) scheme,
-    missing host, IMDS hostname, unresolvable host, or any resolved address in
-    the blocklist (loopback, link-local, private, multicast, reserved,
-    unspecified, CGNAT, ULA, IPv6 link-local).
-
-    Shared by :func:`safe_get` and :func:`safe_post` so one code path
-    enforces the policy.
-    """
+    # Returns the parsed host for the ``Host`` header. Shared by safe_get and
+    # safe_post so one code path enforces the SSRF policy.
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         msg = f"refusing non-http(s) scheme: {parsed.scheme!r}"
@@ -98,7 +89,6 @@ async def safe_get(
     user_agent: str = USER_AGENT,
     timeout: float = 30.0,  # noqa: ASYNC109 - caller-controlled timeout is part of the public API
 ) -> httpx.Response:
-    """Fetch *url* via httpx after enforcing scheme and DNS-pinned SSRF checks."""
     host = _resolve_and_validate(url)
     transport = httpx.AsyncHTTPTransport()
     async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:
@@ -113,12 +103,6 @@ async def safe_post(
     user_agent: str = USER_AGENT,
     timeout: float = 30.0,  # noqa: ASYNC109 - caller-controlled timeout is part of the public API
 ) -> httpx.Response:
-    """POST *json* to *url* via httpx, same SSRF policy as ``safe_get``.
-
-    Routes through :func:`_resolve_and_validate` for the same scheme and DNS
-    checks. Used by the Tavily synthesis tools (``/search`` and ``/extract``
-    are POST-only).
-    """
     host = _resolve_and_validate(url)
     merged_headers: dict[str, str] = {"Host": host, "User-Agent": user_agent}
     if headers:

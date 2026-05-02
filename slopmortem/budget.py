@@ -9,7 +9,7 @@ import anyio
 
 
 class BudgetExceededError(Exception):
-    """Raised when reserve cannot accommodate or settle pushes spent over cap."""
+    """Reserve can't fit, or a settle pushed spent over cap."""
 
 
 @dataclass
@@ -23,11 +23,9 @@ class Budget:
 
     @property
     def remaining(self) -> float:
-        """USD left after subtracting settled spend and outstanding reservations."""
         return self.cap_usd - self.spent_usd - sum(self.reserved.values())
 
     async def reserve(self, amount_usd: float) -> str:
-        """Reserve *amount_usd* under the lock; return a reservation id for settle()."""
         async with self.lock:
             if self.remaining < amount_usd:
                 msg = f"need {amount_usd:.4f}, have {self.remaining:.4f}"
@@ -40,7 +38,7 @@ class Budget:
         """Drop the reservation, credit *actual_usd*, raise if spent exceeds cap.
 
         The call that crossed the cap is already paid for; raising here just
-        stops the next one. Concurrent fan-out can briefly run with multiple
+        stops the next one. Concurrent fan-out can briefly run multiple
         in-flight calls past the cap.
         """
         async with self.lock:

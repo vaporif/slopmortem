@@ -12,18 +12,17 @@ from typing import TYPE_CHECKING
 
 from lmnr import Laminar
 
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
-from slopmortem.llm.tools import to_strict_response_schema
+from slopmortem.llm import prompt_template_sha, render_prompt, to_strict_response_schema
 from slopmortem.models import (
     ConsolidatedRisk,
     LLMTopRisksConsolidation,
     TopRisks,
 )
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
     from slopmortem.config import Config
-    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm import LLMClient
     from slopmortem.models import Synthesis
 
 

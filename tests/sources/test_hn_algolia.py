@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
+from slopmortem.corpus.sources import HNAlgoliaSource
 
 CASSETTE_FILE = (
     Path(__file__).parent / "cassettes" / "test_hn_algolia" / "test_hn_algolia_round_trip.yaml"

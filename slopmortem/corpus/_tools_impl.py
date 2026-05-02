@@ -24,7 +24,7 @@ from slopmortem.models import (
 )
 
 if TYPE_CHECKING:
-    from slopmortem.corpus.store import Corpus
+    from slopmortem.corpus._store import Corpus
 
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
@@ -40,6 +40,7 @@ __all__ = [
     "_set_corpus",
     "get_post_mortem",
     "search_corpus",
+    "set_query_corpus",
     "tavily_extract",
     "tavily_search",
 ]
@@ -111,6 +112,16 @@ def _set_corpus(c: Corpus) -> None:
     _corpus = c
 
 
+def set_query_corpus(c: Corpus) -> None:
+    """Bind the corpus the query-side LLM tools should call into.
+
+    Public re-export of the module-private ``_set_corpus``. Required so
+    callers (``cli.py``, ``evals/runner.py``, ``evals/recording_helper.py``)
+    can avoid reaching past the ``corpus`` package façade.
+    """
+    _set_corpus(c)
+
+
 async def _get_post_mortem(canonical_id: str, max_chars: int = 8000) -> str:
     if _corpus is None:
         msg = "corpus not initialized"
@@ -163,7 +174,7 @@ def _tavily_api_key() -> str:
     return key
 
 
-async def _tavily_search(q: str, limit: int = 5) -> str:
+async def tavily_search_async(q: str, limit: int = 5) -> str:
     r"""Search the live web via Tavily and return a text summary for the LLM.
 
     Reads ``TAVILY_API_KEY`` from the environment at call time. Returns a
@@ -188,7 +199,7 @@ async def _tavily_search(q: str, limit: int = 5) -> str:
     return "\n".join(lines) if lines else "(no results)"
 
 
-async def _tavily_extract(url: str) -> str:
+async def tavily_extract_async(url: str) -> str:
     """Fetch and extract the readable text of a single URL via Tavily.
 
     Reads ``TAVILY_API_KEY`` from the environment at call time. Returns
@@ -236,12 +247,12 @@ tavily_search = ToolSpec(
     name="tavily_search",
     description="Search the live web via Tavily for evidence to support synthesis.",
     args_model=TavilySearchArgs,
-    fn=_tavily_search,
+    fn=tavily_search_async,
 )
 
 tavily_extract = ToolSpec(
     name="tavily_extract",
     description="Fetch and extract the readable content of a single URL via Tavily.",
     args_model=TavilyExtractArgs,
-    fn=_tavily_extract,
+    fn=tavily_extract_async,
 )

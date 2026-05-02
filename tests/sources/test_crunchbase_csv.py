@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource
+from slopmortem.corpus.sources import CrunchbaseCsvSource
 
 if TYPE_CHECKING:
     from pathlib import Path

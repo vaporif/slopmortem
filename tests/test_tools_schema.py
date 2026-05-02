@@ -3,7 +3,7 @@ from __future__ import annotations
 import jsonschema
 from pydantic import BaseModel
 
-from slopmortem.llm.tools import to_openai_input_schema, to_strict_response_schema
+from slopmortem.llm import to_openai_input_schema, to_strict_response_schema
 
 
 class Args(BaseModel):

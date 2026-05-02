@@ -1,4 +1,4 @@
-"""``--reconcile`` dispatches to ``slopmortem.corpus.reconcile.reconcile`` and prints the report."""
+"""``--reconcile`` dispatches to ``corpus._reconcile.reconcile`` and prints the report."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 from typer.testing import CliRunner
 
 from slopmortem.cli import app
-from slopmortem.corpus.reconcile import ReconcileReport, ReconcileRow
+from slopmortem.corpus import ReconcileReport, ReconcileRow
 
 if TYPE_CHECKING:
     from pathlib import Path

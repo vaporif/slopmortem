@@ -32,19 +32,17 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.pipeline import run_query
-from slopmortem.stages.synthesize import synthesize_prompt_kwargs
+from slopmortem.stages import synthesize_prompt_kwargs
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     import pytest
 
-    from slopmortem.llm.client import CompletionResult
+    from slopmortem.llm import CompletionResult
 
 # Inlined fakes (copied verbatim in spirit from tests/test_pipeline_e2e.py;
 # extracting a shared fixture is out of scope for this test file).
@@ -295,7 +293,7 @@ async def test_no_corpus_body_in_laminar_spans(monkeypatch: pytest.MonkeyPatch) 
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     # Initialize Laminar against an unreachable loopback endpoint, then swap the
     # active span processor on the underlying TracerProvider with one backed by

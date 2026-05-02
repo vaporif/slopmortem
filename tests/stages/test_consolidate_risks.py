@@ -8,6 +8,7 @@ boundary.
 
 from __future__ import annotations
 
+import importlib
 import json
 from datetime import date
 from typing import TYPE_CHECKING
@@ -16,21 +17,22 @@ import pytest
 
 from conftest import llm_canned_key
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.llm import FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import (
     PerspectiveScore,
     SimilarityScores,
     Synthesis,
 )
-from slopmortem.stages import consolidate_risks as cr_module
-from slopmortem.stages.consolidate_risks import consolidate_risks
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.stages import consolidate_risks
+from slopmortem.tracing import SpanEvent
+
+# `import x as` returns the façade-shadowed function; use import_module for the module.
+_cr_module = importlib.import_module("slopmortem.stages.consolidate_risks")
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from slopmortem.llm.client import CompletionResult
+    from slopmortem.llm import CompletionResult
 
 
 _MODEL = "test-consolidate-model"
@@ -103,7 +105,7 @@ def _dedup_lessons(syn: Synthesis) -> list[str]:
 @pytest.fixture
 def captured_events(monkeypatch: pytest.MonkeyPatch) -> list[SpanEvent]:
     events: list[SpanEvent] = []
-    monkeypatch.setattr(cr_module, "_emit_event", events.append)
+    monkeypatch.setattr(_cr_module, "_emit_event", events.append)
     return events
 
 

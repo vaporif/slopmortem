@@ -1,0 +1,105 @@
+[importlinter]
+root_package = slopmortem
+
+[importlinter:contract:corpus-leaf]
+name = corpus is a leaf package — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+# Cycle break: llm.tools wraps corpus._tools_impl._tavily_* with budget tracking.
+# Lazy imports of _embed_sparse defer the ~150MB fastembed ONNX load past startup.
+ignore_imports =
+    slopmortem.llm.tools -> slopmortem.corpus._tools_impl
+    slopmortem.ingest -> slopmortem.corpus._embed_sparse
+    slopmortem.evals.recording_helper -> slopmortem.corpus._embed_sparse
+    slopmortem.stages.retrieve -> slopmortem.corpus._embed_sparse
+source_modules =
+    slopmortem.cli
+    slopmortem.ingest
+    slopmortem.pipeline
+    slopmortem.stages
+    slopmortem.evals
+    slopmortem.tracing
+    slopmortem.llm
+forbidden_modules =
+    slopmortem.corpus._chunk
+    slopmortem.corpus._disk
+    slopmortem.corpus._embed_sparse
+    slopmortem.corpus._entity_resolution
+    slopmortem.corpus._extract
+    slopmortem.corpus._merge
+    slopmortem.corpus._merge_text
+    slopmortem.corpus._paths
+    slopmortem.corpus._qdrant_store
+    slopmortem.corpus._reclassify
+    slopmortem.corpus._reconcile
+    slopmortem.corpus._schema
+    slopmortem.corpus._store
+    slopmortem.corpus._summarize
+    slopmortem.corpus._tools_impl
+
+[importlinter:contract:llm-leaf]
+name = llm is a leaf package — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    slopmortem.cli
+    slopmortem.ingest
+    slopmortem.pipeline
+    slopmortem.stages
+    slopmortem.evals
+    slopmortem.corpus
+    slopmortem.tracing
+forbidden_modules =
+    slopmortem.llm.cassettes
+    slopmortem.llm.client
+    slopmortem.llm.embedding_client
+    slopmortem.llm.embedding_factory
+    slopmortem.llm.fake
+    slopmortem.llm.fake_embeddings
+    slopmortem.llm.fastembed_client
+    slopmortem.llm.openai_embeddings
+    slopmortem.llm.openrouter
+
+[importlinter:contract:stages-leaf]
+name = stages is a leaf package — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    slopmortem.cli
+    slopmortem.ingest
+    slopmortem.pipeline
+    slopmortem.evals
+forbidden_modules =
+    slopmortem.stages.facet_extract
+
+[importlinter:contract:sources-leaf]
+name = corpus.sources is a leaf package — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    slopmortem.cli
+    slopmortem.ingest
+    slopmortem.pipeline
+    slopmortem.evals
+forbidden_modules =
+    slopmortem.corpus.sources.base
+    slopmortem.corpus.sources.crunchbase_csv
+    slopmortem.corpus.sources.curated
+    slopmortem.corpus.sources.hn_algolia
+    slopmortem.corpus.sources.tavily
+    slopmortem.corpus.sources.wayback
+
+[importlinter:contract:tracing-leaf]
+name = tracing is a leaf package — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    slopmortem.cli
+    slopmortem.ingest
+    slopmortem.pipeline
+    slopmortem.stages
+    slopmortem.evals
+    slopmortem.corpus
+    slopmortem.llm
+forbidden_modules =
+    slopmortem.tracing.events

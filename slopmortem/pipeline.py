@@ -27,33 +27,29 @@ from lmnr import Laminar, observe
 
 from slopmortem.budget import BudgetExceededError
 from slopmortem.models import PipelineMeta, Report, Synthesis, TopRisks
-from slopmortem.stages.consolidate_risks import consolidate_risks
-from slopmortem.stages.facet_extract import extract_facets
-from slopmortem.stages.llm_rerank import llm_rerank
-from slopmortem.stages.retrieve import retrieve
-from slopmortem.stages.synthesize import synthesize_all
-from slopmortem.tracing import git_sha, mint_run_id
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.stages import (
+    consolidate_risks,
+    extract_facets,
+    llm_rerank,
+    retrieve,
+    synthesize_all,
+)
+from slopmortem.tracing import SpanEvent, git_sha, mint_run_id
 
 if TYPE_CHECKING:
     from slopmortem.budget import Budget
     from slopmortem.config import Config
-    from slopmortem.corpus.store import Corpus
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.corpus import Corpus
+    from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import Candidate, InputContext, ScoredCandidate, SimilarityScores
-    from slopmortem.stages.retrieve import SparseEncoder
+    from slopmortem.stages import SparseEncoder
 
 
 logger = logging.getLogger(__name__)
 
 
 class QueryPhase(StrEnum):
-    """Phase keys used by :class:`QueryProgress`.
-
-    Mirrors :class:`slopmortem.ingest.IngestPhase`. Closed enum so typos
-    (``"facetextract"``) fail at parse time and match statements stay exhaustive.
-    """
+    """Phase keys used by :class:`QueryProgress`. Closed enum so typos fail at parse."""
 
     FACET_EXTRACT = "facet_extract"
     RETRIEVE = "retrieve"
@@ -65,9 +61,8 @@ class QueryPhase(StrEnum):
 class QueryProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem query``.
 
-    Methods are no-op-safe. :class:`NullQueryProgress` is the default so the
-    orchestrator stays decoupled from any UI library; the CLI wires a Rich
-    implementation. Mirrors :class:`slopmortem.ingest.IngestProgress`.
+    Default :class:`NullQueryProgress` keeps the orchestrator decoupled from
+    any UI library; the CLI wires a Rich implementation.
     """
 
     def start_phase(self, phase: QueryPhase, total: int) -> None:
@@ -114,8 +109,8 @@ class NullQueryProgress:
 def cutoff_iso(years_filter: int | None) -> str | None:
     """Convert a years-back recency filter to an ISO-8601 date.
 
-    Retrieve takes dates (``YYYY-MM-DD``), not timestamps. Flooring to
-    ``date()`` here keeps the cutoff stable across the query's hour.
+    Flooring to ``date()`` keeps the cutoff stable across the query's hour;
+    retrieve takes dates (``YYYY-MM-DD``), not timestamps.
     """
     if years_filter is None:
         return None
@@ -123,7 +118,6 @@ def cutoff_iso(years_filter: int | None) -> str | None:
 
 
 def _mean_similarity_score(scores: SimilarityScores) -> float:
-    """Mean of the four 0-10 perspective scores."""
     perspectives = [
         scores.business_model.score,
         scores.market.score,
@@ -136,19 +130,14 @@ def _mean_similarity_score(scores: SimilarityScores) -> float:
 def _filter_by_min_similarity(
     ranked: list[ScoredCandidate], threshold: float
 ) -> list[ScoredCandidate]:
-    """Drop reranked candidates whose mean perspective score is below ``threshold``."""
     return [s for s in ranked if _mean_similarity_score(s.perspective_scores) >= threshold]
 
 
 def _filter_synth_by_min_similarity(
     syntheses: list[Synthesis], threshold: float
 ) -> list[Synthesis]:
-    """Drop syntheses whose mean perspective score is below ``threshold``.
-
-    Synthesis sometimes re-scores a candidate lower than rerank did, so a row
-    that cleared the rerank-side filter can come back below the bar. Second
-    pass keeps the rendered table consistent.
-    """
+    # Synthesis sometimes re-scores a candidate lower than rerank did, so a row
+    # that cleared the rerank-side filter can come back below the bar.
     return [s for s in syntheses if _mean_similarity_score(s.similarity) >= threshold]
 
 
@@ -171,12 +160,8 @@ def _select_top_n(
     threshold: float,
     n_synthesize: int,
 ) -> tuple[list[Candidate], int]:
-    """Apply min-similarity, join to candidates, cap at N. Returns (top_n, dropped_count).
-
-    The reranker returns up to ``n_synthesize`` rows — fewer when retrieve
-    under-fills. ``dropped_count`` conflates that under-fill with min-sim
-    drops.
-    """
+    # ``dropped_count`` conflates min-sim drops with retrieve under-fill (the
+    # reranker returns up to n_synthesize rows, fewer when retrieve under-fills).
     survivors = _filter_by_min_similarity(ranked, threshold)
     _log_min_similarity_drop(
         dropped=len(ranked) - len(survivors),
@@ -191,13 +176,8 @@ def _select_top_n(
 def _join_to_candidates(
     retrieved: list[Candidate], ranked: list[ScoredCandidate]
 ) -> list[Candidate]:
-    """Re-attach :class:`Candidate` payloads to the rerank-ordered ids.
-
-    Reranker returns :class:`ScoredCandidate` (id + scores); synthesize needs
-    the full :class:`Candidate` with ``payload.body``. Preserves rerank order
-    and silently drops any ranked id missing from the retrieved set —
-    defensive, since the reranker only ever sees retrieved ids.
-    """
+    # Drops any ranked id missing from retrieved — defensive, since the
+    # reranker only ever sees retrieved ids.
     id_to_candidate = {c.canonical_id: c for c in retrieved}
     out: list[Candidate] = []
     for s in ranked:
@@ -208,13 +188,9 @@ def _join_to_candidates(
 
 
 def _current_trace_id(*, enable_tracing: bool) -> str | None:
-    """Return the current Laminar trace id, or ``None`` when tracing is off.
-
-    Gated on ``enable_tracing`` because ``Laminar.is_initialized()`` alone
-    isn't sufficient: ``@observe`` can still mint an OTel trace id via
-    ``TracerWrapper`` after ``Laminar.shutdown()``, leaking a trace_id into
-    runs the user never asked to trace.
-    """
+    # Gated on enable_tracing because @observe can still mint an OTel trace id
+    # via TracerWrapper after Laminar.shutdown(), leaking a trace_id into runs
+    # the user never asked to trace.
     if not enable_tracing or not Laminar.is_initialized():
         return None
     tid = Laminar.get_trace_id()
@@ -238,31 +214,9 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
 ) -> Report:
     """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
 
-    Args:
-        input_ctx: User's :class:`InputContext` (name, description, optional
-            recency filter).
-        llm: Async :class:`LLMClient` shared by every LLM stage.
-        embedding_client: Async dense embedder used inside ``retrieve``.
-        corpus: Read-side :class:`Corpus` impl (Qdrant in prod, fake in tests).
-        config: :class:`Config` — ``K_retrieve``, ``N_synthesize``, model ids,
-            ``strict_deaths``.
-        budget: Shared per-run :class:`Budget`. Stages book costs through their
-            clients; this function only reads ``spent_usd`` / ``remaining`` at
-            the end.
-        progress: Optional :class:`QueryProgress` sink. CLI wires a Rich impl;
-            ``None`` falls back to :class:`NullQueryProgress`. Pipeline never
-            writes stderr itself.
-        sparse_encoder: Optional BM25 encoder override forwarded to ``retrieve``.
-            ``None`` lazy-loads the production fastembed model on first call.
-            The recording helper passes a wrapped encoder so it can persist
-            sparse cassettes alongside dense + LLM cassettes.
-
-    Returns:
-        A :class:`Report` with the input echo, generated_at, the synthesized
-        :class:`Synthesis` values (successes only; per-candidate exceptions are
-        dropped silently), and a :class:`PipelineMeta` carrying cost, latency,
-        trace id, and budget bookkeeping. ``budget_exceeded`` is ``True`` iff a
-        :class:`BudgetExceededError` truncated the run.
+    Per-candidate synthesis exceptions are dropped silently;
+    :class:`BudgetExceededError` truncates the run and surfaces as
+    ``pipeline_meta.budget_exceeded=True`` on the returned :class:`Report`.
     """
     t0 = time.monotonic()
     successes: list[Synthesis] = []

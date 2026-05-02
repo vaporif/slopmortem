@@ -62,7 +62,7 @@ class ThickBarColumn(BarColumn):
     """:class:`BarColumn` whose bar spans ``height`` terminal rows.
 
     Rich bars are one row tall. The :class:`_StackedBar` wrapper repeats the
-    bar so it reads as a chunkier marker without changing layout — adjacent
+    bar so it reads as a chunkier marker without changing layout; adjacent
     columns auto-pad to the tallest cell in the row.
     """
 
@@ -70,7 +70,6 @@ class ThickBarColumn(BarColumn):
 
     @override
     def render(self, task: Task) -> _StackedBar | Text:  # pyright: ignore[reportIncompatibleMethodOverride]
-        """Render *task*'s bar stacked ``height`` times, or empty for single-shot phases."""
         if task.total is None or task.total <= 1:
             return Text("")
         return _StackedBar(super().render(task), self.height)
@@ -79,7 +78,7 @@ class ThickBarColumn(BarColumn):
 class OptionalMofNCompleteColumn(MofNCompleteColumn):
     """:class:`MofNCompleteColumn` that hides for single-shot phases.
 
-    Tasks with ``total <= 1`` carry no useful count — the bar's pulse-then-fill
+    Tasks with ``total <= 1`` carry no useful count; the bar's pulse-then-fill
     already conveys done vs not-done. Returning empty text drops the cell and
     avoids ``0/1 → 1/1`` noise.
     """
@@ -96,7 +95,7 @@ class OptionalETAColumn(TimeRemainingColumn):
 
     Suppressed when the task is finished (Rich's default keeps painting
     ``0:00``, which reads as "still computing, 0s left") and when the task
-    has no granular total — single-shot phases pulse, so a remaining-time
+    has no granular total. Single-shot phases pulse, so a remaining-time
     estimate is meaningless.
     """
 
@@ -119,7 +118,6 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         self,
         labels: dict[PhaseT, str],
     ) -> None:
-        """Build the underlying ``Progress`` and console; tasks are added lazily."""
         self._labels = labels
         self._console = Console(stderr=True)
         self._progress = Progress(
@@ -144,7 +142,6 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         self._phase_status: dict[PhaseT, str] = {}
 
     def __enter__(self) -> Self:
-        """Start the live render."""
         self._progress.__enter__()
         return self
 
@@ -154,12 +151,10 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Tear down the live render."""
         self._progress.__exit__(exc_type, exc_val, exc_tb)
 
     @property
     def console(self) -> Console:
-        """Underlying Rich console; the CLI uses it for post-run output."""
         return self._console
 
     def _label(self, phase: PhaseT) -> str:
@@ -217,7 +212,6 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         )
 
     def set_phase_status(self, phase: PhaseT, status: str | None) -> None:
-        """Set or clear a transient dim suffix on *phase*'s description."""
         if status:
             self._phase_status[phase] = status
         else:
@@ -227,7 +221,6 @@ class RichPhaseProgress[PhaseT: StrEnum]:
             self._progress.update(tid, description=self._label(phase))
 
     def log(self, message: str) -> None:
-        """Write a one-off neutral status line above the progress display."""
         self._console.log(message)
 
     def error(self, phase: PhaseT, message: str) -> None:

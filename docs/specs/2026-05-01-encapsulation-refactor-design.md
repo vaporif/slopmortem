@@ -1,6 +1,8 @@
 # Encapsulation Refactor — Design
 
-Status: design, awaiting operator approval.
+Status: design, awaiting operator approval. Revised 2026-05-02 to reflect
+out-of-band fix of the `evals→llm` leak (T1.0 now verification only) and to
+correct the `merge_text` / `_db` / `_throttle` leak inventory.
 
 Staged refactor that turns the existing aspirational `__init__.py` façades into
 load-bearing boundaries, splits the two oversized top-level files into focused
@@ -21,10 +23,15 @@ but callers freely reach past them. Concrete leaks observable today via
 - `from slopmortem.corpus.paths import safe_path` — used in 4 sites despite
   `corpus/__init__.py` re-exporting nothing of the sort.
 - `from slopmortem.corpus.extract import extract_clean` — same pattern, 4 sites.
-- `from slopmortem.corpus._db import connect` — outside callers reaching into
-  an `_`-prefixed module.
-- `from slopmortem.corpus.sources._throttle import …` — outside callers reaching
-  into an `_`-prefixed module inside an `_`-prefixed file convention.
+- `from slopmortem.corpus.merge_text import Section, combined_hash, combined_text`
+  — `slopmortem/ingest.py:59` and `tests/corpus/test_merge_deterministic.py:7`.
+  Two outside callers; T1.7's earlier classification of `merge_text` as
+  rename-safe was wrong (see T1.7 note below).
+- `from slopmortem.corpus.sources._throttle import …` — only one outside
+  caller remaining: `tests/sources/test_robots_and_throttle.py:18`. The
+  three production importers (`corpus/sources/wayback.py`,
+  `corpus/sources/curated.py`, `corpus/sources/hn_algolia.py`) are siblings
+  inside `corpus/sources/` and are not violations.
 - `from slopmortem.llm.openrouter import OpenRouterClient` — `llm/__init__.py`
   only re-exports embedding clients, so the most-used class in the package
   bypasses the façade entirely. Three external sites today: `cli.py`,
@@ -32,12 +39,17 @@ but callers freely reach past them. Concrete leaks observable today via
 - `from slopmortem.llm.embedding_factory import make_embedder` — new factory
   shared by `cli.py`, `evals/corpus_recorder.py`, and `evals/recording_helper.py`;
   not in the `llm/__init__.py` `__all__`.
-- **Forbidden-direction violation already in tree.**
-  `slopmortem/llm/fake_embeddings.py:9` does
-  `from slopmortem.evals.cassettes import NoCannedEmbeddingError` — `evals/`
-  bleeding into `llm/` violates the one-way prod←evals rule documented in
-  `CLAUDE.md`. PR 1's importlinter contract (T1.6) will fail until this is
-  fixed; see new task T1.0 below.
+- **Forbidden-direction violation resolved out-of-band.** The original
+  `slopmortem/llm/fake_embeddings.py:9` import of `NoCannedEmbeddingError`
+  from `slopmortem.evals.cassettes` was fixed in commit `f6557ac`
+  (2026-05-02) by moving the symbol — and the rest of the cassettes module
+  it lives in — to `slopmortem/llm/cassettes.py`. T1.0 below is now a
+  verification step rather than a relocation.
+
+`from slopmortem.corpus._db import connect` is **not** a current leak: the
+two importers (`corpus/merge.py:30`, `corpus/entity_resolution.py:50`) are
+both inside the `corpus` package. Listed here only because earlier drafts
+of this design called it out.
 
 Two top-level files have grown past the size where one-job-per-file holds:
 
@@ -118,16 +130,37 @@ Checkpoint: `just test && just lint && just typecheck && just smoke` green.
 Order matters. Expand façades first (additive, can't break callers), migrate
 callers second, lock the door third, rename last.
 
+**Re-export idiom (applies to T1.1, T1.2, T1.3, T1.4).** Use the explicit
+`from … import X as X` form so basedpyright's strict-mode
+`reportImplicitReexport` is satisfied without project-wide config gymnastics.
+Pattern:
+
+```python
+from slopmortem.corpus.merge import MergeJournal as MergeJournal
+from slopmortem.corpus.qdrant_store import QdrantCorpus as QdrantCorpus, ensure_collection as ensure_collection
+
+__all__ = [
+    "MergeJournal",
+    "QdrantCorpus",
+    "ensure_collection",
+]
+```
+
+The bare `from … import X` form is functionally identical at runtime but
+trips strict re-export diagnostics. Convert the existing bare imports in
+`corpus/__init__.py` and `corpus/sources/__init__.py` while you're there
+(no behavior change).
+
 | ID | Task | Files | Notes |
 |---|---|---|---|
-| T1.0 | **Relocate `NoCannedEmbeddingError`** out of `slopmortem/evals/cassettes.py` — either move it to `slopmortem/llm/fake_embeddings.py` next to its only prod-side caller, or to `slopmortem/errors.py`. Update the one prod import (`slopmortem/llm/fake_embeddings.py:9`) and the `evals/cassettes.py` callers. This precedes T1.6 because the importlinter contract will otherwise fail on a pre-existing violation | `slopmortem/llm/fake_embeddings.py`, `slopmortem/evals/cassettes.py`, optionally `slopmortem/errors.py` | Closes the prod←evals leak |
-| T1.1 | Expand `corpus/__init__.py` `__all__` to include the modules currently bypassed. **Verify each first** with `grep -rnE "^from slopmortem\.corpus\." slopmortem/ tests/ \| grep -v "^slopmortem/corpus/"` and only add modules with at least one outside caller. Candidates: `entity_resolution`, `paths`, `extract`, `reclassify`, `reconcile` (already exported, verify), `store`, `summarize`, `alias_graph`. **Plus a public façade for the `tools_impl` corpus-binding indirection**: introduce `set_query_corpus(corpus)` (and re-export `TAVILY_EXTRACT_URL` if still needed by `corpus/sources/tavily.py`) so `cli.py:68`, `evals/runner.py:313`, `evals/recording_helper.py:156` can drop the `from slopmortem.corpus.tools_impl import _set_corpus` deep-and-private import. **Persist the verification result** as a comment block at the top of `corpus/__init__.py` (e.g. `# T1.1 verification 2026-05-01: store=internal-only, summarize=external (5 sites)`) — T1.7 reads this | `corpus/__init__.py`, `corpus/tools_impl.py` (add public `set_query_corpus` wrapper) | Additive |
+| T1.0 | **Verify the prod←evals leak is closed.** Already fixed by commit `f6557ac` (2026-05-02), which moved `NoCannedEmbeddingError` and the surrounding cassettes module to `slopmortem/llm/cassettes.py`. Re-run `grep -rnE "from slopmortem\.evals" slopmortem/` and assert no production module imports from `evals/`. If clean, no code change; T1.6's contract will pass on first run | `slopmortem/llm/fake_embeddings.py` (verify only), `slopmortem/evals/cassettes.py` (verify only) | Verification only — relocation already shipped |
+| T1.1 | Expand `corpus/__init__.py` `__all__` to include the modules currently bypassed. **Verify each first** with `grep -rnE "^from slopmortem\.corpus\." slopmortem/ tests/ \| grep -v "^slopmortem/corpus/"` and only add modules with at least one outside caller. Candidates: `entity_resolution`, `paths`, `extract`, `reclassify`, `merge_text` (re-export `Section`, `combined_hash`, `combined_text` — 2 outside callers), `reconcile` / `qdrant_store.QdrantCorpus` / `qdrant_store.ensure_collection` (already exported, verify and use as the migration target in T1.5), `store`, `summarize`, `alias_graph`. **Plus a public façade for the `tools_impl` corpus-binding indirection**: introduce `set_query_corpus(corpus)` (and re-export `TAVILY_EXTRACT_URL` if still needed by `corpus/sources/tavily.py`) so `cli.py:68`, `evals/runner.py:311`, `evals/recording_helper.py:156` can drop the `from slopmortem.corpus.tools_impl import _set_corpus` deep-and-private import. **Persist the verification result** as a comment block at the top of `corpus/__init__.py` (e.g. `# T1.1 verification 2026-05-02: store=TYPE_CHECKING-only (3 sites), summarize=external (1 test), alias_graph=internal-only`) — T1.7 reads this | `corpus/__init__.py`, `corpus/tools_impl.py` (add public `set_query_corpus` wrapper) | Additive |
 | T1.2 | Expand `llm/__init__.py`. Already-exported (verify, do not duplicate): `EMBED_DIMS`, `OpenAIEmbeddingClient`, `FakeEmbeddingClient`, `FastEmbedEmbeddingClient`. **Add**: `OpenRouterClient`, `make_embedder` (from `embedding_factory`), `client.CompletionResult`, `embedding_client.EmbeddingResult`, `gather_with_limit` and `is_transient_http` (from `openrouter`, currently reached directly by tests / sibling modules), the relevant `tools` and `cassettes` symbols, and the remaining fakes (`FakeLLMClient`, `FakeResponse`) | `llm/__init__.py` | Additive |
 | T1.3 | Replace empty `stages/__init__.py` with re-exports of `extract_facets`, `retrieve`, `llm_rerank`, `synthesize_all`, `consolidate_risks`. **Also re-export** `synthesize` and `synthesize_prompt_kwargs` from `stages.synthesize` — currently imported directly by `tests/stages/test_synthesize.py:13`, `tests/test_observe_redaction.py:40`, `tests/test_pipeline_e2e.py:48`; without re-export the T1.5 sweep would have to rewrite those test imports instead | `stages/__init__.py` | Additive |
 | T1.4 | Expand `corpus/sources/__init__.py` to re-export the 5 adapter classes alongside `Source`, `Enricher` | `corpus/sources/__init__.py` | Additive |
 | T1.5 | Sweep all in-tree imports to use the façades: `from slopmortem.corpus.paths import safe_path` → `from slopmortem.corpus import safe_path`. Generate the file list with `grep -lrnE "(^\|[[:space:]])from slopmortem\.(corpus\|llm\|stages\|corpus\.sources)\." slopmortem/ tests/` (the indented form catches `TYPE_CHECKING:` blocks). The grep output is the CREATE/MODIFY boundary — do not touch files outside it | grep-derived list (~30 files in `slopmortem/` and `tests/`); brief includes the resolved list | Mechanical |
 | T1.6 | Author `.importlinter` contracts: `corpus`, `llm`, `stages`, `corpus.sources`, `tracing` are leaf packages; outside imports must hit `__init__.py` only. **Also add placeholder forbidden contracts for `ingest` and `cli`** at this stage — they cover only `from slopmortem.ingest.* import …` / `from slopmortem.cli.* import …` and are tightened in T2.7 / T3.6, but they close the enforcement gap that would otherwise persist through PR 2 and PR 3 | `.importlinter` | Enforces 1.5 |
-| T1.7 | Rename true internals with `_` prefix, one commit per rename for bisectable blame. **Safe-now (no outside callers verified)**: `alias_graph`→`_alias_graph`, `merge_text`→`_merge_text`, `schema`→`_schema`. **Conditional on T1.1 verification comment**: `store`, `summarize` (skip if external use). **Deferred / unsafe as written** (do not include in this PR): `embed_sparse` has 3 outside callers (`ingest.py:975`, `evals/recording_helper.py:206`, `stages/retrieve.py:75`, all lazy `noqa: PLC0415` imports) — either expose `encode` via `corpus/__init__.py` and migrate the 3 callers in T1.5 first, or split out a public `corpus/sparse.py` shim before underscoring; `tools_impl` has 6+ outside callers across cli, evals, llm, sources, and tests, mixing public-looking names (`get_post_mortem`, `search_corpus`, `TAVILY_EXTRACT_URL`) with private (`_set_corpus`, `_tavily_extract`) — T1.1 introduces the `set_query_corpus` façade, but a full underscore rename requires either splitting the file or wrapping every public name. **Read T1.1's verification comment block at the top of `corpus/__init__.py` first** | `corpus/*.py` + import call sites | One file at a time |
+| T1.7 | Rename true internals with `_` prefix, one commit per rename for bisectable blame. **Safe-now (no outside callers verified)**: `alias_graph`→`_alias_graph`, `schema`→`_schema`. **Conditional on T1.1 verification comment**: `store` (only `TYPE_CHECKING` callers in `pipeline.py:41`, `cli.py:84`, `stages/retrieve.py:19` — cheap to migrate via the `corpus/__init__.py` re-export), `summarize` (one test caller: `tests/corpus/test_summarize.py:6`). **Deferred / unsafe as written** (do not include in this PR): `merge_text` has 2 outside callers (`ingest.py:59`, `tests/corpus/test_merge_deterministic.py:7`) — T1.1 expands the façade with `Section`/`combined_hash`/`combined_text`, so once T1.5 migrates the 2 callers a follow-up PR can underscore the module; `embed_sparse` has 3 outside callers (`ingest.py:975`, `evals/recording_helper.py:206`, `stages/retrieve.py:72`, all lazy `noqa: PLC0415` imports) — either expose `encode` via `corpus/__init__.py` and migrate the 3 callers in T1.5 first, or split out a public `corpus/sparse.py` shim before underscoring; `tools_impl` has 6+ outside callers across cli, evals, llm, sources, and tests, mixing public-looking names (`get_post_mortem`, `search_corpus`, `TAVILY_EXTRACT_URL`) with private (`_set_corpus`, `_tavily_extract`) — T1.1 introduces the `set_query_corpus` façade, but a full underscore rename requires either splitting the file or wrapping every public name. **Read T1.1's verification comment block at the top of `corpus/__init__.py` first** | `corpus/*.py` + import call sites | One file at a time |
 
 Checkpoint after each task: `just smoke && just lint`.
 

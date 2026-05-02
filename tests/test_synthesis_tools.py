@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from slopmortem.corpus.tools_impl import _get_post_mortem, _search_corpus, _set_corpus
+from slopmortem.corpus._tools_impl import _get_post_mortem, _search_corpus, _set_corpus
 
 if TYPE_CHECKING:
     from slopmortem.models import Candidate, Facets
@@ -85,7 +85,7 @@ def fixture_corpus():
         yield corpus
     finally:
         # Reset module-level binding so other tests don't see the fake.
-        import slopmortem.corpus.tools_impl as ti  # noqa: PLC0415
+        import slopmortem.corpus._tools_impl as ti  # noqa: PLC0415
 
         ti._corpus = None
 
@@ -102,7 +102,7 @@ async def test_search_corpus_returns_hits(fixture_corpus):
 
 # Per-synthesis Tavily budget gate (spec line 1005).
 from slopmortem.config import Config  # noqa: E402
-from slopmortem.llm.tools import synthesis_tools  # noqa: E402
+from slopmortem.llm import synthesis_tools  # noqa: E402
 
 
 async def test_tavily_calls_under_cap_pass_through(monkeypatch):
@@ -115,7 +115,7 @@ async def test_tavily_calls_under_cap_pass_through(monkeypatch):
         calls.append((q, limit))
         return f"hit:{q}"
 
-    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_real)
+    monkeypatch.setattr("slopmortem.corpus._tools_impl.tavily_search_async", fake_real)
     # Re-fetch tools so the patched fn is the inner of the bounded wrapper.
     tools = synthesis_tools(cfg)
     tavily = next(t for t in tools if t.name == "tavily_search")
@@ -136,7 +136,7 @@ async def test_third_tavily_call_returns_budget_message(monkeypatch):
         real_calls.append(q)
         return "ok"
 
-    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_real)
+    monkeypatch.setattr("slopmortem.corpus._tools_impl.tavily_search_async", fake_real)
     tools = synthesis_tools(cfg)
     tavily = next(t for t in tools if t.name == "tavily_search")
 
@@ -157,8 +157,8 @@ async def test_tavily_search_and_extract_share_budget(monkeypatch):
     async def fake_extract(url: str) -> str:
         return "extract-hit"
 
-    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_search)
-    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_extract", fake_extract)
+    monkeypatch.setattr("slopmortem.corpus._tools_impl.tavily_search_async", fake_search)
+    monkeypatch.setattr("slopmortem.corpus._tools_impl.tavily_extract_async", fake_extract)
     tools = synthesis_tools(cfg)
     search = next(t for t in tools if t.name == "tavily_search")
     extract = next(t for t in tools if t.name == "tavily_extract")
@@ -176,7 +176,7 @@ async def test_each_synthesis_gets_a_fresh_budget(monkeypatch):
     async def fake_search(q: str, limit: int = 5) -> str:
         return "ok"
 
-    monkeypatch.setattr("slopmortem.corpus.tools_impl._tavily_search", fake_search)
+    monkeypatch.setattr("slopmortem.corpus._tools_impl.tavily_search_async", fake_search)
 
     # Synthesis #1 exhausts the budget after one call.
     tools_a = synthesis_tools(cfg)

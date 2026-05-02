@@ -23,14 +23,16 @@ from slopmortem.evals.cassettes import (
     write_llm_cassette,
     write_sparse_cassette,
 )
-from slopmortem.llm.cassettes import (
+from slopmortem.llm import (
+    FakeEmbeddingClient,
+    FakeLLMClient,
+    FakeResponse,
     NoCannedEmbeddingError,
+    NoCannedResponseError,
     embed_cassette_key,
     llm_cassette_key,
     template_sha,
 )
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse, NoCannedResponseError
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -46,6 +46,7 @@ dev = [
   "jsonschema>=4.26",
   "ruff>=0.15",
   "basedpyright>=1.39",
+  "import-linter>=2.4",
 ]
 
 [tool.pytest.ini_options]
@@ -74,6 +75,10 @@ ignore = [
   # Mutually exclusive pairs — pick one
   "D203",  # vs D211
   "D213",  # vs D212
+  # "Missing docstring" requirements: per CLAUDE.md, docstrings should explain
+  # *why*, not exist as a checkbox. Style rules (D2xx-D4xx) still enforce
+  # consistency when a docstring is present.
+  "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
   # Pointless to enforce
   "CPY001",  # copyright header on every file
   # TD003 still enforces "TODO needs an issue link"; the meta "you have a TODO"

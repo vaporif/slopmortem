@@ -18,7 +18,7 @@ Pipeline:
    ``cache_read / (cache_read + cache_creation) < 0.80`` emit
    :attr:`SpanEvent.CACHE_READ_RATIO_LOW`.
 7. Resolve canonical id via
-   :func:`slopmortem.corpus.entity_resolution.resolve_entity`. The
+   :func:`slopmortem.corpus._entity_resolution.resolve_entity`. The
    ``resolver_flipped`` and ``alias_blocked`` actions short-circuit.
 8. ``upsert_pending`` row, atomic raw write, deterministic merge of all raw
    sections for this canonical_id, atomic canonical write, chunk + embed,
@@ -52,19 +52,24 @@ from lmnr import Laminar, observe
 
 from slopmortem._time import utcnow_iso
 from slopmortem.concurrency import gather_resilient
-from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION, chunk_markdown
-from slopmortem.corpus.disk import write_canonical_atomic, write_raw_atomic
-from slopmortem.corpus.entity_resolution import resolve_entity
-from slopmortem.corpus.extract import extract_clean
-from slopmortem.corpus.merge_text import Section, combined_hash, combined_text
-from slopmortem.corpus.paths import safe_path
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
+from slopmortem.corpus import (
+    CHUNK_STRATEGY_VERSION,
+    Section,
+    chunk_markdown,
+    combined_hash,
+    combined_text,
+    extract_clean,
+    resolve_entity,
+    safe_path,
+    write_canonical_atomic,
+    write_raw_atomic,
+)
+from slopmortem.llm import prompt_template_sha, render_prompt
 from slopmortem.models import (
     CandidatePayload,
     Facets,
 )
-from slopmortem.tracing import git_sha, mint_run_id
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent, git_sha, mint_run_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -72,10 +77,9 @@ if TYPE_CHECKING:
 
     from slopmortem.budget import Budget
     from slopmortem.config import Config
-    from slopmortem.corpus.merge import MergeJournal
-    from slopmortem.corpus.sources.base import Enricher, Source
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.corpus import MergeJournal
+    from slopmortem.corpus.sources import Enricher, Source
+    from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import RawEntry
 
 # Sparse encoder shape: Callable[[text], {token_id: weight}].
@@ -114,26 +118,17 @@ _PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_c
 class Corpus(Protocol):
     """Narrow corpus surface ingest depends on; production is :class:`QdrantCorpus`."""
 
-    async def upsert_chunk(self, point: object) -> None:
-        """Upsert one chunk point into the underlying store."""
-        ...
+    async def upsert_chunk(self, point: object) -> None: ...
 
-    async def has_chunks(self, canonical_id: str) -> bool:
-        """Return whether at least one chunk exists for *canonical_id*."""
-        ...
+    async def has_chunks(self, canonical_id: str) -> bool: ...
 
     async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
-        """Drop every chunk point for *canonical_id*, used before a re-merge upsert."""
+        # Called before a re-merge upsert.
         ...
 
 
 class IngestPhase(StrEnum):
-    """Phase keys used by :class:`IngestProgress`.
-
-    StrEnum over bare strings: closed-set typing, IDE autocomplete, and
-    exhaustiveness checks. Typos like ``"fanout"`` for ``"fan_out"`` fail at
-    parse time instead of silently no-op'ing.
-    """
+    """Phase keys used by :class:`IngestProgress`. Closed enum so typos fail at parse."""
 
     GATHER = "gather"
     CLASSIFY = "classify"
@@ -158,61 +153,42 @@ INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 class IngestProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem ingest``.
 
-    Methods are no-op-safe. :class:`NullProgress` is the default so the
-    orchestrator stays decoupled from any UI library; the CLI wires a Rich
-    impl. ``log`` is for neutral status lines (cache-warm result,
-    classification summary); ``error`` is for failures and the impl paints
-    those red.
+    Default :class:`NullProgress` keeps the orchestrator decoupled from any UI
+    library; the CLI wires a Rich impl. ``log`` is for neutral status lines,
+    ``error`` for failures (impl paints those red).
     """
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None:
-        """Announce *phase* with an expected ``total`` of advances.
+        """``total=None`` marks the phase indeterminate (Rich pulses; ETA blank)."""
 
-        ``total=None`` marks the phase indeterminate, for cases where the
-        producer can't know the size up front (e.g. ``GATHER`` without
-        ``--limit``). Rich renders a pulsing bar instead of a fake-totaled
-        one so the ETA column stays blank.
-        """
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None: ...
 
-    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
-        """Advance *phase*'s bar by ``n``."""
+    def end_phase(self, phase: IngestPhase) -> None: ...
 
-    def end_phase(self, phase: IngestPhase) -> None:
-        """Mark *phase* complete."""
+    def log(self, message: str) -> None: ...
 
-    def log(self, message: str) -> None:
-        """Emit a one-off status line."""
-
-    def error(self, phase: IngestPhase, message: str) -> None:
-        """Record an error against *phase*."""
+    def error(self, phase: IngestPhase, message: str) -> None: ...
 
 
 class NullProgress:
     """No-op :class:`IngestProgress` used when no display surface is attached."""
 
-    def start_phase(self, phase: IngestPhase, total: int | None) -> None:
-        """No-op."""
+    def start_phase(self, phase: IngestPhase, total: int | None) -> None: ...
 
-    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
-        """No-op."""
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None: ...
 
-    def end_phase(self, phase: IngestPhase) -> None:
-        """No-op."""
+    def end_phase(self, phase: IngestPhase) -> None: ...
 
-    def log(self, message: str) -> None:
-        """No-op."""
+    def log(self, message: str) -> None: ...
 
-    def error(self, phase: IngestPhase, message: str) -> None:
-        """No-op."""
+    def error(self, phase: IngestPhase, message: str) -> None: ...
 
 
 @runtime_checkable
 class SlopClassifier(Protocol):
     """Score a document for LLM-generated-text likelihood; ``> threshold`` quarantines."""
 
-    async def score(self, text: str) -> float:
-        """Return the slop score in ``[0, 1]`` for *text*."""
-        ...
+    async def score(self, text: str) -> float: ...
 
 
 @dataclass
@@ -231,18 +207,15 @@ class InMemoryCorpus:
     points: list[_Point] = field(default_factory=list)
 
     async def upsert_chunk(self, point: object) -> None:
-        """Append the point to the in-memory list. Always succeeds."""
         if not isinstance(point, _Point):
             msg = f"InMemoryCorpus expects _Point, got {type(point).__name__}"
             raise TypeError(msg)
         self.points.append(point)
 
     async def has_chunks(self, canonical_id: str) -> bool:
-        """Return whether any point has the given parent canonical id."""
         return any(p.payload.get("canonical_id") == canonical_id for p in self.points)
 
     async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
-        """Drop every point whose payload references *canonical_id*."""
         self.points = [p for p in self.points if p.payload.get("canonical_id") != canonical_id]
 
 
@@ -254,7 +227,6 @@ class FakeSlopClassifier:
     scores: dict[str, float] = field(default_factory=dict)
 
     async def score(self, text: str) -> float:
-        """Look up ``scores`` by exact match on the first 200 chars; fall back to default."""
         for key, val in self.scores.items():
             if text.startswith(key) or key in text:
                 return val
@@ -265,18 +237,17 @@ class FakeSlopClassifier:
 class HaikuSlopClassifier:
     """Asks Haiku whether a text describes a dead company.
 
-    Only runs on open-corpus sources (HN). Pre-vetted sources (curated YAML,
-    Crunchbase CSV) bypass slop in :func:`ingest` — their bodies are either
-    human-reviewed obituaries or Wayback'd live-era marketing pages, neither
-    of which benefits from the death-narrative check.
+    Only runs on open-corpus sources (HN). Pre-vetted sources bypass slop in
+    :func:`ingest` since their bodies are human-reviewed obituaries or
+    Wayback'd live-era marketing pages.
 
-    One LLM call per text. Returns 0.0 when Haiku says yes, else 1.0
-    (above ``slop_threshold=0.7``, so the entry quarantines).
+    Returns 0.0 when Haiku says yes, else 1.0 (above ``slop_threshold=0.7``,
+    so the entry quarantines).
 
-    ``char_limit=6000`` is sized so the demise narrative (which sits deep in
-    the body for older companies like Sun Microsystems or WeWork) falls
-    inside the window. Costs ~$6 more per full HN pass than a tighter
-    1500-char cap, but avoids false-negative quarantines on long obituaries.
+    ``char_limit=6000`` is sized so the demise narrative (often deep in the
+    body for older companies like Sun Microsystems or WeWork) falls inside
+    the window. Tighter 1500-char caps cause false-negative quarantines on
+    long obituaries.
     """
 
     llm: LLMClient
@@ -285,7 +256,6 @@ class HaikuSlopClassifier:
     max_tokens: int | None = None
 
     async def score(self, text: str) -> float:
-        """Ask Haiku whether *text* describes a dead company; map to 0.0 or 1.0."""
         snippet = text[: self.char_limit]
         prompt = render_prompt("slop_judge", text=snippet)
         result = await self.llm.complete(
@@ -492,7 +462,7 @@ async def _facet_call(
 ) -> Facets:
     # ValidationError from strict-mode parsing propagates up to the per-entry
     # isolator in ``ingest()`` so one bad doc doesn't kill the run.
-    from slopmortem.stages.facet_extract import extract_facets  # noqa: PLC0415
+    from slopmortem.stages import extract_facets  # noqa: PLC0415
 
     return await extract_facets(text, llm, model, max_tokens=max_tokens)
 
@@ -895,34 +865,11 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
 ) -> IngestResult:
     """Run one full ingest pass and return the aggregated :class:`IngestResult`.
 
-    Args:
-        sources: :class:`Source` adapters to fetch from. Per-source failures
-            log and the run continues.
-        enrichers: Optional pre-classifier enrichers (e.g. wayback fallback).
-        journal: SQLite merge journal — pending/complete writers and quarantine.
-        corpus: :class:`Corpus` write surface. Production is :class:`QdrantCorpus`.
-        llm: LLM client for facet_extract + summarize_for_rerank.
-        embed_client: Dense embedding client. Vector dim is read at the
-            client level; ingest never hardcodes dimensions.
-        budget: Shared :class:`~slopmortem.budget.Budget`. LLM and embedding
-            clients reserve and settle internally.
-        slop_classifier: Score-only classifier (Binoculars in production).
-        config: Loaded :class:`Config`. Reads ingest_concurrency,
-            slop_threshold, model ids, taxonomy/reliability versions.
-        post_mortems_root: Root for ``raw/``, ``canonical/``, ``quarantine/``.
-        dry_run: Count entries that would be ingested but write nothing —
-            no journal rows, no disk, no qdrant.
-        force: Bypass the skip_key short-circuit and re-process every entry.
-        sparse_encoder: BM25 sparse encoder override. ``None`` lazy-loads the
-            production fastembed model on first call. Tests pass a no-op stub
-            so they don't trigger the ~150 MB ONNX download.
-        limit: Cap on entries gathered. ``None`` is unbounded; when set,
-            sources past the cap aren't started.
-        progress: :class:`IngestProgress` sink for phase-level updates.
-            Defaults to :class:`NullProgress`.
-
-    Returns:
-        Counters and span event names for the run.
+    Per-entry and per-source failures log and continue; only budget exhaustion
+    truncates the run. ``dry_run`` counts entries without writing journal,
+    disk, or qdrant. ``force`` bypasses the skip_key short-circuit.
+    ``sparse_encoder=None`` lazy-loads the production fastembed model; tests
+    pass a no-op stub to dodge the ~150 MB ONNX download.
     """
     result = IngestResult(dry_run=dry_run)
     progress = progress or NullProgress()
@@ -972,7 +919,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     # Default sparse encoder: BM25 via fastembed. Tests stub it with a
     # dict-returning lambda so the ONNX model never loads under pytest.
     if sparse_encoder is None:
-        from slopmortem.corpus.embed_sparse import encode as _encode_sparse  # noqa: PLC0415
+        from slopmortem.corpus._embed_sparse import encode as _encode_sparse  # noqa: PLC0415
 
         sparse_encoder = _encode_sparse
 

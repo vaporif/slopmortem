@@ -18,14 +18,13 @@ from slopmortem.evals.cassettes import (
     write_llm_cassette,
     write_sparse_cassette,
 )
-from slopmortem.llm.cassettes import embed_cassette_key, llm_cassette_key
+from slopmortem.llm import embed_cassette_key, llm_cassette_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from slopmortem.llm.client import CompletionResult, LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient, EmbeddingResult
+    from slopmortem.llm import CompletionResult, EmbeddingClient, EmbeddingResult, LLMClient
 
 
 _PREVIEW_CHARS_PROMPT = 500
@@ -181,7 +180,7 @@ class RecordingEmbeddingClient:
 class RecordingSparseEncoder:
     """Wrap a sparse-encoder callable; write one cassette per `__call__`."""
 
-    def __init__(  # noqa: D107
+    def __init__(
         self,
         *,
         inner: Callable[[str], dict[int, float]],

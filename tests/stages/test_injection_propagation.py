@@ -7,21 +7,24 @@ detects ``_INJECTION_MARKER``, ``consolidate_risks`` must return empty
 
 from __future__ import annotations
 
+import importlib
 from datetime import date
 
 import pytest
 
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, NoCannedResponseError
+from slopmortem.llm import FakeLLMClient, NoCannedResponseError
 from slopmortem.models import (
     PerspectiveScore,
     SimilarityScores,
     Synthesis,
     TopRisks,
 )
-from slopmortem.stages import consolidate_risks as cr_module
-from slopmortem.stages.consolidate_risks import consolidate_risks
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.stages import consolidate_risks
+from slopmortem.tracing import SpanEvent
+
+# `import x as` returns the façade-shadowed function; use import_module for the module.
+_cr_module = importlib.import_module("slopmortem.stages.consolidate_risks")
 
 _MODEL = "test-consolidate-model"
 _PITCH = "A US consumer crypto savings platform paying yield on customer deposits."
@@ -62,7 +65,7 @@ def _synthesis(
 @pytest.fixture
 def captured_events(monkeypatch: pytest.MonkeyPatch) -> list[SpanEvent]:
     events: list[SpanEvent] = []
-    monkeypatch.setattr(cr_module, "_emit_event", events.append)
+    monkeypatch.setattr(_cr_module, "_emit_event", events.append)
     return events
 
 

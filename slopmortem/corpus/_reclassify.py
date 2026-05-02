@@ -5,7 +5,7 @@ or model changes; declassified docs flow back toward entity resolution on the
 next normal ``ingest`` run.
 
 The quarantine row primary key is ``(content_sha256, source, source_id)``
-(see :mod:`slopmortem.corpus.merge` schema). Quarantine markdown lives at
+(see :mod:`slopmortem.corpus._merge` schema). Quarantine markdown lives at
 ``<post_mortems_root>/quarantine/<content_sha256>.md``. Survivors move to
 ``<post_mortems_root>/raw/<source>/<text_id>.md``, where ``text_id`` is the
 first 16 hex chars of the content_sha256 (consistent with
@@ -16,7 +16,7 @@ re-fetches the entry from its source and routes it through entity resolution.
 
 We don't write a ``merge_state="pending"`` row at this point: the schema's
 ``canonical_id TEXT NOT NULL`` constraint plus the resolver-flip semantics in
-:func:`slopmortem.corpus.entity_resolution.resolve_entity` need a real
+:func:`slopmortem.corpus._entity_resolution.resolve_entity` need a real
 canonical_id, which only entity resolution can assign. The next normal ingest
 re-fetches through the source adapter and resolves from scratch.
 """
@@ -28,13 +28,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from slopmortem.concurrency import gather_resilient
-from slopmortem.corpus.paths import safe_path
+from slopmortem.corpus._paths import safe_path
 from slopmortem.models import ReclassifyReport
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from slopmortem.corpus.merge import MergeJournal
+    from slopmortem.corpus._merge import MergeJournal
     from slopmortem.ingest import SlopClassifier
 
 logger = logging.getLogger(__name__)
@@ -111,26 +111,11 @@ async def reclassify_quarantined(
 ) -> ReclassifyReport:
     """Re-run the slop classifier against every row in ``quarantine_journal``.
 
-    Survivors (new score < ``slop_threshold``) are removed from the
-    quarantine journal and their markdown files are moved into the raw
-    tree at ``raw/<source>/<text_id>.md``. Docs that still score above
-    threshold stay in quarantine. Missing markdown files (or an invalid
-    quarantine path) increment ``errors`` and the loop continues.
-
-    Args:
-        journal: The merge journal whose ``quarantine_journal`` table we
-            iterate (via :meth:`MergeJournal.fetch_quarantined`).
-        slop_classifier: The current classifier; usually a fresh
-            :class:`HaikuSlopClassifier` reflecting the new
-            threshold or model id.
-        post_mortems_root: Root containing ``raw/``, ``canonical/``,
-            ``quarantine/`` subtrees.
-        slop_threshold: Strict-less-than threshold; scores below it
-            declassify.
-
-    Returns:
-        A :class:`ReclassifyReport` with ``total``, ``declassified``,
-        ``still_slop``, and ``errors`` counts.
+    Survivors (score < ``slop_threshold``, strict) are dropped from the
+    quarantine journal and their markdown files moved into
+    ``raw/<source>/<text_id>.md``. Docs that still score over threshold stay
+    in quarantine. Missing files or invalid paths bump ``errors`` and the
+    loop continues.
     """
     rows = await journal.fetch_quarantined()
     total = len(rows)

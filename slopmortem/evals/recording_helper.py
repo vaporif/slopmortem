@@ -32,8 +32,7 @@ from slopmortem.evals.recording_progress import (
     RecordPhase,
     RecordProgress,
 )
-from slopmortem.llm.embedding_factory import make_embedder
-from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.llm import OpenRouterClient, make_embedder
 from slopmortem.pipeline import QueryPhase, run_query
 
 if TYPE_CHECKING:
@@ -41,7 +40,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from slopmortem.config import Config
-    from slopmortem.llm.client import CompletionResult
+    from slopmortem.llm import CompletionResult
     from slopmortem.models import InputContext
 
 
@@ -127,33 +126,17 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
     """Record cassettes for every input in ``inputs`` under ``output_dir/<scope>/``.
 
     Rows run in parallel under an ``anyio.CapacityLimiter(max_concurrent_rows)``
-    so a 10-row run finishes in ~``ceil(N/limit)`` row-times instead of N.
-    Per-row deps (Budget, OpenRouterClient, embedder) are shared across rows
-    — per-row cost ceilings are still enforced by the recording wrappers'
-    ``max_cost_usd``. Failed rows clean their tmp dirs; the first failure is
-    re-raised after every other row settles.
-
-    Args:
-        inputs: One :class:`InputContext` per scope to record.
-        output_dir: Parent directory; one subdir per scope (named via
-            :func:`slopmortem.evals.runner._row_id`).
-        corpus_fixture_path: JSONL fixture used to populate ephemeral Qdrant.
-        config: Live config (the helper forces ``enable_tavily_synthesis=False``).
-        qdrant_url: Qdrant URL for the ephemeral collection.
-        max_cost_usd: Cost ceiling for each per-stage LLM recording wrapper.
-        progress: Optional :class:`RecordProgress` sink. Runner wires a Rich
-            impl; ``None`` falls back to :class:`NullRecordProgress``.
-        max_concurrent_rows: Upper bound on rows running concurrently. Default
-            3 keeps total in-flight Sonnet calls (~``limit * (3 + N_synthesize)``)
-            comfortably under typical OpenRouter per-key rate limits.
-
-    Returns:
-        :class:`RecordResult` with per-run aggregate counters (rows attempted /
-        succeeded, cassettes written to disk, total USD spend). The runner
-        feeds these straight into ``render_record_footer``.
+    so a 10-row run finishes in ~``ceil(N/limit)`` row-times. Per-row deps
+    (Budget, OpenRouterClient, embedder) are shared across rows; per-row
+    cost ceilings are enforced by the recording wrappers' ``max_cost_usd``.
+    Failed rows clean their tmp dirs; the first failure re-raises after
+    every other row settles. Default ``max_concurrent_rows=3`` keeps total
+    in-flight Sonnet calls (~``limit * (3 + N_synthesize)``) under typical
+    OpenRouter per-key rate limits. The helper forces
+    ``enable_tavily_synthesis=False``.
     """
     # Lazy imports so import-time cycles stay cheap.
-    from slopmortem.corpus.tools_impl import _set_corpus  # noqa: PLC0415
+    from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
 
     # Lazy import: the runner imports back into this module, so a top-level
     # import would cycle at process start.
@@ -180,7 +163,7 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             corpus_fixture_path,
             qdrant_url=qdrant_url,
         ) as corpus:
-            _set_corpus(corpus)
+            set_query_corpus(corpus)
             # Shared deps: SDK, Budget, OpenRouterClient, embedder. Per-row
             # spend caps are enforced by each per-stage RecordingLLMClient
             # via its own ``max_cost_usd``; the inner Budget is sized to the
@@ -203,7 +186,7 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             )
             embedder = make_embedder(cfg, budget)
 
-            from slopmortem.corpus.embed_sparse import (  # noqa: PLC0415
+            from slopmortem.corpus._embed_sparse import (  # noqa: PLC0415
                 encode as live_sparse,
             )
 
@@ -368,11 +351,10 @@ class _AggregateProgressBridge:
         self._ticked = 0
 
     def start_phase(self, phase: QueryPhase, total: int) -> None:
-        """No-op; phase totals are pre-summed at the helper level."""
+        # Phase totals are pre-summed at the helper level.
         del phase, total
 
     def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
-        """Forward each inner advance to the shared ROWS bar."""
         del phase
         delta = min(n, self._ticks_per_row - self._ticked)
         if delta <= 0:
@@ -381,24 +363,22 @@ class _AggregateProgressBridge:
         self._sink.advance_phase(RecordPhase.ROWS, delta)
 
     def end_phase(self, phase: QueryPhase) -> None:
-        """No-op."""
         del phase
 
     def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
-        """No-op under parallel mode — inline detail would race across rows."""
+        # Inline detail would race across rows under parallel mode.
         del phase, status
 
     def log(self, message: str) -> None:
-        """Forward a one-off status line."""
         self._sink.log(message)
 
     def error(self, phase: QueryPhase, message: str) -> None:
-        """Forward an error; attribute it to ``ROWS`` since inner phases have no task."""
+        # Attribute to ROWS since inner phases have no task in parallel mode.
         del phase
         self._sink.error(RecordPhase.ROWS, message)
 
     def top_up(self) -> None:
-        """Advance any ticks the row didn't fire so the bar reaches its declared total."""
+        # Advance ticks the row didn't fire so the bar reaches its declared total.
         remaining = self._ticks_per_row - self._ticked
         if remaining > 0:
             self._sink.advance_phase(RecordPhase.ROWS, remaining)

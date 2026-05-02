@@ -87,7 +87,7 @@ class Facets(BaseModel):
 
     Closed enums are typed as ``Literal[*taxonomy_values]`` so Pydantic emits a
     JSON-schema ``enum`` constraint that Anthropic's grammar-constrained
-    sampler enforces. Out-of-enum values can't reach this class — the LLM
+    sampler enforces. Out-of-enum values can't reach this class; the LLM
     can't generate them in the first place.
     """
 

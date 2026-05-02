@@ -7,7 +7,7 @@ import pytest
 from pydantic import BaseModel
 
 from slopmortem.budget import Budget, BudgetExceededError
-from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.llm import OpenRouterClient
 from slopmortem.models import ToolSpec
 
 

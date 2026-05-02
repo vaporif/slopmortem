@@ -43,9 +43,38 @@ eval-record-corpus:
         --inputs tests/fixtures/corpus_fixture_inputs.yml \
         --out tests/fixtures/corpus_fixture.jsonl
 
+# Re-record the pytest-vcr cassettes for the round-trip tests
+# (HN Algolia + OpenRouter facet extract). Distinct from `eval-record`,
+# which targets the eval pipeline cassettes under tests/fixtures/cassettes/evals.
+# Sources .env so OPENROUTER_API_KEY reaches pytest's process; deletes any
+# stale cassette first so vcr's `once` mode actually re-records.
+record-cassettes:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f .env ]; then
+        set -a; source .env; set +a
+    fi
+    rm -f tests/sources/cassettes/test_hn_algolia/test_hn_algolia_round_trip.yaml
+    rm -f tests/llm/cassettes/test_openrouter_cassette/test_facet_extract_round_trip.yaml
+    RECORD=1 uv run pytest \
+        tests/sources/test_hn_algolia.py::test_hn_algolia_round_trip \
+        tests/llm/test_openrouter_cassette.py::test_facet_extract_round_trip
+
+# Fast import-time + cassette smoke. Catches typer registration regressions
+# and LLM-pipeline drift without hitting any live API. Used by every
+# refactor checkpoint in docs/plans/2026-05-02-encapsulation-refactor.md.
+smoke:
+    uv run slopmortem --help
+    uv run slopmortem ingest --help
+    uv run slopmortem query --help
+    uv run slopmortem replay --help
+    uv run slopmortem embed-prefetch --help
+    just eval
+
 lint:
     uv run ruff check .
     uv run ruff format --check .
+    uv run lint-imports
 
 format:
     uv run ruff check --fix .

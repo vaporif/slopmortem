@@ -101,7 +101,7 @@ async def restore_jsonl_to_collection(
     """Read ``jsonl_path`` and bulk-upsert every line into ``collection``.
 
     The collection must already exist with the correct vector configuration
-    (use :func:`slopmortem.corpus.qdrant_store.ensure_collection` to create
+    (use :func:`slopmortem.corpus._qdrant_store.ensure_collection` to create
     it). Points are upserted in batches of ``_UPSERT_BATCH``.
 
     Args:

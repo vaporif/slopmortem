@@ -19,6 +19,4 @@ class EmbeddingResult:
 class EmbeddingClient(Protocol):
     """Async embedding contract that the OpenAI and fake backends implement."""
 
-    async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        """Embed *texts* with the configured (or overridden) model and return vectors."""
-        ...
+    async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult: ...

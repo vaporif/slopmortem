@@ -23,47 +23,34 @@ class RecordPhase(StrEnum):
 class RecordProgress(Protocol):
     """Phase-level progress hooks for the eval cassette recorder.
 
-    Methods are no-op-safe. :class:`NullRecordProgress` is the default so the
-    recorder stays decoupled from any UI library; the runner wires a Rich
-    implementation. Mirrors :class:`slopmortem.pipeline.QueryProgress`.
+    Default :class:`NullRecordProgress` keeps the recorder decoupled from any
+    UI library; the runner wires a Rich implementation.
     """
 
-    def start_phase(self, phase: RecordPhase, total: int | None) -> None:
-        """Announce *phase* with an expected ``total`` of advances."""
+    def start_phase(self, phase: RecordPhase, total: int | None) -> None: ...
 
-    def advance_phase(self, phase: RecordPhase, n: int = 1) -> None:
-        """Advance *phase*'s bar by ``n``."""
+    def advance_phase(self, phase: RecordPhase, n: int = 1) -> None: ...
 
-    def end_phase(self, phase: RecordPhase) -> None:
-        """Mark *phase* complete."""
+    def end_phase(self, phase: RecordPhase) -> None: ...
 
-    def set_phase_status(self, phase: RecordPhase, status: str | None) -> None:
-        """Set or clear a transient status suffix on *phase*'s display label."""
+    def set_phase_status(self, phase: RecordPhase, status: str | None) -> None: ...
 
-    def log(self, message: str) -> None:
-        """Emit a one-off status line."""
+    def log(self, message: str) -> None: ...
 
-    def error(self, phase: RecordPhase, message: str) -> None:
-        """Record an error against *phase*."""
+    def error(self, phase: RecordPhase, message: str) -> None: ...
 
 
 class NullRecordProgress:
     """No-op :class:`RecordProgress` used when no display surface is attached."""
 
-    def start_phase(self, phase: RecordPhase, total: int | None) -> None:
-        """No-op."""
+    def start_phase(self, phase: RecordPhase, total: int | None) -> None: ...
 
-    def advance_phase(self, phase: RecordPhase, n: int = 1) -> None:
-        """No-op."""
+    def advance_phase(self, phase: RecordPhase, n: int = 1) -> None: ...
 
-    def end_phase(self, phase: RecordPhase) -> None:
-        """No-op."""
+    def end_phase(self, phase: RecordPhase) -> None: ...
 
-    def set_phase_status(self, phase: RecordPhase, status: str | None) -> None:
-        """No-op."""
+    def set_phase_status(self, phase: RecordPhase, status: str | None) -> None: ...
 
-    def log(self, message: str) -> None:
-        """No-op."""
+    def log(self, message: str) -> None: ...
 
-    def error(self, phase: RecordPhase, message: str) -> None:
-        """No-op."""
+    def error(self, phase: RecordPhase, message: str) -> None: ...

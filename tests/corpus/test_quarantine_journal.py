@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from slopmortem.corpus.merge import MergeJournal
+from slopmortem.corpus import MergeJournal
 
 
 async def test_quarantine_write_and_fetch(tmp_path):

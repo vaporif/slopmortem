@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from slopmortem.budget import Budget
-from slopmortem.llm.openrouter import OpenRouterClient
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.llm import OpenRouterClient
+from slopmortem.tracing import SpanEvent
 
 
 def _usage(prompt_cached: int = 0, prompt_cache_write: int = 0, cost: float = 0.001):

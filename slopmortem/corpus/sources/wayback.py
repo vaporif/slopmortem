@@ -15,7 +15,7 @@ from urllib.parse import quote_plus
 
 import httpx
 
-from slopmortem.corpus.extract import extract_clean
+from slopmortem.corpus._extract import extract_clean
 from slopmortem.corpus.sources._throttle import (
     HTTP_BAD_REQUEST,
     USER_AGENT,

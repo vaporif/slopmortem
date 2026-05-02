@@ -16,16 +16,20 @@ from typing import TYPE_CHECKING, Any
 from lmnr import Laminar
 
 from slopmortem.concurrency import gather_resilient
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
-from slopmortem.llm.tools import synthesis_tools, to_strict_response_schema
+from slopmortem.llm import (
+    prompt_template_sha,
+    render_prompt,
+    synthesis_tools,
+    to_strict_response_schema,
+)
 from slopmortem.models import LLMSynthesis, Synthesis
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from slopmortem.config import Config
-    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm import LLMClient
     from slopmortem.models import Candidate, InputContext
 
 
@@ -75,29 +79,11 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
 ) -> Synthesis:
     """Generate one :class:`Synthesis` for *candidate* against *ctx*'s pitch.
 
-    Args:
-        candidate: One :class:`Candidate` from the rerank top-N. Its
-            ``payload.body`` is inlined into the prompt inside
-            ``<untrusted_document>`` tags.
-        ctx: The user's :class:`InputContext`; ``ctx.description`` is the pitch.
-        llm: Async :class:`LLMClient`. ``cache=True`` so the system block hits
-            the prompt cache across calls within the 5-min TTL.
-        config: :class:`Config`. Drives ``synthesis_tools`` (Tavily inclusion)
-            and reserved for future per-stage knobs.
-        model: Optional model override. ``None`` lets the client pick.
-        max_tokens: Optional cap on completion tokens. ``None`` keeps the
-            client default (no cap sent upstream).
-
-    Returns:
-        Parsed :class:`Synthesis`. ``sources`` is passed through directly from
-        ``candidate.payload.sources`` (the LLM never sees provenance URLs, so
-        asking it to cite them produced empty or hallucinated lists). When the
-        LLM marks ``where_diverged == "prompt_injection_attempted"``,
-        ``_emit_event`` fires :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED`.
-
-    Raises:
-        ValidationError: The LLM emitted JSON that doesn't validate against
-            :class:`Synthesis`.
+    ``sources`` is passed through from ``candidate.payload.sources`` rather
+    than asked of the LLM — the LLM never sees provenance URLs, so asking
+    produced empty or hallucinated lists. When ``where_diverged ==
+    "prompt_injection_attempted"`` (the :data:`_INJECTION_MARKER`), fires
+    :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED` on the active Laminar span.
     """
     prompt = render_prompt(
         "synthesize",
@@ -147,30 +133,12 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     max_tokens: int | None = None,
     on_candidate_done: Callable[[BaseException | None], None] | None = None,
 ) -> list[Synthesis | BaseException]:
-    """Cache-warm synthesize fan-out: one warm call, then :func:`gather_resilient`.
+    """Cache-warm fan-out: one warm call, then :func:`gather_resilient` for the rest.
 
-    The first call runs alone so the prompt cache is populated before the
-    parallel fan-out hits it — avoids a pile-up of cache-write races. The rest
-    run via :func:`gather_resilient` so one failed candidate can't cancel its
-    siblings; the reporting path filters out exceptions and notes the gap on
-    ``Report.candidates``.
-
-    Args:
-        candidates: All candidates to synthesize. May be empty.
-        ctx: The user's :class:`InputContext`.
-        llm: Async :class:`LLMClient`.
-        config: :class:`Config`.
-        model: Optional model override.
-        max_tokens: Optional cap on completion tokens, forwarded to each
-            :func:`synthesize` call.
-        on_candidate_done: Optional callback fired exactly once per candidate
-            when its ``synthesize`` call settles. Receives ``None`` on success
-            or the raised :class:`BaseException` on failure. For CLI
-            progress-bar wiring; the pipeline's pure path passes ``None``.
-
-    Returns:
-        A list the same length as *candidates*. Each entry is either a
-        :class:`Synthesis` or the :class:`BaseException` raised on its behalf.
+    First call runs alone so the prompt cache is populated before parallel
+    calls race to write it. Remaining calls use :func:`gather_resilient` so
+    a single failure doesn't cancel siblings — exceptions are returned
+    in-list, not raised.
     """
     if not candidates:
         return []

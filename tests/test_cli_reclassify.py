@@ -1,4 +1,4 @@
-"""--reclassify dispatches to slopmortem.corpus.reclassify.reclassify_quarantined."""
+"""--reclassify dispatches to slopmortem.corpus._reclassify.reclassify_quarantined."""
 
 from __future__ import annotations
 

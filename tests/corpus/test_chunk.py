@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tiktoken
 
-from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION, Chunk, chunk_markdown
+from slopmortem.corpus import CHUNK_STRATEGY_VERSION, Chunk, chunk_markdown
 
 
 def test_chunk_strategy_version_exported():

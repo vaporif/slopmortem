@@ -36,12 +36,8 @@ _IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 
 
 def _strip_markdown_links(text: str) -> str:
-    """Strip inline links, reference-style links, and image markdown from *text*.
-
-    Order matters: images use ``![alt](url)``, which the inline-link pattern
-    would match after the leading ``!`` if it ran first. So: images, then
-    inline links, then ref links.
-    """
+    # Order matters: images use ``![alt](url)``, which the inline-link pattern
+    # would match after the leading ``!`` if it ran first.
     text = _IMAGE.sub(r"\1", text)
     text = _INLINE_LINK.sub(r"\1", text)
     return _REF_LINK.sub(r"\1", text)
@@ -108,14 +104,8 @@ def _render_candidate(syn: Synthesis) -> str:
 
 
 def _render_top_risks(top_risks: TopRisks, candidates: list[Synthesis]) -> str:
-    """Render the consolidated top-risks section as a numbered markdown list.
-
-    Each item: a severity-tagged canonical summary, an ``Applies because:``
-    line, and a ``Raised by: <names> (k/N)`` line where ``k`` is
-    ``len(raised_by)`` and ``N`` is the total candidate count. Unknown ids
-    fall back to the raw id string — defensive, since the consolidator only
-    sees ids from the same syntheses list.
-    """
+    # Unknown ids fall back to the raw id string — defensive, the consolidator
+    # only sees ids from the same syntheses list.
     id_to_name = {c.candidate_id: c.name for c in candidates}
     total = len(candidates)
     lines: list[str] = ["## Top risks across all comparables", ""]
@@ -158,7 +148,7 @@ def _render_no_comparables_banner(meta: PipelineMeta) -> str:
     if dropped > 0:
         return (
             f"No comparables passed similarity threshold {threshold:.1f}. "
-            f"{dropped} candidate(s) were filtered out — try lowering "
+            f"{dropped} candidate(s) were filtered out. Try lowering "
             f"min_similarity_score in slopmortem.toml."
         )
     return (
@@ -171,14 +161,9 @@ def _render_no_comparables_banner(meta: PipelineMeta) -> str:
 def render(report: Report) -> str:
     """Render *report* as a markdown string. Pure function, no I/O.
 
-    Args:
-        report: The :class:`Report` produced by the pipeline.
-
-    Returns:
-        Markdown text suitable for stdout. Inline links, reference-style
-        links, and image markdown are stripped from every prose field.
-        Sources go out as plain URLs, one per line, so no clickable autolink
-        reaches a markdown viewer.
+    Inline links, reference-style links, and image markdown are stripped
+    from every prose field. Sources go out as plain URLs, one per line, so
+    no clickable autolink reaches a markdown viewer.
     """
     sections: list[str] = [
         f"# Slopmortem report for {report.input.name}",
