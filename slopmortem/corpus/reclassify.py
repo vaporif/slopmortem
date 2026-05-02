@@ -14,14 +14,11 @@ The quarantine row is dropped via
 :meth:`MergeJournal.drop_quarantine_row`. The next normal ``ingest`` run
 re-fetches the entry from its source and routes it through entity resolution.
 
-Deviation from the originating plan: the plan also called for inserting a
-``merge_state="pending"`` row into the main merge journal. The schema's
-``canonical_id TEXT NOT NULL`` constraint plus the resolver-flip semantics
-in :func:`slopmortem.corpus.entity_resolution.resolve_entity` make this unsafe
-without a real ``canonical_id``, which only entity resolution can assign. So
-we drop the quarantine row and move the file. Re-pickup relies on the next
-normal ingest re-fetching the entry through its source adapter and running
-entity resolution from scratch.
+We don't write a ``merge_state="pending"`` row at this point: the schema's
+``canonical_id TEXT NOT NULL`` constraint plus the resolver-flip semantics in
+:func:`slopmortem.corpus.entity_resolution.resolve_entity` need a real
+canonical_id, which only entity resolution can assign. The next normal ingest
+re-fetches through the source adapter and resolves from scratch.
 """
 
 from __future__ import annotations
@@ -58,8 +55,8 @@ class _Pending:
 
 def _row_to_pending(row: dict[str, object], post_mortems_root: Path) -> _Pending | None:
     """Validate one ``quarantine_journal`` row and read its body; ``None`` on any failure."""
-    # ``fetch_quarantined`` returns sqlite-Row-shaped dicts at the journal
-    # boundary; assert ``str`` on each key cell at this use site.
+    # journal cells come back as sqlite-Row values; narrow each key to ``str``
+    # before using it.
     sha = row["content_sha256"]
     source = row["source"]
     source_id = row["source_id"]
@@ -156,9 +153,8 @@ async def reclassify_quarantined(
         if score >= slop_threshold:
             still_slop += 1
             continue
-        # Declassify: derive a text_id from the content_sha256 and move the
-        # file under raw/<source>/<text_id>.md. The 16-char shape matches
-        # what ``slopmortem.ingest._text_id_for`` produces.
+        # Declassify: 16-char text_id matches ``slopmortem.ingest._text_id_for``
+        # so the next ingest pass sees a consistent path layout.
         text_id = p.sha[:_TEXT_ID_LEN]
         try:
             raw_path = safe_path(post_mortems_root, kind="raw", text_id=text_id, source=p.source)
