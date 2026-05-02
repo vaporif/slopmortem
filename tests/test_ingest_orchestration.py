@@ -26,8 +26,9 @@ from slopmortem.models import RawEntry
 from slopmortem.tracing import SpanEvent
 
 # Façade re-exports shadow submodules: monkeypatching `chunk_markdown` requires
-# the orchestrator submodule, not the `slopmortem.ingest` package facade.
-ingest_module = importlib.import_module("slopmortem.ingest._orchestrator")
+# the fan-out submodule (where `_embed_and_upsert` calls it), not the
+# `slopmortem.ingest` package facade or the orchestrator.
+ingest_module = importlib.import_module("slopmortem.ingest._fan_out")
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

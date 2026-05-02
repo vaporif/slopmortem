@@ -878,7 +878,7 @@ Expected: green; eval baseline byte-stable on the assertion summary.
 - Create: `slopmortem/ingest/_fan_out.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the per-entry pipeline seam**
+- [x] **Step 1: Identify the per-entry pipeline seam**
 
 Per spec, the seam is `_facet_summarize_fanout` (was `ingest.py:637`, now in `_orchestrator.py`) plus the `_embed_and_upsert` call inside `_process_entry` (was `ingest.py:688`). The actual order is **facet → summarize → embed → upsert**. Slop classification is upstream and lives in T2.5's `_slop_gate.py`, not here.
 
@@ -888,7 +888,7 @@ Find the seam:
 grep -nE "_facet_summarize_fanout|_embed_and_upsert|_process_entry" slopmortem/ingest/_orchestrator.py
 ```
 
-- [ ] **Step 2: Extract `_facet_summarize_fanout` and helpers into `_fan_out.py`**
+- [x] **Step 2: Extract `_facet_summarize_fanout` and helpers into `_fan_out.py`**
 
 Create `slopmortem/ingest/_fan_out.py`:
 
@@ -905,7 +905,7 @@ from __future__ import annotations
 
 Move the facet/summarize/embed/upsert flow. Leave the journal-write ordering helper (the `_process_entry` body that calls `journal.upsert_pending` etc.) in `_orchestrator.py` — that's T2.4's territory.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green.
