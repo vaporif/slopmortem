@@ -33,6 +33,11 @@ from slopmortem.llm.openrouter import (
     gather_with_limit as gather_with_limit,
     is_transient_http as is_transient_http,
 )
+from slopmortem.llm.prompts import (
+    prompt_template_sha as prompt_template_sha,
+    render_blocks as render_blocks,
+    render_prompt as render_prompt,
+)
 from slopmortem.llm.tools import (
     synthesis_tools as synthesis_tools,
     to_openai_input_schema as to_openai_input_schema,
@@ -58,6 +63,9 @@ __all__ = [
     "is_transient_http",
     "llm_cassette_key",
     "make_embedder",
+    "prompt_template_sha",
+    "render_blocks",
+    "render_prompt",
     "synthesis_tools",
     "template_sha",
     "to_openai_input_schema",
