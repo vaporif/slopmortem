@@ -1,38 +1,18 @@
 # pyright: reportAny=false
-"""Ingest orchestration: sources -> enrichers -> slop -> facets -> summarize -> chunks -> qdrant.
+"""Shared types, protocols, dataclasses, and pure helpers for the ingest package.
 
-Pipeline:
+The orchestration entry point (`ingest()`) lives in `_ingest.py`; per-stage logic
+lives in `_warm_cache.py`, `_fan_out.py`, `_journal_writes.py`, and `_slop_gate.py`.
+This module is the leaf of that graph — it imports from outside `slopmortem.ingest`
+only and is imported by every sibling module for the symbols below.
 
-1. Per source, iterate ``Source.fetch()`` async. Per-source failures log and
-   the run continues.
-2. Per entry, apply enrichers in declared order. trafilatura sanitizes and
-   extracts the canonical body when HTML is present; entries below the length
-   floor get dropped.
-3. Slop classify. ``slop_score > config.slop_threshold`` quarantines the doc:
-   no qdrant point, no merge journal row, separate ``quarantine_journal``
-   table, body under ``post_mortems_root/quarantine/<content_sha256>.md``.
-4. Cache-warm one serial LLM call so the prompt cache is hot for fan-out.
-5. Fan-out facet_extract + summarize_for_rerank under
-   ``anyio.CapacityLimiter(config.ingest_concurrency)``.
-6. Read-ratio probe on the first 5 fan-out responses. If
-   ``cache_read / (cache_read + cache_creation) < 0.80`` emit
-   :attr:`SpanEvent.CACHE_READ_RATIO_LOW`.
-7. Resolve canonical id via
-   :func:`slopmortem.corpus._entity_resolution.resolve_entity`. The
-   ``resolver_flipped`` and ``alias_blocked`` actions short-circuit.
-8. ``upsert_pending`` row, atomic raw write, deterministic merge of all raw
-   sections for this canonical_id, atomic canonical write, chunk + embed,
-   delete + re-upsert all chunk points, ``mark_complete`` with skip_key LAST.
-
-Idempotency: skip_key is ``(content_hash, facet_prompt_hash,
-summarize_prompt_hash, haiku_model_id, embed_model_id, chunk_strategy_version,
-taxonomy_version, reliability_rank_version)``. A later ingest with a journal
-row already at ``complete`` and a matching skip_key short-circuits with no
-LLM, embed, or qdrant work. ``--force`` bypasses it.
-
-Concurrency contract: every LLM and embedding call routes through the same
-:class:`~slopmortem.budget.Budget` (reserve before, settle after) and the
-bounded fan-out limiter for the facet+summarize batch.
+Public surface (re-exported via `slopmortem.ingest.__init__`): `Corpus`,
+`InMemoryCorpus`, `IngestPhase`, `INGEST_PHASE_LABELS`, `IngestResult`,
+`SlopClassifier`, `FakeSlopClassifier`, `HaikuSlopClassifier`, `_Point`.
+Internal helpers (used by sibling modules across the private boundary):
+`_entry_summary_text`, `_enrich_pipeline`, `_gather_entries`, `_text_id_for`,
+`_skip_key`, `_build_payload`, `_truncate_to_tokens`, `_reliability_for`,
+`_content_sha256`, `_date_from_year`.
 """
 
 from __future__ import annotations

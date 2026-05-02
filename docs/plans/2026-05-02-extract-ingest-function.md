@@ -62,7 +62,7 @@ slopmortem/ingest/
 
 The `ingest()` function lives at `slopmortem/ingest/_orchestrator.py:471-711` (verify on first read; line numbers can drift). It owns two local closures (`_emit_collected_events`, `_record_error`) that move with it. Nothing else moves.
 
-- [ ] **Step 1: Verify the function's line range and import surface**
+- [x] **Step 1: Verify the function's line range and import surface**
 
 Run:
 
@@ -73,7 +73,7 @@ grep -nE "noqa: E402" slopmortem/ingest/_orchestrator.py
 
 Expected: `@observe` at ~line 455, `async def ingest` at ~line 471, two E402 lines at ~446 and ~450. If line numbers diverge, use the actual values for subsequent steps.
 
-- [ ] **Step 2: Inventory what `ingest()` reads from `_orchestrator.py`**
+- [x] **Step 2: Inventory what `ingest()` reads from `_orchestrator.py`**
 
 Read the function body (lines 471-711) and list every name it references that is defined in `_orchestrator.py` (not imported). Expected set:
 
@@ -83,7 +83,7 @@ Read the function body (lines 471-711) and list every name it references that is
 
 Confirm by greping the function body for each name. The list above is the import surface `_ingest.py` will need from `_orchestrator`.
 
-- [ ] **Step 3: Create `slopmortem/ingest/_ingest.py` with the function moved**
+- [x] **Step 3: Create `slopmortem/ingest/_ingest.py` with the function moved**
 
 ```python
 # pyright: reportAny=false
@@ -155,7 +155,7 @@ Cut-and-paste the function (signature + decorator + docstring + body + both clos
 
 The `pyright: ignore[reportPrivateUsage]` pragmas the function used inline (e.g. on `_text_id_for`, `_skip_key`, `_build_payload`) need to come along — those calls cross a private boundary now that they're called from a different module. Match the pragma pattern in `_journal_writes.py:40-46`.
 
-- [ ] **Step 4: Delete `ingest()` and the late-import blocks from `_orchestrator.py`**
+- [x] **Step 4: Delete `ingest()` and the late-import blocks from `_orchestrator.py`**
 
 Remove:
 - The entire `async def ingest(...)` body (lines 471-711, plus the `@observe(...)` decorator at lines 455-470)
@@ -164,7 +164,7 @@ Remove:
 
 Keep everything else: types, protocols, dataclasses, pure helpers, the `_emit_collected_events` and `_record_error` patterns are inside `ingest()` and travel with it.
 
-- [ ] **Step 5: Update `slopmortem/ingest/__init__.py` to re-export from `_ingest`**
+- [x] **Step 5: Update `slopmortem/ingest/__init__.py` to re-export from `_ingest`**
 
 Edit `__init__.py` line 32 (the existing `ingest as ingest` import line) to source from `_ingest`:
 
@@ -190,7 +190,7 @@ If `just lint` flags F401 dead imports in `_orchestrator.py`, run `just format` 
 
 If a test fails, the most likely cause is a name in `ingest()` that wasn't on Step 2's inventory and isn't being imported in `_ingest.py` — the test traceback names it; add the missing import and re-run.
 
-- [ ] **Step 7: Confirm the cycle is gone**
+- [x] **Step 7: Confirm the cycle is gone**
 
 Run:
 

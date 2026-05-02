@@ -71,19 +71,15 @@ def _cfg() -> Config:
 
 
 # Façade re-exports shadow submodules: monkeypatching the corpus write
-# helpers must target the binding inside whichever module currently owns
-# _process_entry — not slopmortem.corpus. importlib lets the test file
-# track the symbol if it ever moves between ingest submodules again.
+# helpers must target the binding inside the module that owns _process_entry,
+# not slopmortem.corpus. importlib resolves to the live module object so the
+# patch lands on the same binding the production code calls.
 _JOURNAL_WRITES_MOD_NAME = "slopmortem.ingest._journal_writes"
-_ORCHESTRATOR_MOD_NAME = "slopmortem.ingest._orchestrator"
 
 
 def _patch_target_module():
-    """Return whichever module currently owns _process_entry."""
-    try:
-        return importlib.import_module(_JOURNAL_WRITES_MOD_NAME)
-    except ModuleNotFoundError:
-        return importlib.import_module(_ORCHESTRATOR_MOD_NAME)
+    """Return the module that owns _process_entry."""
+    return importlib.import_module(_JOURNAL_WRITES_MOD_NAME)
 
 
 class _CrashOnUpsertCorpus(InMemoryCorpus):

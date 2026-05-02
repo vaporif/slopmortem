@@ -58,13 +58,17 @@ from slopmortem.corpus._reconcile import (
     reconcile as reconcile,
 )
 from slopmortem.corpus._store import Corpus as Corpus
-from slopmortem.models import (
-    AliasEdge as AliasEdge,
-    MergeState as MergeState,
-    RawEntry as RawEntry,
-)
 from slopmortem.corpus._summarize import summarize_for_rerank as summarize_for_rerank
 from slopmortem.corpus._tools_impl import set_query_corpus as set_query_corpus
+from slopmortem.models import (
+    AliasEdge as AliasEdge,
+)
+from slopmortem.models import (
+    MergeState as MergeState,
+)
+from slopmortem.models import (
+    RawEntry as RawEntry,
+)
 
 __all__ = [
     "CHUNK_STRATEGY_VERSION",
