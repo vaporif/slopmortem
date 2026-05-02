@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from typer.testing import CliRunner
 
+from slopmortem.budget import Budget
 from slopmortem.cli import app
 
 if TYPE_CHECKING:
@@ -25,7 +26,7 @@ async def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
         MagicMock(name="llm"),
         MagicMock(name="embed"),
         MagicMock(name="corpus"),
-        MagicMock(name="budget"),
+        Budget(cap_usd=1.0),
         MagicMock(name="journal"),
         MagicMock(name="slop"),
     )
