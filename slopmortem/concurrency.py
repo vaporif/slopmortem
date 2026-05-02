@@ -22,7 +22,7 @@ async def gather_resilient[T](*aws: Awaitable[T]) -> list[T | Exception]:
 
     ``BaseException`` subclasses that aren't ``Exception`` (``KeyboardInterrupt``,
     ``SystemExit``, ``asyncio.CancelledError``, and the cassette-miss errors
-    in ``slopmortem.llm.fake`` / ``slopmortem.evals.cassettes``) are re-raised
+    in ``slopmortem.llm.fake`` / ``slopmortem.llm.cassettes``) are re-raised
     so they aren't silently absorbed as a dropped candidate. Operational
     failures stay isolated; programmer / test-fixture errors stay loud.
     """

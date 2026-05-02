@@ -82,10 +82,10 @@ from slopmortem.evals.assertions import (
 )
 from slopmortem.evals.cassettes import (
     CassetteFormatError,
-    NoCannedEmbeddingError,
     load_row_fakes,
 )
 from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant
+from slopmortem.llm.cassettes import NoCannedEmbeddingError
 from slopmortem.llm.fake import NoCannedResponseError
 from slopmortem.llm.openai_embeddings import EMBED_DIMS
 from slopmortem.models import (

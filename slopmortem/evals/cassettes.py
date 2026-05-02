@@ -19,13 +19,19 @@ from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from slopmortem.llm.cassettes import (
+    NoCannedEmbeddingError as NoCannedEmbeddingError,  # noqa: PLC0414 - explicit re-export for back-compat
+)
+from slopmortem.llm.cassettes import embed_cassette_key
+from slopmortem.llm.fake import FakeLLMClient, FakeResponse
+from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from slopmortem.config import Config
-    from slopmortem.llm.fake import CompletionResult, FakeLLMClient, FakeResponse
-    from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
+    from slopmortem.llm.fake import CompletionResult
 
 
 _SCHEMA_MAJOR = 1
@@ -45,15 +51,6 @@ class CassetteSchemaError(Exception):
 
 class DuplicateCassetteError(Exception):
     """Raised when two cassette files in the same scope dir resolve to the same key."""
-
-
-class NoCannedEmbeddingError(BaseException):
-    """Raised when an embedding cassette miss occurs under strict (canned-not-None) lookup.
-
-    BaseException (not Exception) so resilient fan-out wrappers can't swallow
-    it as an operational error — see ``NoCannedResponseError`` for the same
-    rationale.
-    """
 
 
 class RecordingBudgetExceededError(Exception):
@@ -392,14 +389,6 @@ def load_row_fakes(
     ``NoCannedEmbeddingError`` on miss; the LLM/dense fakes raise their own
     miss errors at call time.
     """
-    # Lazy imports break what would otherwise be a cycle: fake_embeddings
-    # imports NoCannedEmbeddingError from this module, so importing anything
-    # from slopmortem.llm at module top level here re-enters cassettes.py
-    # mid-load via slopmortem.llm/__init__.py.
-    from slopmortem.llm.cassettes import embed_cassette_key  # noqa: PLC0415
-    from slopmortem.llm.fake import FakeLLMClient, FakeResponse  # noqa: PLC0415
-    from slopmortem.llm.fake_embeddings import FakeEmbeddingClient  # noqa: PLC0415
-
     llm_canned: dict[tuple[str, str, str], FakeResponse | CompletionResult] = {
         k: FakeResponse(
             text=v.text,

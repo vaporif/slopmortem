@@ -6,8 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from slopmortem.evals.cassettes import NoCannedEmbeddingError
-from slopmortem.llm.cassettes import embed_cassette_key
+from slopmortem.llm.cassettes import NoCannedEmbeddingError, embed_cassette_key
 from slopmortem.llm.embedding_client import EmbeddingResult
 from slopmortem.llm.openai_embeddings import EMBED_DIMS
 
