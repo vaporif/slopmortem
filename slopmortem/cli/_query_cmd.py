@@ -106,17 +106,11 @@ def query_cmd(
         ),
     ] = False,
 ) -> None:
-    """Run the synthesis pipeline against *description* and persist a Markdown report.
+    """When no candidates clear the similarity floor, exits 1 and writes no file.
 
-    By default the rendered :class:`Report` is written to
-    ``.slopmortem/runs/<utc-timestamp>-<slug>.md`` and only the path is echoed
-    to stdout. Pass ``--stdout`` to dump the report to stdout instead (handy in
-    shell pipelines). When no candidates clear the similarity floor, a short
-    "not found" message goes to stdout and the command exits with code 1 (no
-    file is written). Stage progress streams to stderr (TTY-gated). Laminar
-    tracing is gated on ``Config.enable_tracing`` and a present
-    ``LMNR_PROJECT_API_KEY``; if the key is missing but tracing is enabled, a
-    one-line warning goes to stderr and the run continues untraced.
+    Tracing is gated on ``Config.enable_tracing`` and ``LMNR_PROJECT_API_KEY``;
+    if the key is missing but tracing is enabled, the run continues untraced
+    with a one-line warning on stderr.
     """
     anyio.run(
         functools.partial(

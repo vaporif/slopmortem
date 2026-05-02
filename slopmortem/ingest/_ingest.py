@@ -60,111 +60,55 @@ __all__ = ["ingest"]
 logger = logging.getLogger(__name__)
 
 
-@observe(
-    name="ingest",
-    ignore_inputs=[
-        "sources",
-        "enrichers",
-        "journal",
-        "corpus",
-        "llm",
-        "embed_client",
-        "budget",
-        "slop_classifier",
-        "sparse_encoder",
-        "progress",
-    ],
-)
-async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes every dependency.
+def _emit_collected_events(result: IngestResult) -> None:
+    """Replay the run's accumulated span events to Laminar on the parent span."""
+    if not Laminar.is_initialized():
+        return
+    for name in result.span_events:
+        Laminar.event(name=name)
+
+
+def _record_error(result: IngestResult, entry_label: str, exc: BaseException) -> None:
+    """Index the per-entry exception onto the active Laminar span.
+
+    Without this, swallowed per-entry exceptions only surface in stderr; the
+    parent ingest span returns OK and INGEST_ENTRY_FAILED carries no payload.
+    """
+    if not Laminar.is_initialized():
+        return
+    idx = result.errors
+    if idx >= _MAX_RECORDED_ERRORS:
+        Laminar.set_span_attributes({"errors.truncated_count": idx - _MAX_RECORDED_ERRORS + 1})
+        return
+    Laminar.set_span_attributes(
+        {
+            f"errors.{idx}.entry": entry_label,
+            f"errors.{idx}.exception_type": type(exc).__name__,
+            f"errors.{idx}.message": str(exc)[:500],
+        }
+    )
+
+
+async def _classify_phase(  # noqa: PLR0913 - one phase, every dep at this seam
+    entries: Sequence[RawEntry],
     *,
-    sources: Sequence[Source],
     enrichers: Sequence[Enricher],
-    journal: MergeJournal,
-    corpus: Corpus,
-    llm: LLMClient,
-    embed_client: EmbeddingClient,
-    budget: Budget,  # noqa: ARG001 - consumed by LLM/embed clients at construction time
     slop_classifier: SlopClassifier,
+    journal: MergeJournal,
     config: Config,
     post_mortems_root: Path,
-    dry_run: bool = False,
-    force: bool = False,
-    sparse_encoder: SparseEncoder | None = None,
-    limit: int | None = None,
-    progress: IngestProgress | None = None,
-) -> IngestResult:
-    """Run one full ingest pass and return the aggregated :class:`IngestResult`.
+    dry_run: bool,
+    progress: IngestProgress,
+    result: IngestResult,
+) -> list[tuple[RawEntry, str]]:
+    """Enrich → extract body → slop-gate; return the survivors as (entry, body).
 
-    Per-entry and per-source failures log and continue; only budget exhaustion
-    truncates the run. ``dry_run`` counts entries without writing journal,
-    disk, or qdrant. ``force`` bypasses the skip_key short-circuit.
-    ``sparse_encoder=None`` lazy-loads the production fastembed model; tests
-    pass a no-op stub to dodge the ~150 MB ONNX download.
+    Mutates ``result`` counters (``seen``, ``errors``, ``skipped``,
+    ``quarantined``) and ``result.span_events``. Per-entry failures log
+    and continue; only the run-level orchestrator can short-circuit.
     """
-    result = IngestResult(dry_run=dry_run)
-    progress = progress or NullProgress()
-
-    # Drain events on every exit path; the list also stays on result for tests
-    # and the CLI renderer.
-    def _emit_collected_events() -> None:
-        if not Laminar.is_initialized():
-            return
-        for name in result.span_events:
-            Laminar.event(name=name)
-
-    # Without per-entry attributes, swallowed exceptions only surface in stderr;
-    # the parent span returns OK and INGEST_ENTRY_FAILED carries no payload.
-    def _record_error(entry_label: str, exc: BaseException) -> None:
-        if not Laminar.is_initialized():
-            return
-        idx = result.errors
-        if idx >= _MAX_RECORDED_ERRORS:
-            Laminar.set_span_attributes({"errors.truncated_count": idx - _MAX_RECORDED_ERRORS + 1})
-            return
-        Laminar.set_span_attributes(
-            {
-                f"errors.{idx}.entry": entry_label,
-                f"errors.{idx}.exception_type": type(exc).__name__,
-                f"errors.{idx}.message": str(exc)[:500],
-            }
-        )
-
-    if Laminar.is_initialized():
-        Laminar.set_span_attributes(
-            {
-                "run.id": mint_run_id(),
-                "run.kind": "ingest",
-                "run.git_sha": git_sha() or "",
-                "run.dry_run": dry_run,
-                "run.force": force,
-                "run.limit": limit if limit is not None else 0,
-                "config.taxonomy_version": config.taxonomy_version,
-                "config.reliability_rank_version": config.reliability_rank_version,
-                "config.slop_threshold": config.slop_threshold,
-                "config.model_facet": config.model_facet,
-                "config.model_summarize": config.model_summarize,
-            }
-        )
-
-    # Tests stub this with a dict-returning lambda so the ~150 MB ONNX model
-    # never loads under pytest.
-    if sparse_encoder is None:
-        from slopmortem.corpus._embed_sparse import encode as _encode_sparse  # noqa: PLC0415
-
-        sparse_encoder = _encode_sparse
-
-    # ``total=None`` when --limit isn't set: count isn't known up front, so
-    # let the bar pulse instead of lying with 0.
-    progress.start_phase(IngestPhase.GATHER, total=limit)
-    entries, source_failures = await _gather_entries(
-        sources, span_events=result.span_events, limit=limit, progress=progress
-    )
-    progress.end_phase(IngestPhase.GATHER)
-    progress.log(f"gathered {len(entries)} entries from {len(sources)} sources")
-    result.source_failures = source_failures
-
     progress.start_phase(IngestPhase.CLASSIFY, total=len(entries))
-    keepers: list[tuple[RawEntry, str]] = []  # (entry, body) post-extract.
+    keepers: list[tuple[RawEntry, str]] = []
     for entry in entries:
         result.seen += 1
         try:
@@ -172,7 +116,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
         except Exception as exc:  # noqa: BLE001 - per-entry isolation.
             logger.warning("ingest: enricher failed for %r: %s", entry.source_id, exc)
             progress.error(IngestPhase.CLASSIFY, f"enricher failed for {entry.source_id}: {exc}")
-            _record_error(f"{entry.source}:{entry.source_id}", exc)
+            _record_error(result, f"{entry.source}:{entry.source_id}", exc)
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.CLASSIFY)
@@ -210,40 +154,31 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
         keepers.append((enriched, body))
         progress.advance_phase(IngestPhase.CLASSIFY)
     progress.end_phase(IngestPhase.CLASSIFY)
-    quarantined = result.quarantined
-    skipped = result.skipped
-    progress.log(f"classified: {len(keepers)} kept, {quarantined} quarantined, {skipped} skipped")
+    return keepers
 
-    if dry_run:
-        result.would_process = len(keepers)
-        _emit_collected_events()
-        return result
 
-    if not keepers:
-        _emit_collected_events()
-        return result
+async def _write_phase(  # noqa: PLR0913 - one phase, every dep at this seam
+    keepers: Sequence[tuple[RawEntry, str]],
+    fanout: Sequence[_FanoutResult | BaseException],
+    *,
+    journal: MergeJournal,
+    corpus: Corpus,
+    embed_client: EmbeddingClient,
+    llm: LLMClient,
+    config: Config,
+    post_mortems_root: Path,
+    force: bool,
+    sparse_encoder: SparseEncoder,
+    progress: IngestProgress,
+    result: IngestResult,
+) -> None:
+    """Per-entry write: resolve, journal, disk, qdrant, mark_complete.
 
-    progress.start_phase(IngestPhase.CACHE_WARM, total=1)
-    warmed, warm_creation, warm_events = await cache_warm(
-        llm=llm,
-        model=config.model_summarize,
-        seed_text=keepers[0][1][:1000],
-        max_tokens=config.max_tokens_summarize,
-    )
-    progress.advance_phase(IngestPhase.CACHE_WARM)
-    progress.end_phase(IngestPhase.CACHE_WARM)
-    result.cache_warmed = warmed
-    result.cache_creation_tokens_warm = warm_creation
-    result.span_events.extend(warm_events)
-
-    progress.start_phase(IngestPhase.FAN_OUT, total=len(keepers))
-    fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
-    progress.end_phase(IngestPhase.FAN_OUT)
-
-    ratio_event = cache_read_ratio_event([r for r in fanout if isinstance(r, _FanoutResult)])
-    if ratio_event:
-        result.span_events.append(ratio_event)
-
+    Mutates ``result`` counters (``errors``, ``processed``, ``skipped``,
+    ``skipped_empty``, ``failed``) and ``result.span_events``. Per-entry
+    failures isolate; ``BaseException`` (cancel / system-exit) re-raises
+    after surfacing which entry triggered it.
+    """
     progress.start_phase(IngestPhase.WRITE, total=len(keepers))
     for (entry, body), fan in zip(keepers, fanout, strict=True):
         if isinstance(fan, BaseException):
@@ -254,7 +189,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
                 IngestPhase.FAN_OUT,
                 f"fan-out failed for {entry.source}:{entry.source_id}: {fan}",
             )
-            _record_error(f"{entry.source}:{entry.source_id}", fan)
+            _record_error(result, f"{entry.source}:{entry.source_id}", fan)
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.WRITE)
@@ -270,7 +205,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
                 llm=llm,
                 config=config,
                 post_mortems_root=post_mortems_root,
-                slop_score=0.0,  # we already filtered slop above
+                slop_score=0.0,  # already slop-filtered upstream
                 force=force,
                 span_events=result.span_events,
                 sparse_encoder=sparse_encoder,
@@ -286,7 +221,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
                 IngestPhase.WRITE,
                 f"write phase failed for {entry.source}:{entry.source_id}: {exc}",
             )
-            _record_error(f"{entry.source}:{entry.source_id}", exc)
+            _record_error(result, f"{entry.source}:{entry.source_id}", exc)
             result.errors += 1
             result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.WRITE)
@@ -312,5 +247,141 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
         progress.advance_phase(IngestPhase.WRITE)
     progress.end_phase(IngestPhase.WRITE)
 
-    _emit_collected_events()
+
+@observe(
+    name="ingest",
+    ignore_inputs=[
+        "sources",
+        "enrichers",
+        "journal",
+        "corpus",
+        "llm",
+        "embed_client",
+        "budget",
+        "slop_classifier",
+        "sparse_encoder",
+        "progress",
+    ],
+)
+async def ingest(  # noqa: PLR0913 - orchestration takes every dependency.
+    *,
+    sources: Sequence[Source],
+    enrichers: Sequence[Enricher],
+    journal: MergeJournal,
+    corpus: Corpus,
+    llm: LLMClient,
+    embed_client: EmbeddingClient,
+    budget: Budget,  # noqa: ARG001 - consumed by LLM/embed clients at construction time
+    slop_classifier: SlopClassifier,
+    config: Config,
+    post_mortems_root: Path,
+    dry_run: bool = False,
+    force: bool = False,
+    sparse_encoder: SparseEncoder | None = None,
+    limit: int | None = None,
+    progress: IngestProgress | None = None,
+) -> IngestResult:
+    """Per-entry/source failures log and continue; only budget exhaustion truncates the run.
+
+    ``sparse_encoder=None`` lazy-loads the fastembed model; tests pass a no-op
+    stub to dodge the ~150 MB ONNX download.
+    """
+    result = IngestResult(dry_run=dry_run)
+    progress = progress or NullProgress()
+
+    if Laminar.is_initialized():
+        Laminar.set_span_attributes(
+            {
+                "run.id": mint_run_id(),
+                "run.kind": "ingest",
+                "run.git_sha": git_sha() or "",
+                "run.dry_run": dry_run,
+                "run.force": force,
+                "run.limit": limit if limit is not None else 0,
+                "config.taxonomy_version": config.taxonomy_version,
+                "config.reliability_rank_version": config.reliability_rank_version,
+                "config.slop_threshold": config.slop_threshold,
+                "config.model_facet": config.model_facet,
+                "config.model_summarize": config.model_summarize,
+            }
+        )
+
+    # Tests stub this with a dict-returning lambda so the ~150 MB ONNX model
+    # never loads under pytest.
+    if sparse_encoder is None:
+        from slopmortem.corpus._embed_sparse import encode as _encode_sparse  # noqa: PLC0415
+
+        sparse_encoder = _encode_sparse
+
+    # ``total=None`` when --limit isn't set: count isn't known up front, so
+    # let the bar pulse instead of lying with 0.
+    progress.start_phase(IngestPhase.GATHER, total=limit)
+    entries, source_failures = await _gather_entries(
+        sources, span_events=result.span_events, limit=limit, progress=progress
+    )
+    progress.end_phase(IngestPhase.GATHER)
+    progress.log(f"gathered {len(entries)} entries from {len(sources)} sources")
+    result.source_failures = source_failures
+
+    keepers = await _classify_phase(
+        entries,
+        enrichers=enrichers,
+        slop_classifier=slop_classifier,
+        journal=journal,
+        config=config,
+        post_mortems_root=post_mortems_root,
+        dry_run=dry_run,
+        progress=progress,
+        result=result,
+    )
+    quarantined = result.quarantined
+    skipped = result.skipped
+    progress.log(f"classified: {len(keepers)} kept, {quarantined} quarantined, {skipped} skipped")
+
+    if dry_run:
+        result.would_process = len(keepers)
+        _emit_collected_events(result)
+        return result
+
+    if not keepers:
+        _emit_collected_events(result)
+        return result
+
+    progress.start_phase(IngestPhase.CACHE_WARM, total=1)
+    warmed, warm_creation, warm_events = await cache_warm(
+        llm=llm,
+        model=config.model_summarize,
+        seed_text=keepers[0][1][:1000],
+        max_tokens=config.max_tokens_summarize,
+    )
+    progress.advance_phase(IngestPhase.CACHE_WARM)
+    progress.end_phase(IngestPhase.CACHE_WARM)
+    result.cache_warmed = warmed
+    result.cache_creation_tokens_warm = warm_creation
+    result.span_events.extend(warm_events)
+
+    progress.start_phase(IngestPhase.FAN_OUT, total=len(keepers))
+    fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
+    progress.end_phase(IngestPhase.FAN_OUT)
+
+    ratio_event = cache_read_ratio_event([r for r in fanout if isinstance(r, _FanoutResult)])
+    if ratio_event:
+        result.span_events.append(ratio_event)
+
+    await _write_phase(
+        keepers,
+        fanout,
+        journal=journal,
+        corpus=corpus,
+        embed_client=embed_client,
+        llm=llm,
+        config=config,
+        post_mortems_root=post_mortems_root,
+        force=force,
+        sparse_encoder=sparse_encoder,
+        progress=progress,
+        result=result,
+    )
+
+    _emit_collected_events(result)
     return result
