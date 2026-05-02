@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
-from slopmortem.corpus.sources.curated import CuratedSource
+from slopmortem.corpus.sources import CuratedSource
 
 if TYPE_CHECKING:
     import pytest

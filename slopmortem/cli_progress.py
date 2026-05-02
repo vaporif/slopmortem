@@ -142,7 +142,6 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         self._phase_status: dict[PhaseT, str] = {}
 
     def __enter__(self) -> Self:
-        """Start the live render."""
         self._progress.__enter__()
         return self
 
@@ -152,12 +151,10 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Tear down the live render."""
         self._progress.__exit__(exc_type, exc_val, exc_tb)
 
     @property
     def console(self) -> Console:
-        """Underlying Rich console; the CLI uses it for post-run output."""
         return self._console
 
     def _label(self, phase: PhaseT) -> str:
@@ -215,7 +212,6 @@ class RichPhaseProgress[PhaseT: StrEnum]:
         )
 
     def set_phase_status(self, phase: PhaseT, status: str | None) -> None:
-        """Set or clear a transient dim suffix on *phase*'s description."""
         if status:
             self._phase_status[phase] = status
         else:
@@ -225,7 +221,6 @@ class RichPhaseProgress[PhaseT: StrEnum]:
             self._progress.update(tid, description=self._label(phase))
 
     def log(self, message: str) -> None:
-        """Write a one-off neutral status line above the progress display."""
         self._console.log(message)
 
     def error(self, phase: PhaseT, message: str) -> None:
