@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from slopmortem.corpus.sources.base import Enricher as Enricher, Source as Source
+from slopmortem.corpus.sources.base import Enricher as Enricher
+from slopmortem.corpus.sources.base import Source as Source
 from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource as CrunchbaseCsvSource
 from slopmortem.corpus.sources.curated import CuratedSource as CuratedSource
 from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource as HNAlgoliaSource

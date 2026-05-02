@@ -7,11 +7,17 @@ from slopmortem.stages.facet_extract import extract_facets as extract_facets
 from slopmortem.stages.llm_rerank import llm_rerank as llm_rerank
 from slopmortem.stages.retrieve import (
     SparseEncoder as SparseEncoder,
+)
+from slopmortem.stages.retrieve import (
     retrieve as retrieve,
 )
 from slopmortem.stages.synthesize import (
     synthesize as synthesize,
+)
+from slopmortem.stages.synthesize import (
     synthesize_all as synthesize_all,
+)
+from slopmortem.stages.synthesize import (
     synthesize_prompt_kwargs as synthesize_prompt_kwargs,
 )
 

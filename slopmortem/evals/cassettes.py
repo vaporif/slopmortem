@@ -23,8 +23,10 @@ from slopmortem.llm import (
     FakeEmbeddingClient,
     FakeLLMClient,
     FakeResponse,
-    NoCannedEmbeddingError as NoCannedEmbeddingError,  # noqa: PLC0414 - explicit re-export for back-compat
     embed_cassette_key,
+)
+from slopmortem.llm import (
+    NoCannedEmbeddingError as NoCannedEmbeddingError,  # noqa: PLC0414 - explicit re-export for back-compat
 )
 
 if TYPE_CHECKING:
@@ -57,7 +59,7 @@ class DuplicateCassetteError(Exception):
 class RecordingBudgetExceededError(Exception):
     """Raised when `RecordingLLMClient`'s accumulated cost would exceed `max_cost_usd`."""
 
-    def __init__(self, *, spent: float, limit: float) -> None:  # noqa: D107
+    def __init__(self, *, spent: float, limit: float) -> None:
         super().__init__(f"recording cost ceiling exceeded: spent={spent:.4f} limit={limit:.4f}")
         self.spent = spent
         self.limit = limit

@@ -30,7 +30,7 @@ class FakeEmbeddingClient:
     raises :class:`NoCannedEmbeddingError`.
     """
 
-    def __init__(  # noqa: D107
+    def __init__(
         self,
         *,
         model: str,

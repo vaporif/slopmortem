@@ -180,7 +180,7 @@ class RecordingEmbeddingClient:
 class RecordingSparseEncoder:
     """Wrap a sparse-encoder callable; write one cassette per `__call__`."""
 
-    def __init__(  # noqa: D107
+    def __init__(
         self,
         *,
         inner: Callable[[str], dict[int, float]],

@@ -701,7 +701,7 @@ async def _build_ingest_deps(
 class RichIngestProgress(RichPhaseProgress[IngestPhase]):
     """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl."""
 
-    def __init__(self) -> None:  # noqa: D107
+    def __init__(self) -> None:
         super().__init__(INGEST_PHASE_LABELS)
 
 
@@ -738,7 +738,7 @@ _QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
 class RichQueryProgress(RichPhaseProgress[QueryPhase]):
     """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl."""
 
-    def __init__(self) -> None:  # noqa: D107
+    def __init__(self) -> None:
         super().__init__(_QUERY_PHASE_LABELS)
 
 

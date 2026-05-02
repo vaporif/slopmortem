@@ -493,7 +493,7 @@ For each file in the list, rewrite imports of submodules to imports from the pac
 
 Preserve any `# noqa: PLC0415` comments on lazy imports verbatim. Do not collapse lazy imports that exist for `--help` performance reasons.
 
-- [ ] **Step 3: Sibling imports inside a package stay direct; cross-package imports do NOT**
+- [x] **Step 3: Sibling imports inside a package stay direct; cross-package imports do NOT**
 
 A file inside `slopmortem/corpus/` importing from another file inside `slopmortem/corpus/` is **not** a façade violation. Do not rewrite e.g. `corpus/merge.py:30 from slopmortem.corpus._db import connect` — this is sibling-internal and stays direct. Same for `corpus/sources/wayback.py` importing from `corpus/sources/_throttle.py`.
 
@@ -506,12 +506,12 @@ A file inside `slopmortem/corpus/` importing from another file inside `slopmorte
 
 These rewrite to `from slopmortem.llm import …`. Re-run the step 1 grep AFTER the rewrites and verify that no cross-package deep imports remain — lint-imports backstops in T1.6, but catching them here is cheaper than a contract failure.
 
-- [ ] **Step 4: Run typecheck and tests**
+- [x] **Step 4: Run typecheck and tests**
 
 Run: `just typecheck && just test`
 Expected: all green. Type errors usually mean a façade is missing a re-export — go back to T1.1–T1.4 and add it, then resume.
 
-- [ ] **Step 5: Run smoke and eval**
+- [x] **Step 5: Run smoke and eval**
 
 Run: `just smoke`
 Expected: every `--help` works, eval baseline holds.
