@@ -111,26 +111,11 @@ async def reclassify_quarantined(
 ) -> ReclassifyReport:
     """Re-run the slop classifier against every row in ``quarantine_journal``.
 
-    Survivors (new score < ``slop_threshold``) are removed from the
-    quarantine journal and their markdown files are moved into the raw
-    tree at ``raw/<source>/<text_id>.md``. Docs that still score above
-    threshold stay in quarantine. Missing markdown files (or an invalid
-    quarantine path) increment ``errors`` and the loop continues.
-
-    Args:
-        journal: The merge journal whose ``quarantine_journal`` table we
-            iterate (via :meth:`MergeJournal.fetch_quarantined`).
-        slop_classifier: The current classifier; usually a fresh
-            :class:`HaikuSlopClassifier` reflecting the new
-            threshold or model id.
-        post_mortems_root: Root containing ``raw/``, ``canonical/``,
-            ``quarantine/`` subtrees.
-        slop_threshold: Strict-less-than threshold; scores below it
-            declassify.
-
-    Returns:
-        A :class:`ReclassifyReport` with ``total``, ``declassified``,
-        ``still_slop``, and ``errors`` counts.
+    Survivors (score < ``slop_threshold``, strict) are dropped from the
+    quarantine journal and their markdown files moved into
+    ``raw/<source>/<text_id>.md``. Docs that still score over threshold stay
+    in quarantine. Missing files or invalid paths bump ``errors`` and the
+    loop continues.
     """
     rows = await journal.fetch_quarantined()
     total = len(rows)
