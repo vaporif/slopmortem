@@ -82,7 +82,7 @@ slopmortem/
   models.py           # Pydantic schemas, taxonomies
   budget.py           # cost ceilings, anyio.Lock-guarded bookkeeping
   concurrency.py      # gather_resilient + capacity limiters
-  errors.py           # typed errors (BudgetExceededError, NoCannedResponseError, …)
+  errors.py           # typed errors (RerankLengthError, …); BudgetExceededError lives in budget.py, NoCanned* in llm/
   http.py             # safe HTTP client (SSRF guard)
   render.py           # report → markdown
   corpus/             # qdrant_store, merge journal, entity_resolution, sources/, alias_graph

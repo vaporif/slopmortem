@@ -1122,13 +1122,19 @@ grep -rhE "from slopmortem\.ingest import [^_]" slopmortem/ tests/ \
     | sort -u
 ```
 
-Capture the output. **Caveat (per spec):** the `[^_]` filter silently drops `_Point`, which `tests/corpus/test_qdrant_store.py:11` may import. Check separately:
+Capture the output. **Caveat (per spec):** the `[^_]` filter silently drops `_Point`, which `tests/corpus/test_qdrant_store.py:11` imports as `from slopmortem.ingest import _Point`. Verify the actual location:
 
 ```bash
-grep -rnE "from slopmortem\.ingest import.*_Point" slopmortem/ tests/
+grep -rnE "(class _Point|from slopmortem\.ingest import.*_Point)" slopmortem/ tests/
 ```
 
-If that test imports `_Point` from `slopmortem.ingest`, the better fix is to re-route it to import directly from `slopmortem.corpus.qdrant_store` — `_Point` is a Qdrant payload struct, not an ingest concern. Edit the test file to do so.
+`_Point` is the Qdrant-payload dataclass currently defined at what was `slopmortem/ingest.py:219` (now `slopmortem/ingest/_orchestrator.py:219` after T2.1). It is NOT defined in `slopmortem/corpus/qdrant_store.py` — `qdrant_store.py:377` only references it in a docstring. Therefore:
+
+- **Do NOT** rewrite the test import to `from slopmortem.corpus.qdrant_store import _Point` — that module does not export `_Point` and the import would raise `ImportError`.
+- **Preferred fix:** add `_Point` to `_orchestrator.__all__` (the leading underscore is intentional — you are exporting a deliberately-private symbol for one specific test) and let it flow through `slopmortem.ingest.__init__`'s wildcard re-export. The test continues to do `from slopmortem.ingest import _Point` unchanged.
+- **Alternative:** the test imports directly from the orchestrator: `from slopmortem.ingest._orchestrator import _Point`. This works but reaches past the package façade — only acceptable if T2.7's `ingest-private` contract excludes the test tree from `source_modules` (it does — only prod modules are listed).
+
+Pick the preferred option unless `_Point` ends up moved by a later task. Do NOT redirect the import to `slopmortem.corpus.qdrant_store`.
 
 - [ ] **Step 2: Replace the star-import init with explicit re-exports**
 
@@ -1430,9 +1436,35 @@ Expected: order matches the pre-move baseline (typically `ingest`, `query`, `rep
 
 - [ ] **Step 1: Confirm `_app.py` is empty after T3.2/T3.3**
 
-Read `slopmortem/cli/_app.py`. If only the `app = typer.Typer(...)` definition remains, move it into `cli/__init__.py`. If `_app.py` becomes empty (no remaining content), delete it.
+Read `slopmortem/cli/_app.py`. After T3.2 extracted the four subcommands and T3.3 moved shared helpers to `_common.py`, `_app.py` should contain only the `app = typer.Typer(...)` construction. If anything else remains, stop and resolve before continuing — moving `app` while leaving other helpers behind will break callers of those helpers.
 
-- [ ] **Step 2: Update `cli/__init__.py`**
+- [ ] **Step 2: Capture the original `typer.Typer(...)` arguments**
+
+Before any deletion, grep the construction site so we don't lose it:
+
+```bash
+grep -A3 "typer.Typer(" slopmortem/cli/_app.py | tee /tmp/typer_construction.txt
+```
+
+Step 4 reuses this when constructing `app` in `cli/__init__.py`.
+
+- [ ] **Step 3: Rewrite subcommand imports of `app` BEFORE deleting `_app.py`**
+
+The four `_*_cmd.py` files currently each have `from slopmortem.cli._app import app` (planted by T3.2 step 1's pattern at the top of `_ingest_cmd.py`, etc.). After step 4 moves `app` into `cli/__init__.py`, those imports become dangling. Rewrite them to import via the package façade:
+
+```bash
+sed -i '' 's|from slopmortem\.cli\._app import app|from slopmortem.cli import app|' \
+    slopmortem/cli/_ingest_cmd.py \
+    slopmortem/cli/_query_cmd.py \
+    slopmortem/cli/_replay_cmd.py \
+    slopmortem/cli/_embed_prefetch_cmd.py
+```
+
+Verify with: `grep -rn "from slopmortem.cli" slopmortem/cli/_*_cmd.py` — every import should now be `from slopmortem.cli import app`, none should still reference `_app`.
+
+This works because at import time, `cli/__init__.py` defines `app` BEFORE doing the side-effect import of each `_*_cmd.py` module (step 4 ordering). So when `_ingest_cmd.py` runs `from slopmortem.cli import app`, `cli` is partially initialized but `app` is already bound — Python handles the partial-init lookup correctly here.
+
+- [ ] **Step 4: Update `cli/__init__.py`**
 
 Edit `slopmortem/cli/__init__.py`:
 
@@ -1443,10 +1475,11 @@ from __future__ import annotations
 
 import typer
 
-app = typer.Typer(no_args_is_help=True)  # match the original construction args
+app = typer.Typer(no_args_is_help=True)  # match construction from /tmp/typer_construction.txt
 
 # Side-effect imports: each module registers its @app.command() handler.
-# Order determines `--help` listing order.
+# Order determines `--help` listing order. MUST come AFTER `app` is defined
+# so the subcommand modules' `from slopmortem.cli import app` resolves.
 from slopmortem.cli import _ingest_cmd  # noqa: E402,F401
 from slopmortem.cli import _query_cmd  # noqa: E402,F401
 from slopmortem.cli import _replay_cmd  # noqa: E402,F401
@@ -1455,18 +1488,20 @@ from slopmortem.cli import _embed_prefetch_cmd  # noqa: E402,F401
 __all__ = ["app"]
 ```
 
-Replace the `typer.Typer(no_args_is_help=True)` arguments with whatever was in `_app.py`'s original construction (capture before deleting).
+The `noqa: E402` is correct here (top-level imports after a non-import statement, namely `app = typer.Typer(...)`); this is distinct from `noqa: PLC0415` which the codebase uses for *lazy* imports inside function bodies. Do not switch to `PLC0415` — it would not silence E402 for these top-level imports.
 
-- [ ] **Step 3: Delete `_app.py` if empty**
+Replace the `typer.Typer(no_args_is_help=True)` arguments with the actual construction captured in step 2.
+
+- [ ] **Step 5: Delete `_app.py` if empty**
 
 Run: `wc -l slopmortem/cli/_app.py 2>/dev/null && cat slopmortem/cli/_app.py`
 If output is empty or only contains comments/whitespace: `git rm slopmortem/cli/_app.py`
-If non-empty: leave it; document why in a header comment.
+If non-empty: stop — step 1's check missed something. Resolve before deleting.
 
-- [ ] **Step 4: Run the full gate (including the `--help` byte-diff from T3.4)**
+- [ ] **Step 6: Run the full gate (including the `--help` byte-diff from T3.4)**
 
 Run: `just test && just lint && just typecheck && just smoke`
-Expected: green; `--help` outputs still byte-stable.
+Expected: green; `--help` outputs still byte-stable. If you see `ImportError: cannot import name 'app' from 'slopmortem.cli'`, step 3's sed missed a file — re-run the grep.
 
 ### Task T3.6: Add `.importlinter` contract for `slopmortem.cli._*`
 
@@ -1625,7 +1660,19 @@ forbidden_modules =
     slopmortem.corpus._internal
 ```
 
-(import-linter treats `slopmortem.corpus._internal` as covering everything under that namespace.)
+Whether import-linter treats `slopmortem.corpus._internal` as covering everything under that namespace depends on the contract type and the installed version. T1.6 pinned `import-linter>=2.0` — for `forbidden` contracts in modern import-linter, listing a package matches the package itself but does NOT prefix-match its descendants by default unless `include_external_packages` semantics or contract option `include_descendants` is set.
+
+**Verify before relying on prefix matching.** After step 1's edit, run `uv run lint-imports` and then deliberately add a test import like `from slopmortem.corpus._internal.foo import _bar` to a source module listed in the contract. If lint-imports does NOT fire, prefix matching is not active — fall back to listing each submodule explicitly under `forbidden_modules`:
+
+```ini
+forbidden_modules =
+    slopmortem.corpus._internal
+    slopmortem.corpus._internal.alias_graph
+    slopmortem.corpus._internal.schema
+    # ... one entry per file under _internal/
+```
+
+Remove the test import once the contract behavior is confirmed.
 
 Repeat for `llm`, `ingest`, `cli`. The leaf-package contracts (`corpus-leaf`, `llm-leaf`, etc.) from T1.6 stay — they still forbid imports of the package's public submodules. Belt-and-braces.
 
