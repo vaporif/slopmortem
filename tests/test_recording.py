@@ -15,8 +15,7 @@ from slopmortem.evals.recording import (
     RecordingLLMClient,
     RecordingSparseEncoder,
 )
-from slopmortem.llm.client import CompletionResult
-from slopmortem.llm.embedding_client import EmbeddingResult
+from slopmortem.llm import CompletionResult, EmbeddingResult
 
 if TYPE_CHECKING:
     from pathlib import Path

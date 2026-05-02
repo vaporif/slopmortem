@@ -79,29 +79,11 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
 ) -> Synthesis:
     """Generate one :class:`Synthesis` for *candidate* against *ctx*'s pitch.
 
-    Args:
-        candidate: One :class:`Candidate` from the rerank top-N. Its
-            ``payload.body`` is inlined into the prompt inside
-            ``<untrusted_document>`` tags.
-        ctx: The user's :class:`InputContext`; ``ctx.description`` is the pitch.
-        llm: Async :class:`LLMClient`. ``cache=True`` so the system block hits
-            the prompt cache across calls within the 5-min TTL.
-        config: :class:`Config`. Drives ``synthesis_tools`` (Tavily inclusion)
-            and reserved for future per-stage knobs.
-        model: Optional model override. ``None`` lets the client pick.
-        max_tokens: Optional cap on completion tokens. ``None`` keeps the
-            client default (no cap sent upstream).
-
-    Returns:
-        Parsed :class:`Synthesis`. ``sources`` is passed through directly from
-        ``candidate.payload.sources`` (the LLM never sees provenance URLs, so
-        asking it to cite them produced empty or hallucinated lists). When the
-        LLM marks ``where_diverged == "prompt_injection_attempted"``,
-        ``_emit_event`` fires :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED`.
-
-    Raises:
-        ValidationError: The LLM emitted JSON that doesn't validate against
-            :class:`Synthesis`.
+    ``sources`` is passed through from ``candidate.payload.sources`` rather
+    than asked of the LLM — the LLM never sees provenance URLs, so asking
+    produced empty or hallucinated lists. When ``where_diverged ==
+    "prompt_injection_attempted"`` (the :data:`_INJECTION_MARKER`), fires
+    :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED` on the active Laminar span.
     """
     prompt = render_prompt(
         "synthesize",
