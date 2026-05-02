@@ -1040,7 +1040,7 @@ Expected: 4 new tests pass post-extraction; full gate green.
 - Create: `tests/ingest/test_slop_gate.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the slop-gate routing block**
+- [x] **Step 1: Identify the slop-gate routing block**
 
 ```bash
 grep -nE "_quarantine|slop_threshold|_PRE_VETTED_SOURCES|slop_score" slopmortem/ingest/_orchestrator.py
@@ -1048,7 +1048,7 @@ grep -nE "_quarantine|slop_threshold|_PRE_VETTED_SOURCES|slop_score" slopmortem/
 
 Capture the slop-classification call site, the routing branch (above-threshold → quarantine; below-threshold → fan-out), and the `_quarantine` helper (was `ingest.py:405`).
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Write `tests/ingest/test_slop_gate.py`:
 
@@ -1083,12 +1083,12 @@ async def test_pre_vetted_source_bypasses_classifier_even_at_high_score():
 
 Implement both bodies. Use `FakeSlopClassifier` from `_orchestrator.py` and `InMemoryCorpus` as the test doubles.
 
-- [ ] **Step 3: Run tests; expect them to fail until extraction**
+- [x] **Step 3: Run tests; expect them to fail until extraction**
 
 Run: `pytest tests/ingest/test_slop_gate.py -v`
 Expected: 2 fails (no `_slop_gate` module yet to import). If you wired the test to call directly into `_orchestrator.py` for the pre-extraction pass, expect 2 passes — that confirms the current behavior matches the spec.
 
-- [ ] **Step 4: Extract slop-gate routing to `_slop_gate.py`**
+- [x] **Step 4: Extract slop-gate routing to `_slop_gate.py`**
 
 Create `slopmortem/ingest/_slop_gate.py` with `_quarantine` collocated:
 
@@ -1108,7 +1108,7 @@ from __future__ import annotations
 
 Update `_orchestrator.py` to call into the new module.
 
-- [ ] **Step 5: Re-run the slop-gate tests AND the full gate**
+- [x] **Step 5: Re-run the slop-gate tests AND the full gate**
 
 Run: `pytest tests/ingest/test_slop_gate.py -v && just test && just lint && just typecheck && just smoke && just eval`
 Expected: 2 slop-gate tests pass; full gate green.

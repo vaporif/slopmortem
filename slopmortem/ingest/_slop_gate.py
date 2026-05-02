@@ -1,0 +1,106 @@
+# pyright: reportAny=false
+"""Slop-gate routing.
+
+Entries with ``slop_score > config.slop_threshold`` route to :func:`_quarantine`
+and get no Qdrant point and no merge-journal row. Pre-vetted sources (in
+:data:`_PRE_VETTED_SOURCES`) bypass the classifier entirely — their bodies are
+human-reviewed obituaries (curated YAML) or upstream-filtered closed-status
+records (crunchbase_csv). ``--reclassify`` is the only path back from
+quarantine.
+
+The orchestrator owns the routing decision (quarantine vs keep) so it can also
+mutate ``IngestResult`` and progress state in the same loop iteration; this
+module exposes :func:`classify_one` for the score-and-bypass logic and
+:func:`_quarantine` for the terminal write.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import secrets
+from typing import TYPE_CHECKING, Final
+
+from anyio import to_thread
+
+from slopmortem.corpus import safe_path
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
+    from slopmortem.corpus import MergeJournal
+    from slopmortem.ingest._orchestrator import SlopClassifier
+    from slopmortem.models import RawEntry
+
+__all__ = ["_PRE_VETTED_SOURCES", "_quarantine", "classify_one"]
+
+logger = logging.getLogger(__name__)
+
+# Sources pre-filtered to "confirmed dead company" upstream of slopmortem:
+# curated YAML is human-reviewed, crunchbase_csv is filtered to status=closed.
+# Running the LLM dead-company classifier on these wastes spend AND
+# misclassifies — Wayback'd Crunchbase homepages are pre-death marketing copy,
+# not death narratives. Skip slop entirely for these; HN and any future
+# open-corpus sources still go through it.
+_PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_csv"})
+
+
+def _content_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+async def classify_one(
+    *,
+    entry: RawEntry,
+    body: str,
+    slop_classifier: SlopClassifier,
+    pre_vetted_sources: frozenset[str] = _PRE_VETTED_SOURCES,
+    on_error: Callable[[Exception], None],
+) -> float:
+    """Return the slop score for *entry*, or 0.0 for pre-vetted sources / classifier failures.
+
+    Pre-vetted sources skip the classifier entirely. Classifier exceptions are
+    swallowed (defensive: never abort the run on a classifier hiccup) and
+    reported via *on_error* so the caller can wire its own progress / logging.
+    """
+    if entry.source in pre_vetted_sources:
+        return 0.0
+    try:
+        return await slop_classifier.score(body)
+    except Exception as exc:  # noqa: BLE001 - defensive: never abort on classifier failure.
+        logger.warning("ingest: slop classifier failed: %s", exc)
+        on_error(exc)
+        return 0.0
+
+
+async def _quarantine(
+    *,
+    journal: MergeJournal,
+    entry: RawEntry,
+    body: str,
+    slop_score: float,
+    post_mortems_root: Path,
+) -> None:
+    """Write quarantine markdown + journal row for a slop-flagged entry."""
+    sha = _content_sha256(body)
+    path = safe_path(post_mortems_root, kind="quarantine", content_sha256=sha)
+
+    def _write_sync() -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(f"{path.suffix}.{secrets.token_hex(8)}.tmp")
+        try:
+            tmp.write_text(body, encoding="utf-8")
+            tmp.replace(path)
+        finally:
+            if tmp.exists():
+                tmp.unlink()
+
+    await to_thread.run_sync(_write_sync)
+    await journal.write_quarantine(
+        content_sha256=sha,
+        source=entry.source,
+        source_id=entry.source_id,
+        reason="slop_classifier",
+        slop_score=slop_score,
+    )

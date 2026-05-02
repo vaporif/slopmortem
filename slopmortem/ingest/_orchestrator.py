@@ -40,18 +40,16 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import secrets
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
-from anyio import to_thread
 from lmnr import Laminar, observe
 
 from slopmortem.corpus import (
     extract_clean,
-    safe_path,
 )
+from slopmortem.ingest._slop_gate import _quarantine, classify_one
 from slopmortem.ingest._warm_cache import cache_read_ratio_event, cache_warm
 from slopmortem.llm import prompt_template_sha, render_prompt
 from slopmortem.models import (
@@ -102,14 +100,6 @@ _RELIABILITY_RANK: Final[dict[str, int]] = {
     "wayback": 2,
     "crunchbase": 3,
 }
-
-# Sources pre-filtered to "confirmed dead company" upstream of slopmortem:
-# curated YAML is human-reviewed, crunchbase_csv is filtered to status=closed.
-# Running the LLM dead-company classifier on these wastes spend AND
-# misclassifies — Wayback'd Crunchbase homepages are pre-death marketing copy,
-# not death narratives. Skip slop entirely for these; HN and any future
-# open-corpus sources still go through it.
-_PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_csv"})
 
 
 @runtime_checkable
@@ -306,10 +296,6 @@ class IngestResult:
     span_events: list[str] = field(default_factory=list)
 
 
-def _content_sha256(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 def _text_id_for(canonical_id: str) -> str:  # pyright: ignore[reportUnusedFunction]  -- imported by _fan_out.py and _journal_writes.py
     return hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:16]
 
@@ -368,38 +354,6 @@ def _entry_summary_text(entry: RawEntry, *, max_tokens: int) -> str:
     if entry.raw_html:
         return _truncate_to_tokens(extract_clean(entry.raw_html), max_tokens)
     return ""
-
-
-async def _quarantine(
-    *,
-    journal: MergeJournal,
-    entry: RawEntry,
-    body: str,
-    slop_score: float,
-    post_mortems_root: Path,
-) -> None:
-    """Write quarantine markdown + journal row for a slop-flagged entry."""
-    sha = _content_sha256(body)
-    path = safe_path(post_mortems_root, kind="quarantine", content_sha256=sha)
-
-    def _write_sync() -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(f"{path.suffix}.{secrets.token_hex(8)}.tmp")
-        try:
-            tmp.write_text(body, encoding="utf-8")
-            tmp.replace(path)
-        finally:
-            if tmp.exists():
-                tmp.unlink()
-
-    await to_thread.run_sync(_write_sync)
-    await journal.write_quarantine(
-        content_sha256=sha,
-        source=entry.source,
-        source_id=entry.source_id,
-        reason="slop_classifier",
-        slop_score=slop_score,
-    )
 
 
 async def _enrich_pipeline(entry: RawEntry, enrichers: Sequence[Enricher]) -> RawEntry:
@@ -624,16 +578,14 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             progress.advance_phase(IngestPhase.CLASSIFY)
             continue
 
-        # See ``_PRE_VETTED_SOURCES`` for why curated/crunchbase skip the judge.
-        if entry.source in _PRE_VETTED_SOURCES:
-            slop_score = 0.0
-        else:
-            try:
-                slop_score = await slop_classifier.score(body)
-            except Exception as exc:  # noqa: BLE001 - defensive: never abort on classifier failure.
-                logger.warning("ingest: slop classifier failed: %s", exc)
-                progress.error(IngestPhase.CLASSIFY, f"slop classifier failed: {exc}")
-                slop_score = 0.0
+        slop_score = await classify_one(
+            entry=enriched,
+            body=body,
+            slop_classifier=slop_classifier,
+            on_error=lambda exc: progress.error(
+                IngestPhase.CLASSIFY, f"slop classifier failed: {exc}"
+            ),
+        )
 
         if slop_score > config.slop_threshold:
             if not dry_run:
