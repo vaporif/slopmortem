@@ -124,13 +124,7 @@ class LLMSynthesis(BaseModel):
 
 
 class Synthesis(BaseModel):
-    """Synthesized post-mortem analogue for one candidate.
-
-    LLMSynthesis fields plus failure_date, lifespan_months, and sources.
-    The dates are derived from the candidate's typed payload; ``sources``
-    is passed through directly from ``CandidatePayload.sources`` rather than
-    asked of the LLM, since the LLM never sees provenance URLs anyway.
-    """
+    """LLMSynthesis fields plus dates and sources derived from ``CandidatePayload``."""
 
     candidate_id: str
     name: str
@@ -155,7 +149,6 @@ class Synthesis(BaseModel):
         sources: list[str],
         injection_detected: bool = False,
     ) -> Synthesis:
-        """Build a Synthesis from the LLM's output plus typed payload dates and sources."""
         lifespan = _months_between(founding_date, failure_date)
         return cls(
             candidate_id=llm_synth.candidate_id,
@@ -174,7 +167,7 @@ class Synthesis(BaseModel):
 
 
 def _months_between(founding: date | None, failure: date | None) -> int | None:
-    """Whole months between two dates, None if missing or delta is negative."""
+    """Whole months between two dates; ``None`` if missing or delta is negative."""
     if founding is None or failure is None:
         return None
     months = (failure.year - founding.year) * 12 + (failure.month - founding.month)

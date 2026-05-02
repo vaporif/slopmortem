@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import typing
 from dataclasses import dataclass
@@ -12,7 +13,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from conftest import llm_canned_key
-from slopmortem import ingest as ingest_module
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.corpus import MergeJournal
@@ -24,6 +24,11 @@ from slopmortem.ingest import (
 from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import RawEntry
 from slopmortem.tracing import SpanEvent
+
+# Façade re-exports shadow submodules: monkeypatching `chunk_markdown` requires
+# the fan-out submodule (where `_embed_and_upsert` calls it), not the
+# `slopmortem.ingest` package facade or the orchestrator.
+ingest_module = importlib.import_module("slopmortem.ingest._fan_out")
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

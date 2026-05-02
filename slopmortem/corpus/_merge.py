@@ -1,23 +1,17 @@
 # pyright: reportAny=false
 """SQLite-backed merge journal, quarantine table, and alias graph.
 
-Async surface routes every sqlite call through
-:func:`anyio.to_thread.run_sync`. One short-lived connection per call, no
-pool. Every connection uses WAL and ``busy_timeout=5000``.
+All sqlite calls go through ``anyio.to_thread.run_sync``; WAL +
+``busy_timeout=5000``.
 
-Terminal-state writers (atomicity contract):
+Terminal-state writers (``upsert_pending``, ``upsert_resolver_flipped``,
+``upsert_alias_blocked``) each run inside one ``BEGIN; ... COMMIT;`` so a
+crash commits everything or nothing. ``mark_complete`` is the only path from
+``pending`` to ``complete``, and runs after the qdrant and disk writes succeed.
 
-- :meth:`MergeJournal.upsert_pending`
-- :meth:`MergeJournal.upsert_resolver_flipped`
-- :meth:`MergeJournal.upsert_alias_blocked`
-
-Each runs its inserts inside one ``BEGIN; ... COMMIT;`` so a crash commits
-everything or nothing. ``mark_complete`` is the only path from ``pending``
-to ``complete``, and runs after the qdrant and disk writes succeed.
-
-Quarantine rows live in their own table keyed on
-``(content_sha256, source, source_id)``. No ``canonical_id`` or
-``merge_state`` column. Quarantined docs are not in the main journal.
+Quarantine rows live in a separate table keyed on
+``(content_sha256, source, source_id)``; quarantined docs are not in the
+main journal.
 """
 
 from __future__ import annotations
@@ -140,10 +134,7 @@ class MergeJournal:
         source_id: str,
         alias_edge: AliasEdge,
     ) -> None:
-        """Write the alias_blocked journal row and alias graph edge atomically.
-
-        Both inserts run inside one ``BEGIN; ... COMMIT;``.
-        """
+        """Write the alias_blocked journal row and alias graph edge in one transaction."""
         await to_thread.run_sync(
             self._upsert_alias_blocked_sync,
             canonical_id,
@@ -156,12 +147,10 @@ class MergeJournal:
         with connect(self._db) as conn:
             conn.execute("BEGIN")
             try:
-                # Resolver flip: this (source, source_id) is now bound to a
-                # new canonical_id, and the UNIQUE reverse index would block
-                # the insert otherwise. Drop the prior row first when the new
-                # state is 'resolver_flipped'. The prior canonical's chunks,
-                # raw, and canonical files stay on disk — reconcile drift
-                # class (f) handles repair.
+                # Resolver flip rebinds (source, source_id) to a new canonical;
+                # drop the prior row first since the UNIQUE reverse index would
+                # block the insert. Prior chunks/raw/canonical files stay on
+                # disk — reconcile drift class (f) handles repair.
                 if state == "resolver_flipped":
                     conn.execute(
                         """
@@ -238,7 +227,7 @@ class MergeJournal:
         merged_at: str,
         content_hash: str | None = None,
     ) -> None:
-        """Promote a pending row to ``merge_state='complete'``, writing skip_key last."""
+        """Promote pending → complete; runs after qdrant + disk writes succeed."""
         await to_thread.run_sync(
             self._mark_complete_sync,
             canonical_id,
@@ -282,7 +271,7 @@ class MergeJournal:
     async def fetch_by_key(
         self, canonical_id: str, source: str, source_id: str
     ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        """Return the row(s) matching the full primary key. Always 0 or 1 entries."""
+        """Return rows matching the full primary key (0 or 1 entries)."""
         return await to_thread.run_sync(self._fetch_by_key_sync, canonical_id, source, source_id)
 
     def _fetch_by_key_sync(
@@ -353,7 +342,7 @@ class MergeJournal:
         reason: str,
         slop_score: float | None,
     ) -> None:
-        """Record a slop-classified quarantine row. No canonical_id is assigned."""
+        """Record a slop-classified quarantine row; no canonical_id is assigned."""
         await to_thread.run_sync(
             self._write_quarantine_sync,
             content_sha256,
@@ -385,7 +374,6 @@ class MergeJournal:
             )
 
     async def fetch_quarantined(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        """Return every quarantine row as a dict. The column set has no merge_state."""
         return await to_thread.run_sync(self._fetch_quarantined_sync)
 
     def _fetch_quarantined_sync(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
@@ -400,12 +388,7 @@ class MergeJournal:
         source: str,
         source_id: str,
     ) -> None:
-        """Delete the quarantine_journal row for the given primary key.
-
-        Used by ``slopmortem ingest --reclassify`` after a doc is declassified
-        (re-scored below ``slop_threshold``) and its markdown is moved out of
-        the quarantine tree.
-        """
+        """Used by ``--reclassify`` after a survivor's markdown is moved out of quarantine."""
         await to_thread.run_sync(self._drop_quarantine_row_sync, content_sha256, source, source_id)
 
     def _drop_quarantine_row_sync(self, content_sha256: str, source: str, source_id: str) -> None:
@@ -419,11 +402,7 @@ class MergeJournal:
             )
 
     async def list_pending_review(self) -> list[PendingReviewRow]:
-        """Read all rows from the ``pending_review`` table.
-
-        Returns rows in INSERT order (no explicit ``ORDER BY``). ``--list-review``
-        is exploratory; callers can sort if they care.
-        """
+        """Returns rows in INSERT order — ``--list-review`` is exploratory, callers can sort."""
         return await to_thread.run_sync(self._list_pending_review_sync)
 
     def _list_pending_review_sync(self) -> list[PendingReviewRow]:

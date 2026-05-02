@@ -1,12 +1,8 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-"""Async OpenRouter / OpenAI-compatible chat client.
+"""Async OpenRouter / OpenAI-compatible chat client; retries, tool-call loop, cache control.
 
-Handles retries, the tool-call loop, and cache control.
-
-The vendor SDK is loosely typed (`object` / `Any` payloads with duck-typed
-attributes), so this file silences `reportAny` / `reportUnknown*` at the
-boundary. Explicit `Any` in annotations is still gated per-site via
-`reportExplicitAny` ignores.
+Vendor SDK is duck-typed at the boundary; reportAny / reportUnknown* are
+silenced file-wide, reportExplicitAny stays per-site.
 """
 
 from __future__ import annotations
@@ -35,20 +31,18 @@ _HTTP_TOO_MANY_REQUESTS = 429
 
 
 class MidStreamError(Exception):
-    """Raised when an SSE chunk arrives at HTTP 200 with finish_reason='error'.
+    """SSE chunk arrived at HTTP 200 with finish_reason='error'.
 
     Carries the raw error payload so the retry layer can decide whether
-    error.code is transient (e.g. ``overloaded_error``) or fatal.
+    ``error.code`` is transient (e.g. ``overloaded_error``) or fatal.
     """
 
     def __init__(self, error: object) -> None:
-        """Wrap *error* (the OpenRouter SSE error payload) as an exception."""
         super().__init__(str(error))
         self.error = error or {}
 
     @property
     def code(self) -> str:
-        """Return the upstream error.code string (empty if not present)."""
         if isinstance(self.error, dict):
             return str(self.error.get("code", ""))
         return str(getattr(self.error, "code", ""))
@@ -63,9 +57,8 @@ async def gather_with_limit[T](
 ) -> list[T | Exception]:
     """Run *coros* concurrently with at most *limit* in flight.
 
-    Wraps :func:`slopmortem.concurrency.gather_resilient` behind an
-    ``anyio.CapacityLimiter`` so callers can cap parallel OpenRouter calls at
-    ``config.ingest_concurrency`` without rewriting the bookkeeping.
+    Wraps ``gather_resilient`` behind a ``CapacityLimiter`` so callers can cap
+    parallel OpenRouter calls at ``config.ingest_concurrency``.
     """
     limiter = anyio.CapacityLimiter(limit)
 
@@ -90,7 +83,6 @@ class OpenRouterClient:
         initial_backoff: float = 1.0,
         sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
-        """Bind an SDK instance, budget, and tunable retry/tool-loop knobs."""
         self._sdk = sdk
         self._budget = budget
         self._default_model = model
@@ -112,9 +104,9 @@ class OpenRouterClient:
         max_tokens: int | None = None,
     ) -> CompletionResult:
         """Run a chat completion, including the tool-call loop and transient-error retries."""
-        # Cheap pre-call gate so a runaway loop stops issuing calls once the
-        # budget is exhausted. Concurrent fan-out can still tail-overshoot by
-        # up to N_synthesize x per-call cost.
+        # Pre-call gate: a runaway loop stops issuing calls once the budget is
+        # exhausted. Concurrent fan-out can still tail-overshoot by up to
+        # N_synthesize x per-call cost.
         if self._budget.remaining <= 0.0:
             msg = f"budget exhausted: remaining {self._budget.remaining:.4f}"
             raise BudgetExceededError(msg)
@@ -125,8 +117,8 @@ class OpenRouterClient:
         cache_write = 0
         cost = 0.0
 
-        # Build kwargs once; only include max_tokens when set so unset callers
-        # keep the SDK's "no cap" behavior and don't send max_tokens=None upstream.
+        # Only include max_tokens when set so unset callers keep the SDK's
+        # "no cap" behavior — sending max_tokens=None upstream is rejected.
         base_kw: dict[str, Any] = {  # pyright: ignore[reportExplicitAny]
             "model": model or self._default_model,
             "response_format": response_format,
@@ -197,9 +189,9 @@ class OpenRouterClient:
             raise RuntimeError(msg)
         finally:
             if cost > 0.0:
-                # True cost lands on response.usage.cost, so we settle without
-                # a prior reserve. settle() raises if spent crosses the cap;
-                # the pre-call gate above stops the next call.
+                # True cost lands on response.usage.cost — settle without a
+                # prior reserve. settle() raises if spent crosses the cap; the
+                # pre-call gate above stops the next call.
                 await self._budget.settle("openrouter:complete", cost)
 
     @staticmethod
@@ -211,19 +203,17 @@ class OpenRouterClient:
     async def _call_with_retry(self, **kw: Any) -> Any:  # pyright: ignore[reportExplicitAny]
         """Call SDK with retry/backoff on transient errors.
 
-        A finish_reason='error' chunk with error.code='overloaded_error' is
-        treated as transient: raise MidStreamError, catch here, retry. Auth
-        (401/403), 402 (insufficient credits), 503 (no provider), and
-        non-overloaded mid-stream errors are fatal — re-raised immediately.
+        Mid-stream ``error.code='overloaded_error'`` is transient. Auth
+        (401/403), 402 (no credits), 503 (no provider), and non-overloaded
+        mid-stream errors are fatal — re-raised immediately.
         """
         sdk: Any = self._sdk  # pyright: ignore[reportExplicitAny]
         for attempt in range(self._max_retries + 1):
             try:
                 resp = await sdk.chat.completions.create(**kw)
-                # Inspect for the mid-stream error signal even on a non-streaming
-                # response. The SDK normalizes the final SSE chunk into the same
-                # ChatCompletion object whose choices[0].finish_reason='error'
-                # carries the upstream error payload.
+                # Even non-streaming responses surface the final SSE chunk's
+                # mid-stream error here: choices[0].finish_reason=='error'
+                # with the upstream payload on choices[0].error.
                 if resp.choices and resp.choices[0].finish_reason == "error":
                     err = getattr(resp.choices[0], "error", None) or {"code": "unknown"}
                     raise MidStreamError(err)  # noqa: TRY301 - caught locally to drive retry loop
@@ -288,9 +278,8 @@ class OpenRouterClient:
                 raise RuntimeError(msg)
 
     def _emit(self, _event: SpanEvent) -> None:
-        # No-op hook so tests can patch it to observe emissions. The active
-        # emit path lives in stages.synthesize._emit_event; this client stays
-        # silent until something needs it to participate.
+        # No-op hook so tests can patch it to observe emissions. Active emit
+        # path lives in stages.synthesize._emit_event.
         return
 
 
@@ -313,11 +302,7 @@ def _tc_id(tc: object) -> str:
 
 
 def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
-    """Render the assistant turn that requested tool calls.
-
-    Builds the payload the next API call replays so the model sees its own
-    prior tool-call request alongside the tool's response.
-    """
+    """Render the assistant turn that requested tool calls (replayed with the tool response)."""
     tcs = [
         {
             "id": _tc_id(tc),
@@ -339,9 +324,7 @@ def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore
 def is_transient_http(exc: BaseException) -> bool:
     """Classify openai SDK exceptions as transient or fatal.
 
-    Duck-types attributes so this works against the SDK's exception hierarchy
-    (RateLimitError, APIStatusError, APIConnectionError, APITimeoutError, ...)
-    without importing internals.
+    Duck-typed; no SDK internals imported.
     """
     name = type(exc).__name__
     if name in ("APIConnectionError", "APITimeoutError", "RateLimitError"):

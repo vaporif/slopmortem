@@ -1,5 +1,8 @@
 # slopmortem
 
+[![ci](https://github.com/vaporif/slopmortem/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vaporif/slopmortem/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/vaporif/slopmortem/branch/main/graph/badge.svg)](https://codecov.io/gh/vaporif/slopmortem)
+
 [![asciicast](https://asciinema.org/a/wexQWJ8nMrPPC5l1.svg)](https://asciinema.org/a/wexQWJ8nMrPPC5l1?speed=5)
 
 You give it a pitch, it finds dead startups that tried something similar.

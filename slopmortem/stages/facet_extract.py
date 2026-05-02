@@ -1,4 +1,4 @@
-"""Facet-extract stage: one LLM call returning a strict-mode :class:`Facets` JSON object."""
+"""Facet-extract stage: one strict-mode JSON LLM call → :class:`Facets`."""
 
 from __future__ import annotations
 
@@ -21,10 +21,10 @@ async def extract_facets(
     *,
     max_tokens: int | None = None,
 ) -> Facets:
-    """Extract a :class:`Facets` bundle from *text* via one strict-mode JSON call.
+    """Extract :class:`Facets` from *text*.
 
     Malformed or out-of-taxonomy output raises Pydantic ``ValidationError``;
-    the per-entry ingest isolation absorbs this without aborting the run.
+    per-entry ingest isolation absorbs this without aborting the run.
     """
     prompt = render_prompt("facet_extract", description=text)
     result = await llm.complete(

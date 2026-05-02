@@ -1,9 +1,8 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
 """JSON-Schema helpers for tool definitions and OpenAI strict-mode response schemas.
 
-`jsonref` ships no stubs, so calls into it surface as `Unknown`. Assert the
-shape we know we produced (a dict from `model_json_schema()`) and silence
-the `reportUnknown*` family at the file boundary.
+``jsonref`` ships no stubs; reportUnknown* is silenced file-wide and the
+shape we produced (a dict from ``model_json_schema()``) is asserted at use.
 """
 
 from __future__ import annotations
@@ -56,15 +55,10 @@ def _force_required(node: object) -> None:
 def to_strict_response_schema(
     model: type[BaseModel],
 ) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
-    """Emit a ``response_format.json_schema.schema`` payload for OpenAI strict mode.
+    """Emit ``response_format.json_schema.schema`` for OpenAI strict mode.
 
-    Pydantic v2 omits defaulted fields (including ``T | None = None``) from
-    ``required``. OpenAI strict mode wants every property in ``required``;
-    nullability gets expressed via ``anyOf:[T,null]`` instead. This helper
-    inlines ``$ref`` / ``$defs``, strips draft metadata, and adds every
-    top-level property (and every nested object's properties) to
-    ``required``. The ``anyOf:[T,null]`` shape is preserved as-is. Idempotent:
-    models without Optional defaults round-trip unchanged.
+    Pydantic v2 drops defaulted fields from ``required``; OpenAI strict mode
+    wants every property required and nullability as ``anyOf:[T,null]``.
     """
     schema = model.model_json_schema()
     inlined = jsonref.replace_refs(schema, proxies=False, lazy_load=False)
@@ -78,12 +72,7 @@ def to_strict_response_schema(
 
 
 def synthesis_tools(config: Config) -> list[ToolSpec]:
-    """Build the synthesis tool list.
-
-    Tavily inclusion depends on config, so it can't be a constant.
-    """
-    # Lazy import to break the cycle with corpus._tools_impl, which imports
-    # ToolSpec from models via this module's transitive deps.
+    """Build the synthesis tool list (Tavily inclusion is config-gated)."""
     from slopmortem.corpus import _tools_impl  # noqa: PLC0415 - break import cycle
     from slopmortem.corpus._tools_impl import (  # noqa: PLC0415 - break import cycle
         get_post_mortem,
@@ -94,8 +83,7 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
 
     tools = [get_post_mortem, search_corpus]
     if config.enable_tavily_synthesis:
-        # Each synthesize() call gets its own quota (default ≤2 Tavily calls
-        # per synthesis), shared across both tools.
+        # Per-synthesize() quota (default ≤2 calls), shared across both tools.
         used = 0
         cap = config.tavily_calls_per_synthesis
 
@@ -104,7 +92,7 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
             if used >= cap:
                 return f"tavily call budget exceeded ({cap} per synthesis); refusing"
             used += 1
-            # Runtime attr lookup so tests can monkeypatch the impl.
+            # Attribute lookup at call time so tests can monkeypatch the impl.
             return await _tools_impl.tavily_search_async(q, limit)
 
         async def _bounded_extract(*, url: str) -> str:
@@ -112,7 +100,6 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
             if used >= cap:
                 return f"tavily call budget exceeded ({cap} per synthesis); refusing"
             used += 1
-            # Runtime attr lookup so tests can monkeypatch the impl.
             return await _tools_impl.tavily_extract_async(url)
 
         tools.extend(

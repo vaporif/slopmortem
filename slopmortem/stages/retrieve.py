@@ -1,10 +1,8 @@
-"""Retrieve stage: embed the description and delegate to :meth:`Corpus.query`.
+"""Retrieve stage: embed and delegate to :meth:`Corpus.query`.
 
-Thin orchestrator. The hybrid-retrieval contract (FormulaQuery + RRF +
-recency-branch filter + collapse-to-parents + alias-graph dedup) lives in
-:meth:`slopmortem.corpus._qdrant_store.QdrantCorpus.query`. This stage embeds
-the user's description (dense via :class:`EmbeddingClient`, sparse via
-``embed_sparse.encode``) and forwards every other knob unchanged.
+The hybrid-retrieval contract (FormulaQuery + RRF + recency-branch filter +
+collapse-to-parents + alias-graph dedup) lives in
+:meth:`slopmortem.corpus._qdrant_store.QdrantCorpus.query`.
 """
 
 from __future__ import annotations
@@ -41,12 +39,13 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
     k_retrieve: int,
     sparse_encoder: SparseEncoder | None = None,
 ) -> list[Candidate]:
-    """Embed *description* and run hybrid retrieve against *corpus*.
+    """Retrieve dense+sparse candidates for *description* from *corpus*.
 
     Both dense and sparse queries come from *description* verbatim — no HyDE
-    expansion, rerank slack absorbs the modality gap. ``sparse_encoder=None``
-    lazy-loads the production fastembed model on first call; tests pass a
-    no-op stub to dodge the ~150 MB ONNX download.
+    expansion, rerank slack absorbs the modality gap.
+
+    ``sparse_encoder=None`` lazy-loads the fastembed model on first call;
+    tests pass a no-op stub to dodge the ~150 MB ONNX download.
     """
     if sparse_encoder is None:
         from slopmortem.corpus._embed_sparse import encode as _default_encode  # noqa: PLC0415

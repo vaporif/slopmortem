@@ -1,23 +1,5 @@
 r"""Eval runner: drive a JSONL dataset through the pipeline and diff against a baseline.
 
-Usage:
-    python -m slopmortem.evals.runner --dataset PATH --baseline PATH \
-        [--live] [--record] [--write-baseline]
-
-Modes:
-    DEFAULT (cassettes): FakeLLMClient + FakeEmbeddingClient backed by
-        committed cassettes under tests/fixtures/cassettes/evals/<row_id>/,
-        plus an ephemeral Qdrant collection seeded from
-        tests/fixtures/corpus_fixture.jsonl. Requires a running Qdrant
-        instance on localhost:6333. This is what `just eval` and CI run.
-    --live: real production deps via slopmortem.cli._build_deps. Operator-
-        invoked, out of CI scope. Costs real money.
-    --record: re-record cassettes against the live API. Calls
-        record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
-    --scope <row_id>: restrict record or replay to one row. Unknown scopes
-        exit 2 with a usage error before any pipeline call.
-    --write-baseline: write the current run's results to --baseline.
-
 Baseline JSON shape (normative)::
 
     {
@@ -92,12 +74,10 @@ from slopmortem.models import (
 )
 from slopmortem.pipeline import run_query
 
-# Fixed host allowlist for the eval-time ``all_sources_in_allowed_domains``
-# assertion in live mode (when no in-memory corpus is available to widen the
-# set with payload sources). web.archive.org is intentionally NOT here —
-# Wayback proxies arbitrary URLs and would bypass host-level allowlist
-# semantics. The synthesize stage no longer consults this constant; sources
-# come from CandidatePayload directly.
+# Eval-time host allowlist for ``all_sources_in_allowed_domains`` in live
+# mode (no in-memory corpus to widen the set from payload sources).
+# web.archive.org is deliberately excluded: Wayback proxies arbitrary URLs
+# and would bypass host-level allowlist semantics.
 _FIXED_HOST_ALLOWLIST: frozenset[str] = frozenset({"news.ycombinator.com"})
 
 if TYPE_CHECKING:
@@ -105,8 +85,8 @@ if TYPE_CHECKING:
 
     from slopmortem.models import Report
 
-# Module-level so tests can monkeypatch it to point at a tmp tree without
-# touching the committed fixtures.
+# Module-level so tests can monkeypatch it at a tmp tree without touching
+# the committed fixtures.
 _CASSETTE_ROOT: Path = Path("tests/fixtures/cassettes/evals")
 
 _BASELINE_VERSION = 1
@@ -121,30 +101,22 @@ _ASSERTION_NAMES: tuple[str, ...] = (
 
 
 def _load_dataset(path: Path) -> list[InputContext]:
-    """Parse a JSONL dataset into :class:`InputContext` rows.
-
-    Empty lines are skipped. Each non-empty line must validate as
-    ``InputContext`` (``name``, ``description``, optional ``years_filter``).
-    """
+    """Parse a JSONL dataset into ``InputContext`` rows; empty lines skipped."""
     rows: list[InputContext] = []
     text = path.read_text()
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
             continue
-        # ``json.loads`` returns ``Any``. Narrow at the InputContext boundary.
         parsed: object = json.loads(line)  # pyright: ignore[reportAny]
         rows.append(InputContext.model_validate(parsed))
     return rows
 
 
 def _row_id(ctx: InputContext) -> str:
-    """Derive a stable row id for keying baseline entries.
+    """Stable baseline key: ``ctx.name`` if set, else ``sha1(description)[:8]``.
 
-    Uses ``ctx.name`` when non-empty; otherwise falls back to the first
-    8 hex chars of ``sha1(description)``. The runner verifies global
-    uniqueness across the whole dataset and raises if duplicates would
-    result.
+    Global uniqueness is enforced separately by ``_verify_unique_row_ids``.
     """
     if ctx.name:
         return ctx.name
@@ -154,7 +126,7 @@ def _row_id(ctx: InputContext) -> str:
 
 
 def _verify_unique_row_ids(rows: list[InputContext]) -> list[str]:
-    """Compute row ids for *rows* and raise ValueError if any collide."""
+    """Compute row ids; ``ValueError`` if any collide."""
     ids = [_row_id(r) for r in rows]
     seen: set[str] = set()
     dup: list[str] = []
@@ -169,7 +141,7 @@ def _verify_unique_row_ids(rows: list[InputContext]) -> list[str]:
 
 
 def _validate_scope(scope: str | None, row_ids: list[str]) -> None:
-    """Exit 2 if *scope* is set and not in *row_ids*. No-op when scope is None."""
+    """Exit 2 if ``scope`` is set and not in ``row_ids``."""
     if scope is None or scope in row_ids:
         return
     print(  # noqa: T201 — CLI surface
@@ -180,11 +152,7 @@ def _validate_scope(scope: str | None, row_ids: list[str]) -> None:
 
 
 def _allowed_hosts_for_candidate(s: Synthesis) -> set[str]:
-    """Compute the host allowlist for ``all_sources_in_allowed_domains``.
-
-    Unions the fixed allowlist with the candidate's own ``Synthesis.sources``
-    (populated from ``CandidatePayload.sources`` in ``Synthesis.from_llm``).
-    """
+    """Union the fixed allowlist with the candidate's own ``Synthesis.sources``."""
     hosts: set[str] = set(_FIXED_HOST_ALLOWLIST)
     for url in s.sources:
         host = urlparse(url).hostname
@@ -198,7 +166,7 @@ def _score_synthesis(
     *,
     bodies_map: Mapping[str, str | None],
 ) -> dict[str, bool]:
-    """Apply every assertion in :data:`_ASSERTION_NAMES` to *s*."""
+    """Apply every assertion in ``_ASSERTION_NAMES`` to ``s``."""
     allowed = _allowed_hosts_for_candidate(s)
     body = bodies_map.get(s.candidate_id)
     return {
@@ -214,7 +182,7 @@ def _score_report(
     *,
     bodies_map: Mapping[str, str | None],
 ) -> dict[str, object]:
-    """Return the per-row results-dict in the baseline shape."""
+    """Per-row results-dict in the baseline shape."""
     assertions: dict[str, dict[str, bool]] = {}
     for s in report.candidates:
         assertions[s.candidate_id] = _score_synthesis(s, bodies_map=bodies_map)
@@ -231,22 +199,14 @@ async def _run_cassettes(
 ) -> dict[str, dict[str, object]]:
     """Run every row in cassette mode and return per-row scored results.
 
-    Opens an ephemeral Qdrant collection seeded from
-    ``tests/fixtures/corpus_fixture.jsonl``. For each row, loads the
-    committed cassette dir under ``_CASSETTE_ROOT/<row_id>/``, runs
-    ``pipeline.run_query`` with fakes pinned to that cassette, and pre-fetches
-    the per-candidate body via ``corpus.get_post_mortem`` before scoring. The
-    host allowlist is computed directly from ``Synthesis.sources``.
-
     Per-row failures (missing cassette dir, ``NoCannedResponseError``,
     ``NoCannedEmbeddingError``) log ``FAIL <row_id>: …`` and write
-    ``candidates_count=0`` for that row. Run-level failures (missing fixture,
+    ``candidates_count=0``. Run-level failures (missing fixture,
     ``CassetteFormatError``) print to stderr and exit 2.
     """
     cfg = load_config()
     fixture_path = Path("tests/fixtures/corpus_fixture.jsonl")
-    # ASYNC240: this is a one-shot pre-flight check at run start; the cost of
-    # spinning up anyio.Path for one stat() isn't worth it.
+    # One-shot pre-flight; anyio.Path for a single stat() isn't worth it.
     if not fixture_path.exists():  # noqa: ASYNC240
         print(  # noqa: T201 — CLI surface
             f"missing {fixture_path}; run `just eval-record-corpus` first",
@@ -300,12 +260,13 @@ async def _run_cassettes(
 
 async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, dict[str, object]]:
     """Run every row through real production deps. May spend real money."""
-    # Lazy-imported so cassette mode doesn't drag CLI deps in. Both names are
-    # private; the runner deliberately mirrors the CLI boot path so live evals
-    # get the same prod wiring.
-    from slopmortem.cli import (  # noqa: PLC0415
-        _build_deps,  # pyright: ignore[reportPrivateUsage]
-    )
+    # Lazy import so cassette mode doesn't drag CLI deps in. Mirrors the CLI
+    # boot path so live evals get the same prod wiring.
+    # TODO(deps-extraction): _build_deps should live in a shared module  # noqa: TD003
+    # (e.g. slopmortem/deps.py) so evals can consume it without reaching into
+    # slopmortem.cli internals. Until then, T3.6's importlinter contract needs
+    # an ignore_imports exception for slopmortem.evals.runner -> slopmortem.cli._common.
+    from slopmortem.cli._common import _build_deps  # noqa: PLC0415
     from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
 
     cfg = load_config()
@@ -336,11 +297,10 @@ def _diff_against_baseline(
     current: dict[str, dict[str, object]],
     baseline: dict[str, object],
 ) -> tuple[list[str], list[str]]:
-    """Compute (regressions, warnings) between *current* and *baseline*.
+    """Compute (regressions, warnings) between current and baseline.
 
-    ``baseline`` is the parsed JSON file's top-level dict (or ``{}`` when
-    the file is empty / missing). Tolerates the ``{}`` case as "no baseline,
-    every row is new" — emits no regressions, only forward-compat warnings.
+    Empty baseline (``{}``) means "no baseline, every row is new" — emits no
+    regressions, only forward-compat warnings.
     """
     regressions: list[str] = []
     warnings: list[str] = []
@@ -349,8 +309,6 @@ def _diff_against_baseline(
     if not isinstance(raw_rows, dict):
         warnings.append("baseline.rows is not a dict; treating as empty")
         raw_rows = {}
-    # Narrow once. Pyright infers ``dict[Unknown, Unknown]`` from the runtime
-    # check, which is good enough for this scope.
     baseline_rows = cast("dict[str, dict[str, object]]", raw_rows)
 
     for row_id, cur_row in current.items():
@@ -368,7 +326,7 @@ def _diff_row(
     cur_row: dict[str, object],
     base_row: dict[str, object],
 ) -> list[str]:
-    """Return regression messages for a single (current, baseline) row pair."""
+    """Regression messages for a single (current, baseline) row pair."""
     out: list[str] = []
     base_count_obj = base_row.get("candidates_count", 0)
     cur_count_obj = cur_row.get("candidates_count", 0)
@@ -406,7 +364,7 @@ def _diff_row(
 
 
 def _load_baseline(path: Path) -> dict[str, object]:
-    """Load the baseline JSON, returning ``{}`` if the file is missing or empty."""
+    """Load the baseline JSON; ``{}`` if the file is missing or empty."""
     if not path.exists():
         return {}
     text = path.read_text().strip()
@@ -420,7 +378,6 @@ def _load_baseline(path: Path) -> dict[str, object]:
 
 
 def _serialize_results(results: dict[str, dict[str, object]]) -> dict[str, object]:
-    """Wrap per-row results in the normative baseline-file envelope."""
     return {"version": _BASELINE_VERSION, "rows": results}
 
 
@@ -454,7 +411,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--live",
         action="store_true",
         help=(
-            "Use real production deps via slopmortem.cli._build_deps. "
+            "Use real production deps via slopmortem.cli._common._build_deps. "
             "Requires env keys + Qdrant; will spend real money. CI does not run this."
         ),
     )
@@ -502,9 +459,9 @@ def _run_record(
     scope: str | None,
     max_cost_usd: float,
 ) -> None:
-    """Dispatch to the recording helper. Exits the process on completion or error."""
-    # Lazy: pulling these in eagerly would drag the recording wrappers and Rich
-    # widgets into every cassette-mode replay, which is the common path.
+    """Dispatch to the recording helper; ``sys.exit`` on completion or error."""
+    # Lazy: eager import would drag the recording wrappers and Rich widgets
+    # into every cassette-mode replay, which is the common path.
     from slopmortem.evals import recording_helper  # noqa: PLC0415
     from slopmortem.evals.recording_progress import NullRecordProgress  # noqa: PLC0415
     from slopmortem.evals.render import (  # noqa: PLC0415
@@ -550,9 +507,8 @@ def _run_record(
             )
 
         result = anyio.run(_do_record)
-        # Footer goes to the bar's console when present so the panel renders
-        # under the live progress region rather than fighting it; the
-        # nullcontext branch falls back to a fresh stderr console.
+        # Footer routes through the bar's console so the panel renders under
+        # the live progress region instead of fighting it.
         footer_console = bar.console if bar is not None else Console(stderr=True)
         render_record_footer(
             footer_console,
@@ -569,9 +525,8 @@ def main(argv: list[str] | None = None) -> None:
     """CLI entry point: parse args, drive the run, exit 0 on no regression else 1."""
     parser = _build_argparser()
     ns = parser.parse_args(argv)
-    # ``argparse.Namespace`` attributes are ``Any`` by design (argparse
-    # builds the namespace dynamically). We narrow each at the boundary
-    # with explicit casts. ``--store_true`` flags read out as ``bool``.
+    # argparse builds Namespace attrs dynamically (typed as ``Any``); narrow
+    # each at the boundary with explicit casts.
     dataset_path = cast("Path", ns.dataset)
     baseline_path = cast("Path", ns.baseline)
     live = cast("bool", ns.live)

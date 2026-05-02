@@ -13,24 +13,15 @@ if TYPE_CHECKING:
 
 
 class NoCannedResponseError(BaseException):
-    """Raised when FakeLLMClient can't find a canned reply for the given key.
+    """No canned reply for ``(template_sha, model, prompt_hash)``.
 
-    The error message names the missing ``(template_sha, model, prompt_hash)``
-    so you can find the gap without a repro.
-
-    Inherits from BaseException, not Exception, so it propagates through the
-    resilient fan-out wrappers in ``slopmortem.stages.synthesize`` (which
-    catch ``Exception`` to keep one bad candidate from killing siblings). A
-    cassette miss is a test-fixture error, not an operational error — it must
-    surface to the eval runner instead of being silently absorbed as a
-    dropped candidate.
+    Inherits ``BaseException`` so resilient fan-out wrappers (which catch
+    ``Exception``) can't swallow a fixture miss as a dropped candidate.
     """
 
 
 @dataclass
 class FakeResponse:
-    """Canned response that FakeLLMClient turns into a CompletionResult when called."""
-
     text: str
     stop_reason: str = "stop"
     cost_usd: float = 0.0
@@ -63,15 +54,11 @@ class _Call:
 
 @dataclass
 class FakeLLMClient:
-    r"""In-memory LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
+    """LLMClient stub keyed on ``(prompt_template_sha, model, prompt_hash)``.
 
-    Callers pass the template SHA via ``extra_body['prompt_template_sha']``.
-    Stage tests load it from
-    ``slopmortem.llm.prompts.prompt_template_sha(name)`` so any change in
-    prompt text changes the fixture key too. The ``prompt_hash`` slot is the
-    first 16 hex chars of ``sha256(system + '\x1f' + prompt)`` (via
-    :func:`slopmortem.llm.cassettes.llm_cassette_key`); tests can override it
-    by passing ``extra_body['prompt_hash']`` directly.
+    Template SHA arrives via ``extra_body['prompt_template_sha']`` so any
+    prompt change invalidates the fixture key. Tests can pin ``prompt_hash``
+    via ``extra_body['prompt_hash']`` instead of letting it derive.
     """
 
     canned: Mapping[tuple[str, str, str], FakeResponse | CompletionResult]
@@ -100,8 +87,6 @@ class FakeLLMClient:
                 f"none supplied for model {eff_model!r}"
             )
             raise NoCannedResponseError(msg)
-        # Compute prompt_hash from prompt+system; tests can pin a specific
-        # hash by setting extra_body["prompt_hash"].
         prompt_hash: str
         if extra_body and "prompt_hash" in extra_body:
             prompt_hash = str(extra_body["prompt_hash"])  # pyright: ignore[reportAny]

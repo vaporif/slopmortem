@@ -28,9 +28,9 @@ def test_cli_reclassify_dispatches(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     """--reclassify wires journal+classifier into reclassify_quarantined and prints the report."""
     fake_report = ReclassifyReport(total=3, declassified=1, still_slop=2, errors=0)
     fake_reclassify = AsyncMock(return_value=fake_report)
-    monkeypatch.setattr("slopmortem.cli.reclassify_quarantined", fake_reclassify)
-    monkeypatch.setattr("slopmortem.cli._build_journal", _fake_journal)
-    monkeypatch.setattr("slopmortem.cli._build_slop_classifier", _fake_classifier)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd.reclassify_quarantined", fake_reclassify)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd._build_journal", _fake_journal)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd._build_slop_classifier", _fake_classifier)
 
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", "--reclassify", "--post-mortems-root", str(tmp_path)])

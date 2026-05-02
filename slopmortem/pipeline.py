@@ -1,17 +1,9 @@
-"""Top-level orchestration: ``run_query`` wires every stage of the pipeline.
+"""Pipeline orchestration. All side-effecting deps injected; CLI wires them up.
 
-Pure library code: no I/O, no stderr, no file access, no outbound HTTP. Every
-side-effecting capability is injected (LLM client, embedding client, Corpus,
-Budget, optional progress callback). The CLI in ``slopmortem.cli`` builds those
-deps and calls ``run_query``.
-
-Failure model:
-- A :class:`BudgetExceededError` from any stage truncates the run. Whatever
-  Synthesis values had accumulated up to that point come back in the final
-  :class:`Report` with ``budget_exceeded=True``.
-- Per-candidate synthesis failures do NOT abort the run. ``synthesize_all``
-  swallows them as exception entries; we filter those out so ``Report.candidates``
-  only carries successes.
+``BudgetExceededError`` truncates the run and returns a partial
+:class:`Report` with ``budget_exceeded=True``. Per-candidate synthesis
+failures don't abort — ``synthesize_all`` returns them as exception entries
+which we drop before populating ``Report.candidates``.
 """
 
 from __future__ import annotations
@@ -49,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 class QueryPhase(StrEnum):
-    """Phase keys used by :class:`QueryProgress`. Closed enum so typos fail at parse."""
+    """Phase keys used by :class:`QueryProgress`."""
 
     FACET_EXTRACT = "facet_extract"
     RETRIEVE = "retrieve"
@@ -61,55 +53,33 @@ class QueryPhase(StrEnum):
 class QueryProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem query``.
 
-    Default :class:`NullQueryProgress` keeps the orchestrator decoupled from
-    any UI library; the CLI wires a Rich implementation.
+    The default :class:`NullQueryProgress` keeps the orchestrator decoupled
+    from any UI library; the CLI wires a Rich implementation.
     """
 
-    def start_phase(self, phase: QueryPhase, total: int) -> None:
-        """Announce *phase* with an expected ``total`` of advances."""
-
-    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
-        """Advance *phase*'s bar by ``n``."""
-
-    def end_phase(self, phase: QueryPhase) -> None:
-        """Mark *phase* complete."""
-
-    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
-        """Set or clear a transient status suffix on *phase*'s display label."""
-
-    def log(self, message: str) -> None:
-        """Emit a one-off status line."""
-
-    def error(self, phase: QueryPhase, message: str) -> None:
-        """Record an error against *phase*."""
+    def start_phase(self, phase: QueryPhase, total: int) -> None: ...
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None: ...
+    def end_phase(self, phase: QueryPhase) -> None: ...
+    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None: ...
+    def log(self, message: str) -> None: ...
+    def error(self, phase: QueryPhase, message: str) -> None: ...
 
 
 class NullQueryProgress:
-    """No-op :class:`QueryProgress` used when no display surface is attached."""
+    """No-op :class:`QueryProgress` for when no display surface is attached."""
 
-    def start_phase(self, phase: QueryPhase, total: int) -> None:
-        """No-op."""
-
-    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
-        """No-op."""
-
-    def end_phase(self, phase: QueryPhase) -> None:
-        """No-op."""
-
-    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
-        """No-op."""
-
-    def log(self, message: str) -> None:
-        """No-op."""
-
-    def error(self, phase: QueryPhase, message: str) -> None:
-        """No-op."""
+    def start_phase(self, phase: QueryPhase, total: int) -> None: ...
+    def advance_phase(self, phase: QueryPhase, n: int = 1) -> None: ...
+    def end_phase(self, phase: QueryPhase) -> None: ...
+    def set_phase_status(self, phase: QueryPhase, status: str | None) -> None: ...
+    def log(self, message: str) -> None: ...
+    def error(self, phase: QueryPhase, message: str) -> None: ...
 
 
 def cutoff_iso(years_filter: int | None) -> str | None:
-    """Convert a years-back recency filter to an ISO-8601 date.
+    """Compute the ISO date cutoff for *years_filter*.
 
-    Flooring to ``date()`` keeps the cutoff stable across the query's hour;
+    Floor to ``date()`` keeps the cutoff stable across the query's hour;
     retrieve takes dates (``YYYY-MM-DD``), not timestamps.
     """
     if years_filter is None:
@@ -212,11 +182,10 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     progress: QueryProgress | None = None,
     sparse_encoder: SparseEncoder | None = None,
 ) -> Report:
-    """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
+    """Run the query pipeline end-to-end and assemble the :class:`Report`.
 
-    Per-candidate synthesis exceptions are dropped silently;
-    :class:`BudgetExceededError` truncates the run and surfaces as
-    ``pipeline_meta.budget_exceeded=True`` on the returned :class:`Report`.
+    Per-candidate synthesis exceptions are dropped silently; ``BudgetExceededError``
+    truncates the run and surfaces as ``pipeline_meta.budget_exceeded=True``.
     """
     t0 = time.monotonic()
     successes: list[Synthesis] = []

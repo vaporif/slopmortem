@@ -9,7 +9,7 @@ allow_indirect_imports = True
 # Lazy imports of _embed_sparse defer the ~150MB fastembed ONNX load past startup.
 ignore_imports =
     slopmortem.llm.tools -> slopmortem.corpus._tools_impl
-    slopmortem.ingest -> slopmortem.corpus._embed_sparse
+    slopmortem.ingest._ingest -> slopmortem.corpus._embed_sparse
     slopmortem.evals.recording_helper -> slopmortem.corpus._embed_sparse
     slopmortem.stages.retrieve -> slopmortem.corpus._embed_sparse
 source_modules =
@@ -32,7 +32,6 @@ forbidden_modules =
     slopmortem.corpus._qdrant_store
     slopmortem.corpus._reclassify
     slopmortem.corpus._reconcile
-    slopmortem.corpus._schema
     slopmortem.corpus._store
     slopmortem.corpus._summarize
     slopmortem.corpus._tools_impl
@@ -103,3 +102,46 @@ source_modules =
     slopmortem.llm
 forbidden_modules =
     slopmortem.tracing.events
+
+[importlinter:contract:ingest-private]
+name = ingest._* is private — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    slopmortem.cli
+    slopmortem.pipeline
+    slopmortem.evals
+    slopmortem.stages
+    slopmortem.corpus
+    slopmortem.llm
+    slopmortem.tracing
+forbidden_modules =
+    slopmortem.ingest._fan_out
+    slopmortem.ingest._ingest
+    slopmortem.ingest._journal_writes
+    slopmortem.ingest._orchestrator
+    slopmortem.ingest._slop_gate
+    slopmortem.ingest._warm_cache
+
+[importlinter:contract:cli-private]
+name = cli._* is private — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+# TODO(deps-extraction): drop this once _build_deps moves to a shared module
+# (e.g. slopmortem/deps.py); see TODO in slopmortem/evals/runner.py.
+ignore_imports =
+    slopmortem.evals.runner -> slopmortem.cli._common
+source_modules =
+    slopmortem.evals
+    slopmortem.pipeline
+    slopmortem.ingest
+    slopmortem.stages
+    slopmortem.corpus
+    slopmortem.llm
+    slopmortem.tracing
+forbidden_modules =
+    slopmortem.cli._common
+    slopmortem.cli._embed_prefetch_cmd
+    slopmortem.cli._ingest_cmd
+    slopmortem.cli._query_cmd
+    slopmortem.cli._replay_cmd

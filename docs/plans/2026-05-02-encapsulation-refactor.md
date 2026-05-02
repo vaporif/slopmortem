@@ -737,7 +737,7 @@ If cassettes are stale at the start of PR 2, drift inside PR 2 is ambiguous.
 - Move: `slopmortem/ingest.py` → `slopmortem/ingest/_orchestrator.py`
 - Create: `slopmortem/ingest/__init__.py`
 
-- [ ] **Step 1: Capture the pre-move external surface**
+- [x] **Step 1: Capture the pre-move external surface**
 
 Run:
 
@@ -749,7 +749,7 @@ grep -rhnE "from slopmortem\.ingest(\.|[[:space:]])" slopmortem/ tests/ \
 
 This is the list of names external callers import. T2.6 trims `__init__.py` to exactly this set.
 
-- [ ] **Step 2: Capture pre-move smoke/eval baseline**
+- [x] **Step 2: Capture pre-move smoke/eval baseline**
 
 Run:
 
@@ -760,7 +760,7 @@ just eval 2>&1 | tee /tmp/eval_before.txt
 
 These are the diff baselines for steps 7–8.
 
-- [ ] **Step 3: Grep for `__name__`-pinned log filters or span attributes**
+- [x] **Step 3: Grep for `__name__`-pinned log filters or span attributes**
 
 Run:
 
@@ -770,7 +770,7 @@ grep -rnE "(slopmortem\.ingest['\"]|name == ['\"]slopmortem\.ingest['\"]|getLogg
 
 Expected: empty. If anything matches, the move will silently change `__name__` from `slopmortem.ingest` to `slopmortem.ingest._orchestrator` and break the filter — fix or update before proceeding.
 
-- [ ] **Step 4: Move the file**
+- [x] **Step 4: Move the file**
 
 Run:
 
@@ -779,7 +779,7 @@ mkdir -p slopmortem/ingest
 git mv slopmortem/ingest.py slopmortem/ingest/_orchestrator.py
 ```
 
-- [ ] **Step 5+6: Add `__all__` to `_orchestrator.py` AND create `__init__.py` in the SAME commit**
+- [x] **Step 5+6: Add `__all__` to `_orchestrator.py` AND create `__init__.py` in the SAME commit**
 
 These two edits MUST land in one commit. If `__init__.py` lands first with `from … import *` but no `__all__` on `_orchestrator.py`, the wildcard re-export leaks `InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier`, and the test protocols to the public surface — a CLAUDE.md "fakes over mocks" violation that survives in git history.
 
@@ -801,7 +801,7 @@ The `noqa` is required because ruff disallows `import *` by default; here it is 
 
 Do not run `git commit` between 5a and 5b. T2.6 will replace this wildcard with explicit re-exports later — until then, the `__all__` is the only thing keeping fakes out of the public surface.
 
-- [ ] **Step 7: Verify the smoke/eval baseline holds**
+- [x] **Step 7: Verify the smoke/eval baseline holds**
 
 Run:
 
@@ -814,7 +814,7 @@ diff /tmp/eval_before.txt  /tmp/eval_after.txt  | head -40
 
 Expected: only timing/path differences in the smoke output; eval baseline byte-stable on the assertion summary.
 
-- [ ] **Step 8: Run the full gate**
+- [x] **Step 8: Run the full gate**
 
 Run: `just test && just lint && just typecheck`
 Expected: green. T1.6's `corpus-leaf` / `llm-leaf` / etc. contracts still pass (the move did not touch any cross-package imports).
@@ -825,7 +825,7 @@ Expected: green. T1.6's `corpus-leaf` / `llm-leaf` / etc. contracts still pass (
 - Create: `slopmortem/ingest/_warm_cache.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the warm-cache block in `_orchestrator.py`**
+- [x] **Step 1: Identify the warm-cache block in `_orchestrator.py`**
 
 The warm-cache pattern is "first entry runs alone, then the rest fan out" — cited in `CLAUDE.md` and `slopmortem/ingest.py` (now `_orchestrator.py`) header. Find it by searching for `CACHE_READ_RATIO_LOW` and the surrounding fan-out:
 
@@ -835,7 +835,7 @@ grep -nE "CACHE_READ_RATIO_LOW|first entry|prompt cache warm" slopmortem/ingest/
 
 Capture the start and end line of the block plus any helper functions it depends on.
 
-- [ ] **Step 2: Extract the block to `_warm_cache.py`**
+- [x] **Step 2: Extract the block to `_warm_cache.py`**
 
 Create `slopmortem/ingest/_warm_cache.py` with a header comment:
 
@@ -855,7 +855,7 @@ from __future__ import annotations
 
 Move the block + helpers into this file. Update `_orchestrator.py` to import from `slopmortem.ingest._warm_cache`.
 
-- [ ] **Step 3: Verify the cache_read_ratio span event still fires**
+- [x] **Step 3: Verify the cache_read_ratio span event still fires**
 
 The warm-cache emits a `cache_read_ratio` span event when the ratio drops below 0.80 across the first 5 responses. Run a small sample ingest with cassettes:
 
@@ -867,7 +867,7 @@ Inspect the cassette trace for the `cache_read_ratio` span event (or run `grep -
 
 Expected: the span event still appears in the same shape as before extraction.
 
-- [ ] **Step 4: Run the full gate**
+- [x] **Step 4: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green; eval baseline byte-stable on the assertion summary.
@@ -878,7 +878,7 @@ Expected: green; eval baseline byte-stable on the assertion summary.
 - Create: `slopmortem/ingest/_fan_out.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the per-entry pipeline seam**
+- [x] **Step 1: Identify the per-entry pipeline seam**
 
 Per spec, the seam is `_facet_summarize_fanout` (was `ingest.py:637`, now in `_orchestrator.py`) plus the `_embed_and_upsert` call inside `_process_entry` (was `ingest.py:688`). The actual order is **facet → summarize → embed → upsert**. Slop classification is upstream and lives in T2.5's `_slop_gate.py`, not here.
 
@@ -888,7 +888,7 @@ Find the seam:
 grep -nE "_facet_summarize_fanout|_embed_and_upsert|_process_entry" slopmortem/ingest/_orchestrator.py
 ```
 
-- [ ] **Step 2: Extract `_facet_summarize_fanout` and helpers into `_fan_out.py`**
+- [x] **Step 2: Extract `_facet_summarize_fanout` and helpers into `_fan_out.py`**
 
 Create `slopmortem/ingest/_fan_out.py`:
 
@@ -905,7 +905,7 @@ from __future__ import annotations
 
 Move the facet/summarize/embed/upsert flow. Leave the journal-write ordering helper (the `_process_entry` body that calls `journal.upsert_pending` etc.) in `_orchestrator.py` — that's T2.4's territory.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green.
@@ -917,7 +917,7 @@ Expected: green.
 - Create: `tests/ingest/test_journal_writes.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the journal-write block**
+- [x] **Step 1: Identify the journal-write block**
 
 The actual order from the spec (line numbers from the original `ingest.py`, verify in `_orchestrator.py`):
 
@@ -930,7 +930,7 @@ The actual order from the spec (line numbers from the original `ingest.py`, veri
 
 Locate these in `_orchestrator.py` (line numbers will have shifted due to T2.2 and T2.3).
 
-- [ ] **Step 2: Write a failing test for the (Qdrant-upsert → mark_complete) gap**
+- [x] **Step 2: Write a failing test for the (Qdrant-upsert → mark_complete) gap**
 
 Write `tests/ingest/test_journal_writes.py` (skeleton):
 
@@ -985,21 +985,21 @@ Use `InMemoryCorpus` (already in `_orchestrator.py`) as the corpus-side base, su
 
 Do NOT introduce a brand-new `InMemoryJournal` class for this task — it would need to mirror the full `MergeJournal` API (15+ methods) and drift from it on schema changes. The two journal helpers in this test file (corpus subclass + crash-injection wrapper, if needed) belong in this file, not in `slopmortem/`.
 
-- [ ] **Step 3: Run tests; expect them to fail with NotImplementedError or with assertion errors against the current code**
+- [x] **Step 3: Run tests; expect them to fail with NotImplementedError or with assertion errors against the current code**
 
 Run: `pytest tests/ingest/test_journal_writes.py -v`
 Expected: 4 tests fail (either with `NotImplementedError` if you left placeholders, or with assertion failures because the journal write order in `_orchestrator.py` has not yet been extracted — that's fine; the test will continue passing after the move since extraction is behavior-preserving).
 
-- [ ] **Step 4: Implement the test bodies**
+- [x] **Step 4: Implement the test bodies**
 
 Replace each `raise NotImplementedError` with the actual arrange/act/assert. Helper that subclasses `InMemoryCorpus` and `MergeJournal` to inject crashes belongs in this test file.
 
-- [ ] **Step 5: Run tests; expect 4 passes against current `_orchestrator.py`**
+- [x] **Step 5: Run tests; expect 4 passes against current `_orchestrator.py`**
 
 Run: `pytest tests/ingest/test_journal_writes.py -v`
 Expected: 4 passing tests. If any fail, the orchestrator's current write sequence violates the invariant — stop and report to operator before proceeding.
 
-- [ ] **Step 6: Extract the journal-write block to `_journal_writes.py`**
+- [x] **Step 6: Extract the journal-write block to `_journal_writes.py`**
 
 Create `slopmortem/ingest/_journal_writes.py`:
 
@@ -1028,7 +1028,7 @@ from __future__ import annotations
 
 Update `_orchestrator.py` to call into the extracted module.
 
-- [ ] **Step 7: Re-run the new tests AND the full gate**
+- [x] **Step 7: Re-run the new tests AND the full gate**
 
 Run: `pytest tests/ingest/test_journal_writes.py -v && just test && just lint && just typecheck && just smoke && just eval`
 Expected: 4 new tests pass post-extraction; full gate green.
@@ -1040,7 +1040,7 @@ Expected: 4 new tests pass post-extraction; full gate green.
 - Create: `tests/ingest/test_slop_gate.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the slop-gate routing block**
+- [x] **Step 1: Identify the slop-gate routing block**
 
 ```bash
 grep -nE "_quarantine|slop_threshold|_PRE_VETTED_SOURCES|slop_score" slopmortem/ingest/_orchestrator.py
@@ -1048,7 +1048,7 @@ grep -nE "_quarantine|slop_threshold|_PRE_VETTED_SOURCES|slop_score" slopmortem/
 
 Capture the slop-classification call site, the routing branch (above-threshold → quarantine; below-threshold → fan-out), and the `_quarantine` helper (was `ingest.py:405`).
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Write `tests/ingest/test_slop_gate.py`:
 
@@ -1083,12 +1083,12 @@ async def test_pre_vetted_source_bypasses_classifier_even_at_high_score():
 
 Implement both bodies. Use `FakeSlopClassifier` from `_orchestrator.py` and `InMemoryCorpus` as the test doubles.
 
-- [ ] **Step 3: Run tests; expect them to fail until extraction**
+- [x] **Step 3: Run tests; expect them to fail until extraction**
 
 Run: `pytest tests/ingest/test_slop_gate.py -v`
 Expected: 2 fails (no `_slop_gate` module yet to import). If you wired the test to call directly into `_orchestrator.py` for the pre-extraction pass, expect 2 passes — that confirms the current behavior matches the spec.
 
-- [ ] **Step 4: Extract slop-gate routing to `_slop_gate.py`**
+- [x] **Step 4: Extract slop-gate routing to `_slop_gate.py`**
 
 Create `slopmortem/ingest/_slop_gate.py` with `_quarantine` collocated:
 
@@ -1108,7 +1108,7 @@ from __future__ import annotations
 
 Update `_orchestrator.py` to call into the new module.
 
-- [ ] **Step 5: Re-run the slop-gate tests AND the full gate**
+- [x] **Step 5: Re-run the slop-gate tests AND the full gate**
 
 Run: `pytest tests/ingest/test_slop_gate.py -v && just test && just lint && just typecheck && just smoke && just eval`
 Expected: 2 slop-gate tests pass; full gate green.
@@ -1118,7 +1118,7 @@ Expected: 2 slop-gate tests pass; full gate green.
 **Files:**
 - Modify: `slopmortem/ingest/__init__.py`
 
-- [ ] **Step 1: Derive the explicit public surface from current callers**
+- [x] **Step 1: Derive the explicit public surface from current callers**
 
 Run:
 
@@ -1145,7 +1145,7 @@ grep -rnE "(class _Point|from slopmortem\.ingest import.*_Point)" slopmortem/ te
 
 Pick the preferred option unless `_Point` ends up moved by a later task. Do NOT redirect the import to `slopmortem.corpus.qdrant_store`.
 
-- [ ] **Step 2: Replace the star-import init with explicit re-exports**
+- [x] **Step 2: Replace the star-import init with explicit re-exports**
 
 Edit `slopmortem/ingest/__init__.py`:
 
@@ -1168,7 +1168,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green. If a test breaks because of a missing name, add it to step 2's import block (and to step 1's grep output for posterity).
@@ -1178,7 +1178,7 @@ Expected: green. If a test breaks because of a missing name, add it to step 2's 
 **Files:**
 - Modify: `.importlinter`
 
-- [ ] **Step 1: Add the `ingest-private` contract**
+- [x] **Step 1: Add the `ingest-private` contract**
 
 Edit `.importlinter`. T1.6 deliberately did not include a placeholder (import-linter rejects empty `forbidden_modules`). Append a fresh contract:
 
@@ -1204,12 +1204,12 @@ forbidden_modules =
 
 Add additional `_*.py` modules if T2.2–T2.5 introduced extras (e.g. `_protocols.py`, `_gather.py` per the destination map in the spec).
 
-- [ ] **Step 2: Run lint-imports**
+- [x] **Step 2: Run lint-imports**
 
 Run: `uv run lint-imports`
 Expected: contract passes. If broken, an external file was importing into `ingest._*` — fix the import to go through `slopmortem.ingest` instead, or expose the symbol via T2.6's `__all__`.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green. PR 2 ready to merge.
@@ -1238,7 +1238,7 @@ Late/lazy imports inside `cli.py` helpers (`qdrant_client`, `MergeJournal`, `Fak
 - Move: `slopmortem/cli.py` → `slopmortem/cli/_app.py`
 - Create: `slopmortem/cli/__init__.py`
 
-- [ ] **Step 1: Capture the pre-move `--help` output as a baseline**
+- [x] **Step 1: Capture the pre-move `--help` output as a baseline**
 
 Run:
 
@@ -1252,7 +1252,7 @@ uv run slopmortem embed-prefetch --help > /tmp/cli_help_prefetch_before.txt
 
 T3.4 will diff these against the post-extraction outputs.
 
-- [ ] **Step 2: Move the file into the new package**
+- [x] **Step 2: Move the file into the new package**
 
 Run:
 
@@ -1261,7 +1261,7 @@ mkdir -p slopmortem/cli
 git mv slopmortem/cli.py slopmortem/cli/_app.py
 ```
 
-- [ ] **Step 3: Write the new `cli/__init__.py`**
+- [x] **Step 3: Write the new `cli/__init__.py`**
 
 Edit `slopmortem/cli/__init__.py`:
 
@@ -1275,11 +1275,11 @@ from slopmortem.cli._app import app as app
 __all__ = ["app"]
 ```
 
-- [ ] **Step 4: Verify `pyproject.toml` `[project.scripts]` still resolves**
+- [x] **Step 4: Verify `pyproject.toml` `[project.scripts]` still resolves**
 
 Read `pyproject.toml` line 29: `slopmortem = "slopmortem.cli:app"`. Expected: this still resolves because `cli/__init__.py` re-exports `app`. No edit needed.
 
-- [ ] **Step 5: Diff the `--help` outputs**
+- [x] **Step 5: Diff the `--help` outputs**
 
 Run:
 
@@ -1290,7 +1290,7 @@ diff /tmp/cli_help_root_before.txt /tmp/cli_help_root_after.txt
 
 Expected: empty diff. Repeat for each subcommand `--help`. Any non-empty diff is a regression — stop and investigate.
 
-- [ ] **Step 6: Run the full gate**
+- [x] **Step 6: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green.
@@ -1309,7 +1309,7 @@ The four `@app.command(...)` registrations in `_app.py` are: `ingest`, `query`, 
 
 **Import order in `cli/__init__.py` determines `--help` listing order.** Preserve the current ordering: `_ingest_cmd`, `_query_cmd`, `_replay_cmd`, `_embed_prefetch_cmd`.
 
-- [ ] **Step 1: Extract `_ingest_cmd.py` (one commit)**
+- [x] **Step 1: Extract `_ingest_cmd.py` (one commit)**
 
 Move the `ingest_cmd` function and its `@app.command("ingest")` decorator into `slopmortem/cli/_ingest_cmd.py`. Also move:
 - `RichIngestProgress` (single-consumer)
@@ -1346,7 +1346,7 @@ Expected: byte-identical help output.
 
 Stage and commit just this extraction.
 
-- [ ] **Step 2: Extract `_query_cmd.py` (one commit)**
+- [x] **Step 2: Extract `_query_cmd.py` (one commit)**
 
 Move `query_cmd` into `slopmortem/cli/_query_cmd.py`. Note: `RichQueryProgress`, `_QUERY_PHASE_LABELS`, and `_render_query_footer` are dual-consumer — DO NOT move them here. T3.3 puts them in `_common.py`. For now, leave them in `_app.py` and have `_query_cmd.py` import them from there as a temporary measure (T3.3 fixes the location).
 
@@ -1359,15 +1359,15 @@ from slopmortem.cli import _query_cmd   # noqa: F401
 
 Verify `--help`. Commit.
 
-- [ ] **Step 3: Extract `_replay_cmd.py` (one commit)**
+- [x] **Step 3: Extract `_replay_cmd.py` (one commit)**
 
 Move `replay_cmd`. It also consumes `RichQueryProgress` — same temporary import strategy as step 2. Verify `--help`. Commit.
 
-- [ ] **Step 4: Extract `_embed_prefetch_cmd.py` (one commit)**
+- [x] **Step 4: Extract `_embed_prefetch_cmd.py` (one commit)**
 
 Move `embed_prefetch_cmd`. Verify `--help`. Commit.
 
-- [ ] **Step 5: Run the full gate after all four extractions**
+- [x] **Step 5: Run the full gate after all four extractions**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green. `_app.py` is now mostly empty except for the `app = typer.Typer(...)` definition and the dual-consumer Rich helpers.
@@ -1380,7 +1380,7 @@ Expected: green. `_app.py` is now mostly empty except for the `app = typer.Typer
 - Modify: `slopmortem/cli/_query_cmd.py`
 - Modify: `slopmortem/cli/_replay_cmd.py`
 
-- [ ] **Step 1: Inventory shared helpers**
+- [x] **Step 1: Inventory shared helpers**
 
 The dual-consumer / shared helpers identified by the spec:
 - `RichQueryProgress` (consumed by `query_cmd` and `replay_cmd`)
@@ -1393,18 +1393,18 @@ Plus any argument-type helpers (e.g. typer Option/Argument factories), Rich cons
 grep -lrn "_render_query_footer\|_QUERY_PHASE_LABELS\|RichQueryProgress" slopmortem/cli/
 ```
 
-- [ ] **Step 2: Move them into `_common.py`**
+- [x] **Step 2: Move them into `_common.py`**
 
 Create `slopmortem/cli/_common.py` and move the helpers in. Update the importers in `_query_cmd.py` and `_replay_cmd.py` to import from `slopmortem.cli._common` instead of `slopmortem.cli._app`.
 
 Preserve the lazy `noqa: PLC0415` imports inside helper functions (the late-load pattern that keeps `--help` fast).
 
-- [ ] **Step 3: Verify `--help` is still byte-stable**
+- [x] **Step 3: Verify `--help` is still byte-stable**
 
 Run: same diffs as T3.1 step 5.
 Expected: empty diffs.
 
-- [ ] **Step 4: Run the full gate**
+- [x] **Step 4: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green.
@@ -1414,12 +1414,12 @@ Expected: green.
 **Files:**
 - Verify only: `pyproject.toml`, every CLI subcommand surface
 
-- [ ] **Step 1: Re-resolve the script entrypoint**
+- [x] **Step 1: Re-resolve the script entrypoint**
 
 Run: `uv run slopmortem --version 2>/dev/null || uv run slopmortem --help | head -5`
 Expected: typer help banner appears, exit 0. Confirms `pyproject.toml [project.scripts] slopmortem = "slopmortem.cli:app"` still resolves through `cli/__init__.py`.
 
-- [ ] **Step 2: Diff `--help` for every subcommand**
+- [x] **Step 2: Diff `--help` for every subcommand**
 
 Run:
 
@@ -1432,7 +1432,7 @@ done
 
 Expected: all five diffs empty; "OK" printed five times. Any non-empty diff catches missing registrations or reordered listings.
 
-- [ ] **Step 3: Confirm subcommand list ordering**
+- [x] **Step 3: Confirm subcommand list ordering**
 
 Run: `uv run slopmortem --help | grep -E '^  (ingest|query|replay|embed-prefetch)'`
 Expected: order matches the pre-move baseline (typically `ingest`, `query`, `replay`, `embed-prefetch`).
@@ -1443,11 +1443,11 @@ Expected: order matches the pre-move baseline (typically `ingest`, `query`, `rep
 - Modify: `slopmortem/cli/__init__.py`
 - Delete (if empty): `slopmortem/cli/_app.py`
 
-- [ ] **Step 1: Confirm `_app.py` is empty after T3.2/T3.3**
+- [x] **Step 1: Confirm `_app.py` is empty after T3.2/T3.3**
 
 Read `slopmortem/cli/_app.py`. After T3.2 extracted the four subcommands and T3.3 moved shared helpers to `_common.py`, `_app.py` should contain only the `app = typer.Typer(...)` construction. If anything else remains, stop and resolve before continuing — moving `app` while leaving other helpers behind will break callers of those helpers.
 
-- [ ] **Step 2: Capture the original `typer.Typer(...)` arguments**
+- [x] **Step 2: Capture the original `typer.Typer(...)` arguments**
 
 Before any deletion, grep the construction site so we don't lose it:
 
@@ -1457,7 +1457,7 @@ grep -A3 "typer.Typer(" slopmortem/cli/_app.py | tee /tmp/typer_construction.txt
 
 Step 4 reuses this when constructing `app` in `cli/__init__.py`.
 
-- [ ] **Step 3: Rewrite subcommand imports of `app` BEFORE deleting `_app.py`**
+- [x] **Step 3: Rewrite subcommand imports of `app` BEFORE deleting `_app.py`**
 
 The four `_*_cmd.py` files currently each have `from slopmortem.cli._app import app` (planted by T3.2 step 1's pattern at the top of `_ingest_cmd.py`, etc.). After step 4 moves `app` into `cli/__init__.py`, those imports become dangling. Rewrite them to import via the package façade:
 
@@ -1473,7 +1473,7 @@ Verify with: `grep -rn "from slopmortem.cli" slopmortem/cli/_*_cmd.py` — every
 
 This works because at import time, `cli/__init__.py` defines `app` BEFORE doing the side-effect import of each `_*_cmd.py` module (step 4 ordering). So when `_ingest_cmd.py` runs `from slopmortem.cli import app`, `cli` is partially initialized but `app` is already bound — Python handles the partial-init lookup correctly here.
 
-- [ ] **Step 4: Update `cli/__init__.py`**
+- [x] **Step 4: Update `cli/__init__.py`**
 
 Edit `slopmortem/cli/__init__.py`:
 
@@ -1501,13 +1501,13 @@ The `noqa: E402` is correct here (top-level imports after a non-import statement
 
 Replace the `typer.Typer(no_args_is_help=True)` arguments with the actual construction captured in step 2.
 
-- [ ] **Step 5: Delete `_app.py` if empty**
+- [x] **Step 5: Delete `_app.py` if empty**
 
 Run: `wc -l slopmortem/cli/_app.py 2>/dev/null && cat slopmortem/cli/_app.py`
 If output is empty or only contains comments/whitespace: `git rm slopmortem/cli/_app.py`
 If non-empty: stop — step 1's check missed something. Resolve before deleting.
 
-- [ ] **Step 6: Run the full gate (including the `--help` byte-diff from T3.4)**
+- [x] **Step 6: Run the full gate (including the `--help` byte-diff from T3.4)**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green; `--help` outputs still byte-stable. If you see `ImportError: cannot import name 'app' from 'slopmortem.cli'`, step 3's sed missed a file — re-run the grep.
@@ -1517,7 +1517,7 @@ Expected: green; `--help` outputs still byte-stable. If you see `ImportError: ca
 **Files:**
 - Modify: `.importlinter`
 
-- [ ] **Step 1: Add the `cli-private` contract**
+- [x] **Step 1: Add the `cli-private` contract**
 
 Edit `.importlinter`. T1.6 deliberately did not include a placeholder (import-linter rejects empty `forbidden_modules`). Append a fresh contract:
 
@@ -1544,12 +1544,12 @@ forbidden_modules =
 
 Drop `slopmortem.cli._app` from `forbidden_modules` if step T3.5 deleted that file.
 
-- [ ] **Step 2: Run lint-imports**
+- [x] **Step 2: Run lint-imports**
 
 Run: `uv run lint-imports`
 Expected: contract passes. The `slopmortem/cli_progress.py` re-export pattern keeps eval recorders compliant — they import from `slopmortem.cli_progress` (top-level), not from `slopmortem.cli._*`.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green. PR 3 ready to merge.

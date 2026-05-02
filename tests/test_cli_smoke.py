@@ -95,9 +95,9 @@ def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
         return _fixture_report(name=input_ctx.name)
 
     # Swap dep-construction so the test doesn't need real OPENROUTER_API_KEY etc.
-    monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
-    monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
+    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
 
     runner = CliRunner()
     result = runner.invoke(app, ["query", "Some pitch text", "--name", "MyStartup", "--stdout"])
@@ -112,9 +112,9 @@ def test_query_smoke_default_unnamed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name)
 
-    monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
-    monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
+    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
 
     runner = CliRunner()
     result = runner.invoke(app, ["query", "A pitch", "--stdout"])
@@ -128,9 +128,9 @@ def test_query_default_writes_to_runs_dir(monkeypatch: pytest.MonkeyPatch, tmp_p
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name)
 
-    monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
-    monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
+    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()
@@ -154,9 +154,9 @@ def test_query_empty_candidates_exits_nonzero(
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name).model_copy(update={"candidates": []})
 
-    monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
-    monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
+    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()

@@ -1,15 +1,9 @@
-"""Pure markdown renderer for :class:`Report`. No I/O. Text-in, text-out.
+"""Markdown renderer for :class:`Report`.
 
-Defense-in-depth output filter: clickable autolinks (``[txt](url)`` and
-reference-style ``[txt][ref]``) and image markdown (``![alt](url)``) are
-stripped from prose fields so the rendered output can't embed a one-click
-attacker URL or an exfil pixel. Sources render as plain text; the user has
-to copy-paste.
-
-The synthesize-stage URL allowlist already drops off-allowlist hosts before
-data reaches here. This module is the second line of defense for
-markdown-rendered prose that didn't pass through that filter (e.g.
-``where_diverged`` text).
+Strips clickable links and images from prose as a second line of defense
+behind the synthesize-stage URL allowlist: prose like ``where_diverged``
+doesn't pass through that filter, and a one-click attacker URL or exfil
+pixel in the rendered output is unacceptable.
 """
 
 from __future__ import annotations
@@ -27,11 +21,9 @@ if TYPE_CHECKING:
         TopRisks,
     )
 
-# ``[txt](url)``: inline markdown link. Must NOT be greedy across lines.
+# Inline link must NOT be greedy across lines.
 _INLINE_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-# ``[txt][ref]``: reference-style link.
 _REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]+\]")
-# ``![alt](url)``: image markdown.
 _IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 
 
@@ -97,7 +89,6 @@ def _render_candidate(syn: Synthesis) -> str:
         "",
         "Sources:",
         "",
-        # Sources render as plain text, one per line. No `[]()` wrapping.
         "\n".join(syn.sources),
     ]
     return "\n".join(parts)
@@ -159,11 +150,11 @@ def _render_no_comparables_banner(meta: PipelineMeta) -> str:
 
 
 def render(report: Report) -> str:
-    """Render *report* as a markdown string. Pure function, no I/O.
+    """Render *report* to plain markdown, stripping clickable links.
 
-    Inline links, reference-style links, and image markdown are stripped
-    from every prose field. Sources go out as plain URLs, one per line, so
-    no clickable autolink reaches a markdown viewer.
+    Inline links, reference-style links, and image markdown are stripped from
+    every prose field. Sources go out as plain URLs, one per line, so no
+    clickable autolink reaches a markdown viewer.
     """
     sections: list[str] = [
         f"# Slopmortem report for {report.input.name}",

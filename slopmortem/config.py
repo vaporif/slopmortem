@@ -111,10 +111,10 @@ class Config(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Wire TOML below env+dotenv so env wins (12-factor).
+        """TOML sits below env+dotenv (12-factor).
 
-        The second ``toml_file`` entry applies last, so ``local.toml``
-        overrides the tracked defaults.
+        The second ``toml_file`` entry applies last so ``local.toml`` overrides
+        tracked defaults.
         """
         toml_files: list[Path] = [
             p

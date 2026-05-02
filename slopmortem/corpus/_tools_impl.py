@@ -1,9 +1,8 @@
 """Tool implementations exposed to the LLM via OpenRouter function-calling.
 
-The corpus tools (``_get_post_mortem`` / ``_search_corpus``) delegate to a
-module-level :class:`Corpus` bound at CLI startup via :func:`_set_corpus`.
-The indirection keeps tool functions as plain ``async def`` so they match the
-:class:`ToolSpec` signature contract (no closures, no bound methods).
+Corpus tools delegate to a module-level ``Corpus`` bound via ``_set_corpus``
+so the functions stay plain ``async def`` and match the ``ToolSpec``
+signature contract (no closures, no bound methods).
 """
 
 from __future__ import annotations
@@ -47,8 +46,6 @@ __all__ = [
 
 
 class GetPostMortemArgs(BaseModel):
-    """Arguments for ``get_post_mortem``: canonical id and read budget."""
-
     canonical_id: str
     max_chars: int = 8000
 
@@ -56,10 +53,9 @@ class GetPostMortemArgs(BaseModel):
 class SearchFacets(BaseModel):
     """Closed-enum filters for ``search_corpus``; all optional.
 
-    Values come from ``taxonomy.yml`` at module load (via ``*Lit``), so the
-    JSON schema carries an ``enum`` constraint per field. Anthropic's
-    grammar-constrained sampler / OpenAI strict tools mode enforces validity
-    at decode time — the model can't emit a typo or an out-of-taxonomy value.
+    Values come from ``taxonomy.yml`` via ``*Lit``, so the JSON schema carries
+    a per-field ``enum`` and grammar-constrained sampling enforces validity
+    at decode time.
     """
 
     sector: SectorLit | None = None
@@ -70,16 +66,12 @@ class SearchFacets(BaseModel):
 
 
 class SearchCorpusArgs(BaseModel):
-    """Arguments for ``search_corpus``: query string and optional facet filters."""
-
     q: str
     facets: SearchFacets | None = None
     limit: int = 5
 
 
 class SearchHit(BaseModel):
-    """A single corpus search result with the minimal fields the LLM reasons about."""
-
     canonical_id: str
     name: str
     snippet: str
@@ -87,15 +79,11 @@ class SearchHit(BaseModel):
 
 
 class TavilySearchArgs(BaseModel):
-    """Arguments for ``tavily_search``: web search query string."""
-
     q: str
     limit: int = 5
 
 
 class TavilyExtractArgs(BaseModel):
-    """Arguments for ``tavily_extract``: URL to fetch and extract."""
-
     url: str
 
 
@@ -103,22 +91,12 @@ _corpus: Corpus | None = None
 
 
 def _set_corpus(c: Corpus) -> None:
-    """Bind the module-level :class:`Corpus` used by ``_get_post_mortem`` / ``_search_corpus``.
-
-    Called once at CLI startup so tool functions stay plain ``async def``.
-    Tests pass a fake and reset to ``None`` in teardown.
-    """
     global _corpus  # noqa: PLW0603 — the module-level binding is the public init surface
     _corpus = c
 
 
 def set_query_corpus(c: Corpus) -> None:
-    """Bind the corpus the query-side LLM tools should call into.
-
-    Public re-export of the module-private ``_set_corpus``. Required so
-    callers (``cli.py``, ``evals/runner.py``, ``evals/recording_helper.py``)
-    can avoid reaching past the ``corpus`` package façade.
-    """
+    """Public re-export of ``_set_corpus`` so callers don't reach past the ``corpus`` façade."""
     _set_corpus(c)
 
 
@@ -141,10 +119,8 @@ async def _search_corpus(
     raw = await _corpus.search_corpus(q, facets=facets)
     hits: list[SearchHit] = []
     for row in raw[:limit]:
-        # Corpus.search_corpus returns list[dict[str, Any]]. Impls vary
-        # (Qdrant payload shapes, fakes, future stores), so per-row dict
-        # values are deliberately Any. Coerce each field to its expected
-        # scalar type at this boundary.
+        # Corpus impls vary (Qdrant payloads, fakes, future stores), so coerce
+        # each field to its expected scalar type at this boundary.
         summary = row.get("summary") or row.get("body") or ""
         snippet = str(summary)[:500]
         hits.append(
@@ -159,14 +135,7 @@ async def _search_corpus(
 
 
 def _tavily_api_key() -> str:
-    """Return ``TAVILY_API_KEY`` from the environment, or raise.
-
-    Read at call time (rather than from :class:`Config`) because the tool
-    callables are passed bare to OpenRouter's function-calling surface and
-    the existing ``_set_corpus`` indirection would not extend cleanly to a
-    second binding. ``TAVILY_API_KEY`` is the documented surface in the
-    spec (Auth, Synthesis tool registry).
-    """
+    """Read at call time — tool callables are passed bare to OpenRouter and can't carry config."""
     key = os.environ.get("TAVILY_API_KEY", "")
     if not key:
         msg = "TAVILY_API_KEY not set; --tavily-synthesis path is unavailable"
@@ -175,12 +144,7 @@ def _tavily_api_key() -> str:
 
 
 async def tavily_search_async(q: str, limit: int = 5) -> str:
-    r"""Search the live web via Tavily and return a text summary for the LLM.
-
-    Reads ``TAVILY_API_KEY`` from the environment at call time. Returns a
-    newline-joined ``- title — url\n  snippet`` listing, capped at
-    *limit* results, or ``"(no results)"`` if Tavily returned an empty set.
-    """
+    r"""Search Tavily; return ``- title — url\n  snippet`` lines or ``"(no results)"``."""
     resp = await safe_post(
         _TAVILY_SEARCH_URL,
         json={"api_key": _tavily_api_key(), "query": q, "max_results": limit},
@@ -200,12 +164,7 @@ async def tavily_search_async(q: str, limit: int = 5) -> str:
 
 
 async def tavily_extract_async(url: str) -> str:
-    """Fetch and extract the readable text of a single URL via Tavily.
-
-    Reads ``TAVILY_API_KEY`` from the environment at call time. Returns
-    the first result's ``raw_content`` string, or ``""`` if Tavily
-    returned no results.
-    """
+    """Return ``""`` when no results."""
     resp = await safe_post(
         TAVILY_EXTRACT_URL,
         json={"api_key": _tavily_api_key(), "urls": [url]},

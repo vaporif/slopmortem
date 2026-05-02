@@ -1,10 +1,8 @@
 """LLM-backed summarizer that produces ``payload.summary`` for the rerank stage.
 
-Runs at ingest time, between :mod:`facet_extract` and :mod:`embed_dense`.
-The 400-token cap is a contract on the LLM's output, enforced by the
-``Stay under 120 words`` directive in
-``slopmortem/llm/prompts/summarize.j2``. The rerank stage budgets
-``K * summary`` tokens for its input window and checks accordingly.
+The 400-token / 120-word cap is a prompt-level contract in
+``llm/prompts/summarize.j2``; the rerank stage budgets ``K * summary``
+tokens against it.
 """
 
 from __future__ import annotations
@@ -25,12 +23,7 @@ async def summarize_for_rerank(
     source_id: str = "",
     max_tokens: int | None = None,
 ) -> str:
-    """Produce ``payload.summary`` for the rerank stage.
-
-    The ≤400-token cap is a prompt-level contract (see ``summarize.j2``),
-    not enforced here. ``source_id`` is embedded in the prompt's
-    ``<untrusted_document>`` tag.
-    """
+    """``source_id`` is embedded in the prompt's ``<untrusted_document>`` tag."""
     prompt = render_prompt("summarize", body=text, source_id=source_id)
     result = await llm.complete(
         prompt,

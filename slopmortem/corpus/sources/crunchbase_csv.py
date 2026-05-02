@@ -1,13 +1,7 @@
-"""Crunchbase CSV source. File-based ``RawEntry`` producer.
+"""Crunchbase CSV source: file-based ``RawEntry`` producer.
 
-Crunchbase exports their organization dataset as CSV; v1 takes the path at
-construction time (passed via ``--crunchbase-csv path`` at the CLI). No HTTP
-happens here, so the throttle and robots checks don't apply. Mapping:
-
-* ``source = "crunchbase_csv"``
-* ``source_id = uuid`` if present, else falls back to the company name
-* ``url = homepage_url`` (may be empty)
-* ``markdown_text = short_description`` (may be empty)
+No HTTP, so throttle and robots don't apply. ``source_id`` falls back to
+company name when no uuid column is present.
 """
 
 from __future__ import annotations
@@ -41,15 +35,9 @@ class CrunchbaseCsvSource:
     """[Source] Reads a Crunchbase organization CSV; one ``RawEntry`` per row."""
 
     def __init__(self, *, csv_path: Path) -> None:
-        """Build a Crunchbase CSV source.
-
-        Args:
-            csv_path: Filesystem path to the Crunchbase organizations CSV export.
-        """
         self.csv_path = csv_path
 
     async def fetch(self) -> AsyncIterator[RawEntry]:
-        """Yield one ``RawEntry`` per CSV row that carries an ID or company name."""
         with self.csv_path.open("r", encoding="utf-8", newline="") as fh:
             reader = csv.DictReader(fh)
             for row in reader:

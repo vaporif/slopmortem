@@ -1,18 +1,12 @@
 # pyright: reportAny=false
 """Entity resolution: tier-1, tier-2, tier-3 canonical_id derivation.
 
-``resolve_entity`` returns a :class:`ResolveResult` with the chosen
-canonical_id, the action (``create`` / ``merge`` / ``resolver_flipped`` /
-``alias_blocked``), and any span events the caller should emit.
-
 Tiered IDs:
 
 - Tier 1: registrable_domain (via ``tldextract``). Demoted if the domain is
-  on the CODEOWNERS-protected ``platform_domains.yml`` blocklist, or if a
-  recycled-domain founding-year delta or parent/subsidiary suffix delta
-  forces demotion.
-- Tier 2: ``{normalized_name}::{sector}``. Used when tier 1 is demoted or
-  blocked.
+  on ``platform_domains.yml``, or recycled-domain founding-year delta /
+  parent/subsidiary suffix delta forces demotion.
+- Tier 2: ``{normalized_name}::{sector}``.
 - Tier 3: dense-embedding cosine similarity against the existing tier-2
   canonical, with a Haiku tiebreaker inside the calibration band
   ``[0.65, 0.85]``.
@@ -63,7 +57,7 @@ _CORPORATE_HIERARCHY_YAML = (
     Path(__file__).resolve().parent / "sources" / "corporate_hierarchy_overrides.yml"
 )
 
-# Suffix-delta detection: corporate suffixes that indicate parent/subsidiary disambiguation.
+# Corporate suffixes that flag parent/subsidiary disambiguation.
 _CORPORATE_SUFFIXES = (
     "holdings",
     "group",
@@ -84,11 +78,10 @@ _CORPORATE_SUFFIXES = (
 )
 _CORPORATE_SUFFIXES_RE = re.compile(rf"\s+({'|'.join(_CORPORATE_SUFFIXES)})\b\.?$", re.IGNORECASE)
 
-# Founding-year delta: more than this many years apart → demote (recycled domain).
+# Founding-year delta beyond this demotes tier-1 to tier-2 (recycled domain).
 _RECYCLED_DOMAIN_YEAR_DELTA = 10
 
-# Tier-3 calibration band: similarity in this range triggers the Haiku
-# tiebreaker. Values outside the band auto-decide.
+# Similarity inside this band triggers the Haiku tiebreaker; outside auto-decides.
 _DEFAULT_TIER3_BAND: tuple[float, float] = (0.65, 0.85)
 
 _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
@@ -96,10 +89,10 @@ _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
 
 @dataclass(frozen=True, slots=True)
 class ResolveResult:
-    """Outcome of a :func:`resolve_entity` call.
+    """Outcome of a resolve attempt.
 
     For ``resolver_flipped``, ``canonical_id`` is the NEW id and intentionally
-    NOT written here — the repair pass owns the rebind.
+    not written here — the repair pass owns the rebind.
     """
 
     canonical_id: str
@@ -119,7 +112,7 @@ def _load_platform_domains() -> frozenset[str]:
 
 
 def _load_corporate_hierarchy_overrides() -> dict[str, list[str]]:
-    """Map parent canonical → list of subsidiary canonicals; empty in v1."""
+    """Map parent canonical → list of subsidiary canonicals (empty in v1)."""
     with _CORPORATE_HIERARCHY_YAML.open("r", encoding="utf-8") as fh:
         data = cast("dict[str, Any]", yaml.safe_load(fh) or {})  # pyright: ignore[reportExplicitAny]
     overrides_obj: object = data.get("overrides") or []
@@ -159,11 +152,7 @@ def _normalize_name(name: str) -> str:
 
 
 def _strip_corporate_suffix(name: str) -> tuple[str, str | None]:
-    """Return ``(stem, suffix_or_None)``.
-
-    The stem is the corporate-suffix-stripped, lowercase, whitespace-collapsed
-    name. Used by the suffix-delta heuristic.
-    """
+    """Return ``(normalized_stem, suffix_or_None)`` for the suffix-delta heuristic."""
     match = _CORPORATE_SUFFIXES_RE.search(name)
     suffix = match.group(1).lower() if match else None
     stem = re.sub(r"\s+", " ", _CORPORATE_SUFFIXES_RE.sub("", name).strip().lower())
@@ -171,7 +160,6 @@ def _strip_corporate_suffix(name: str) -> tuple[str, str | None]:
 
 
 def _tier2_canonical(name: str, sector: str) -> str:
-    """Tier-2 canonical: ``{normalized_name}::{sector}``."""
     return f"{_normalize_name(name)}::{sector.lower()}"
 
 
@@ -187,7 +175,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def _pair_key(canonical_a: str, canonical_b: str) -> str:
-    """Tier-3 cache key: lex-sorted pair joined by a U+0001 SOH separator."""
+    """Lex-sorted pair joined by U+0001 SOH so ``(A, B)`` and ``(B, A)`` collapse."""
     lo, hi = sorted((canonical_a, canonical_b))
     return f"{lo}{hi}"
 
@@ -350,16 +338,13 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
     haiku_model_id: str,
     max_tokens: int | None = None,
 ) -> tuple[str, str]:
-    """Return ``(decision, rationale)`` where decision is 'same' or 'different'.
-
-    Auto-decides outside the band; calls the Haiku tiebreaker (with caching) inside.
-    """
+    """Auto-decide outside the band; cached Haiku tiebreaker inside."""
     if similarity >= band[1]:
         return "same", "auto: similarity above upper band"
     if similarity <= band[0]:
         return "different", "auto: similarity below lower band"
     if llm_client is None:
-        # In-band but no LLM available: conservative, do NOT collapse.
+        # In-band, no LLM: conservative, do NOT collapse.
         return "different", "no llm: defaulting to different inside calibration band"
     pk = _pair_key(canonical_existing, canonical_new)
     tiebreaker_hash = prompt_template_sha(_TIEBREAKER_PROMPT_NAME)
@@ -393,7 +378,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
         tiebreaker_hash,
         now_iso,
     )
-    # Also write a pending_review row for the offline `--list-review` queue.
+    # Mirror to pending_review for the offline `--list-review` queue.
     section_heads = json.dumps(
         {
             "existing": section_head_existing[:200],
@@ -413,7 +398,7 @@ async def _decide_tier3(  # noqa: PLR0913 — keyword-only tier-3 decision API
 
 
 def _parse_tiebreaker_response(text: str) -> tuple[str, str]:
-    """Parse the Haiku tiebreaker JSON response. Falls back conservatively."""
+    """Falls back to ``different`` on any parse failure."""
     try:
         payload = cast("dict[str, Any]", json.loads(text))  # pyright: ignore[reportExplicitAny]
     except json.JSONDecodeError:
@@ -426,18 +411,15 @@ def _parse_tiebreaker_response(text: str) -> tuple[str, str]:
 
 
 def _looks_tier1(canonical_id: str) -> bool:
-    """True for plain-domain canonicals (no ``::`` separator)."""
     return "::" not in canonical_id
 
 
 async def _is_parent_subsidiary_suspect(journal: MergeJournal, domain: str, new_name: str) -> bool:
-    """Heuristic: tier-1 hit on *domain* + new name carries a corporate suffix.
+    """Flag a suffix-delta when the bare domain is in the journal and the name has a corp suffix.
 
-    No per-row display-name persistence yet, so we conservatively flag a
-    suffix-delta when (a) the bare domain is already journal-resident in
-    pending or complete state, and (b) the new entry's name carries a
-    known corporate suffix. :file:`corporate_hierarchy_overrides.yml` also
-    seeds explicit parent/subsidiary pairs (ships empty in v1).
+    No per-row display-name persistence yet, so the heuristic is conservative.
+    ``corporate_hierarchy_overrides.yml`` seeds explicit parent/subsidiary pairs
+    (ships empty in v1).
     """
     if domain in _HIERARCHY_OVERRIDES:
         return True
@@ -468,26 +450,18 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     force_similarity: float | None = None,
     tiebreaker_max_tokens: int | None = None,
 ) -> ResolveResult:
-    """Resolve *entry* to a canonical_id, returning a typed result.
+    """Resolve *entry* to a canonical_id.
 
-    Behavioral notes worth keeping near the signature:
+    - ``alias_hint`` set → alias edge + ``alias_blocked`` journal row written
+      atomically, short-circuits.
+    - ``founding_year`` drives the recycled-domain check (delta > 10).
+    - ``llm_client`` only required for in-band tier-3 calls.
+    - ``force_similarity`` is a test-only escape hatch.
 
-    - ``alias_hint``: when set (e.g. founder blog mentions "we became X"), the
-      resolver writes the alias edge atomically with an ``alias_blocked``
-      journal row and short-circuits.
-    - ``founding_year``: drives the recycled-domain check
-      (same registrable_domain + founding_year delta > 10).
-    - ``llm_client``: only required for in-band tier-3 calls. ``None`` is fine
-      outside the band.
-    - ``force_similarity``: test-only escape hatch; skips the embedding cosine
-      and uses the value directly.
-
-    Sqlite or LLM exceptions propagate after the journal transaction rolls
-    back (see :meth:`MergeJournal.upsert_alias_blocked`).
+    Sqlite or LLM exceptions propagate after the journal transaction rolls back.
     """
-    # tier-3 cache and founding-year cache live in the same sqlite file as the
-    # merge journal. No public accessor on purpose — merge.py is read-only
-    # from this side.
+    # tier-3 + founding-year caches share the merge journal's sqlite file. No
+    # public accessor on purpose — merge.py is read-only from this side.
     db_path = journal._db  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
     await to_thread.run_sync(_ensure_tier3_table_sync, db_path)
 
@@ -511,7 +485,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     candidate_id = domain
     use_tier2 = is_platform or not domain
 
-    # Recycled-domain check: same registrable_domain + founding_year delta > 10.
+    # Recycled-domain check: same domain + founding_year delta > 10 → demote.
     if not use_tier2 and founding_year is not None:
         cached_year = await to_thread.run_sync(_read_founding_year_sync, db_path, domain)
         if (
@@ -520,8 +494,7 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         ):
             use_tier2 = True
 
-    # Parent/subsidiary suffix-delta: tier-1 hit, but the existing canonical's
-    # name differs from the new name only by a corporate suffix.
+    # Suffix-delta: tier-1 hit but new name differs only by a corporate suffix.
     if not use_tier2 and await _is_parent_subsidiary_suspect(journal, domain, name):
         use_tier2 = True
         span_events.append(SpanEvent.PARENT_SUBSIDIARY_SUSPECTED.value)
@@ -529,8 +502,6 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     if use_tier2:
         candidate_id = _tier2_canonical(name, sector)
 
-    # Tier-3 fuzzy matching only fires when on a tier-2 id and an existing
-    # tier-2 sibling is journal-resident under the same sector.
     candidate_id = await _maybe_tier3_collapse(
         db_path=db_path,
         journal=journal,
@@ -563,10 +534,9 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
         )
 
     if founding_year is not None and _looks_tier1(candidate_id):
-        # Ideally the cache key would include content_sha256, but the merged
-        # content doesn't exist yet at resolve time. The entry's source_id
-        # works as a per-row dedup key — v1's cache only needs *some* entry
-        # per (registrable_domain, *) for the delta check.
+        # Ideally cache key would include content_sha256, but the merged content
+        # doesn't exist at resolve time. v1 only needs *some* entry per domain
+        # for the delta check, so source_id stands in as a per-row dedup key.
         await to_thread.run_sync(
             _write_founding_year_sync,
             db_path,
@@ -597,11 +567,9 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
     is_tier2: bool,
     tiebreaker_max_tokens: int | None = None,
 ) -> str:
-    """Run tier-3 fuzzy matching against existing canonicals; return the (possibly merged) id.
+    """Collapse a tier-2 candidate onto a same-sector tier-2 sibling when ``same`` fires.
 
-    Only fires when ``is_tier2`` is True and at least one tier-2 canonical
-    is journal-resident under the same sector. A tier-3 ``same`` collapses
-    *candidate_id* onto the existing canonical's id.
+    Only runs when ``is_tier2`` is True.
     """
     if not is_tier2:
         return candidate_id
