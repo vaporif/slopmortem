@@ -244,8 +244,8 @@ class HaikuSlopClassifier:
     Returns 0.0 when Haiku says yes, else 1.0 (above ``slop_threshold=0.7``,
     so the entry quarantines).
 
-    ``char_limit=6000`` is sized so the demise narrative — often deep in the
-    body for older companies like Sun Microsystems or WeWork — falls inside
+    ``char_limit=6000`` is sized so the demise narrative (often deep in the
+    body for older companies like Sun Microsystems or WeWork) falls inside
     the window. Tighter 1500-char caps cause false-negative quarantines on
     long obituaries.
     """

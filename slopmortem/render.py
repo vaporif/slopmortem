@@ -148,7 +148,7 @@ def _render_no_comparables_banner(meta: PipelineMeta) -> str:
     if dropped > 0:
         return (
             f"No comparables passed similarity threshold {threshold:.1f}. "
-            f"{dropped} candidate(s) were filtered out — try lowering "
+            f"{dropped} candidate(s) were filtered out. Try lowering "
             f"min_similarity_score in slopmortem.toml."
         )
     return (

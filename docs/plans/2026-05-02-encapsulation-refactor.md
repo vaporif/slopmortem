@@ -654,12 +654,12 @@ Expected: green.
 
 This task is **conditional** on T1.1's verification comment. Read the header comment block in `slopmortem/corpus/__init__.py` first to confirm which modules have zero outside callers.
 
-- [ ] **Step 1: Confirm `alias_graph` is internal-only**
+- [x] **Step 1: Confirm `alias_graph` is internal-only**
 
 Run: `grep -rnE "from slopmortem\.corpus(\.alias_graph| import alias_graph)" slopmortem/ tests/ | grep -v "^slopmortem/corpus/"`
 Expected: empty output.
 
-- [ ] **Step 2: Rename `alias_graph.py` → `_alias_graph.py`**
+- [x] **Step 2: Rename `alias_graph.py` → `_alias_graph.py`**
 
 Run:
 
@@ -675,21 +675,25 @@ grep -lrn "slopmortem\.corpus\.alias_graph" slopmortem/
 
 to find them.
 
-- [ ] **Step 3: Run typecheck + lint + smoke**
+- [x] **Step 3: Run typecheck + lint + smoke**
 
 Run: `just typecheck && just lint && just smoke`
 Expected: green. **Stage and commit only the rename + intra-package import updates** to keep blame clean (`git mv ... → git commit -m "rename: alias_graph → _alias_graph"`). Do not bundle multiple renames into one commit.
 
-- [ ] **Step 4: Confirm `schema` is internal-only**
+- [x] **Step 4: Confirm `schema` is internal-only**
 
 Run: `grep -rnE "from slopmortem\.corpus(\.schema| import schema)" slopmortem/ tests/ | grep -v "^slopmortem/corpus/"`
 Expected: empty output.
 
-- [ ] **Step 5: Rename `schema.py` → `_schema.py`**
+**Result (2026-05-02):** non-empty — `tests/corpus/test_schema_and_store.py:10` does `from slopmortem.corpus import schema, store`. Per the safety rule, schema is NOT internal-only. Step 5 SKIPPED. Deferred follow-up: migrate the test to use the façade re-export, then rename `schema.py → _schema.py` in a follow-up PR.
+
+- [x] **Step 5: Rename `schema.py` → `_schema.py`**
 
 Same procedure as steps 2–3. Single commit.
 
-- [ ] **Step 6: Decide on conditional renames**
+**Skipped:** see step 4 result.
+
+- [x] **Step 6: Decide on conditional renames**
 
 For each of `store`, `summarize`, the verification comment in `corpus/__init__.py` tells you whether outside callers exist:
 - If only `TYPE_CHECKING`-block callers and the façade re-exports the symbol, the rename is safe — proceed (one commit per rename, like steps 2–3).
@@ -697,7 +701,14 @@ For each of `store`, `summarize`, the verification comment in `corpus/__init__.p
 
 For `merge_text`, `embed_sparse`, `tools_impl`: do not rename in this PR (per spec). Document the deferral in the PR description.
 
-- [ ] **Step 7: Run the full gate one last time**
+**Result (2026-05-02):** Per the verification comment in `corpus/__init__.py`:
+- `store` — TYPE_CHECKING-only callers (3 sites), but `Corpus` is NOT re-exported by the façade. Safety rule fails. SKIPPED.
+- `summarize` — external (non-TYPE_CHECKING) caller `tests/corpus/test_summarize.py`. Safety rule fails. SKIPPED.
+- `merge_text`, `embed_sparse`, `tools_impl` — explicitly deferred per spec.
+
+Deferred follow-up: re-export `Corpus` from `corpus/__init__.py`, then rename `store.py → _store.py`. For `summarize`, migrate the test to use the façade and then rename.
+
+- [x] **Step 7: Run the full gate one last time**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green. PR 1 is ready to merge.

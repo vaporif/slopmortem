@@ -62,7 +62,7 @@ class ThickBarColumn(BarColumn):
     """:class:`BarColumn` whose bar spans ``height`` terminal rows.
 
     Rich bars are one row tall. The :class:`_StackedBar` wrapper repeats the
-    bar so it reads as a chunkier marker without changing layout — adjacent
+    bar so it reads as a chunkier marker without changing layout; adjacent
     columns auto-pad to the tallest cell in the row.
     """
 
@@ -78,7 +78,7 @@ class ThickBarColumn(BarColumn):
 class OptionalMofNCompleteColumn(MofNCompleteColumn):
     """:class:`MofNCompleteColumn` that hides for single-shot phases.
 
-    Tasks with ``total <= 1`` carry no useful count — the bar's pulse-then-fill
+    Tasks with ``total <= 1`` carry no useful count; the bar's pulse-then-fill
     already conveys done vs not-done. Returning empty text drops the cell and
     avoids ``0/1 → 1/1`` noise.
     """
@@ -95,7 +95,7 @@ class OptionalETAColumn(TimeRemainingColumn):
 
     Suppressed when the task is finished (Rich's default keeps painting
     ``0:00``, which reads as "still computing, 0s left") and when the task
-    has no granular total — single-shot phases pulse, so a remaining-time
+    has no granular total. Single-shot phases pulse, so a remaining-time
     estimate is meaningless.
     """
 
