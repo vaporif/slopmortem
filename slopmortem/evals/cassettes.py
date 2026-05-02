@@ -1,14 +1,12 @@
 """Cassette loaders, writers, slugifier, error types, and schema-version policy.
 
-Key derivation lives in `slopmortem.llm.cassettes` (see G14/P17). The
-recording wrappers and the replay loaders both import from here so record
-and replay can't disagree on disk shape.
+Key derivation lives in ``slopmortem.llm.cassettes``. Recording wrappers and
+replay loaders both import from here so record and replay can't disagree on
+disk shape.
 
-Forward-compat policy (P12): `schema_version` is `"<major>.<minor>"`. The
-reader hard-fails on a major mismatch (renamed/removed fields, semantic
-shifts) and accepts any minor at the same major — minor bumps are purely
-additive. Pydantic models use `extra="ignore"` so unknown fields a future
-writer adds deserialize cleanly under older readers.
+Schema version is ``<major>.<minor>``: reader hard-fails on major mismatch,
+accepts any minor at the same major. Minor bumps are purely additive and
+Pydantic ``extra="ignore"`` lets unknown future fields deserialize cleanly.
 """
 
 from __future__ import annotations
@@ -45,19 +43,19 @@ _SLUG_RE = re.compile(r"[^A-Za-z0-9._-]")
 
 
 class CassetteFormatError(Exception):
-    """Raised when a cassette file's JSON cannot be parsed or fails type validation."""
+    """Cassette JSON unparseable or fails type validation."""
 
 
 class CassetteSchemaError(Exception):
-    """Raised when a cassette file's `schema_version` is unparseable or major-mismatched."""
+    """Cassette ``schema_version`` is unparseable or major-mismatched."""
 
 
 class DuplicateCassetteError(Exception):
-    """Raised when two cassette files in the same scope dir resolve to the same key."""
+    """Two cassette files in the same scope dir resolved to the same key."""
 
 
 class RecordingBudgetExceededError(Exception):
-    """Raised when `RecordingLLMClient`'s accumulated cost would exceed `max_cost_usd`."""
+    """``RecordingLLMClient`` accumulated cost would exceed ``max_cost_usd``."""
 
     def __init__(self, *, spent: float, limit: float) -> None:
         super().__init__(f"recording cost ceiling exceeded: spent={spent:.4f} limit={limit:.4f}")
@@ -66,16 +64,12 @@ class RecordingBudgetExceededError(Exception):
 
 
 def _slugify_model(model: str) -> str:
-    """Replace any character not in [A-Za-z0-9._-] with `_`. Used only for filenames."""
+    """Replace any character outside ``[A-Za-z0-9._-]`` with ``_`` (filenames only)."""
     return _SLUG_RE.sub("_", model)
 
 
 def _check_schema_version(version: object, *, path: Path) -> None:
-    """Enforce the `major == reader_major` policy. Same-major minor always accepted.
-
-    Raises `CassetteSchemaError` on any mismatch. Unknown extra fields in the
-    envelope are tolerated by the loaders (Pydantic models use `extra="ignore"`).
-    """
+    """Enforce ``major == reader_major``; any minor at the same major is accepted."""
     if not isinstance(version, str) or "." not in version:
         msg = f"cassette {path} has unparseable schema_version={version!r}"
         raise CassetteSchemaError(msg)

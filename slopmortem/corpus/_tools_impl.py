@@ -97,7 +97,10 @@ def _set_corpus(c: Corpus) -> None:
 
 
 def set_query_corpus(c: Corpus) -> None:
-    """Public re-export of :func:`_set_corpus` so callers avoid reaching past the ``corpus`` façade."""
+    """Public re-export of :func:`_set_corpus`.
+
+    Lets callers avoid reaching past the ``corpus`` façade.
+    """
     _set_corpus(c)
 
 
@@ -138,7 +141,10 @@ async def _search_corpus(
 
 
 def _tavily_api_key() -> str:
-    """Read ``TAVILY_API_KEY`` at call time — tool callables are passed bare to OpenRouter and can't carry config."""
+    """Read ``TAVILY_API_KEY`` at call time.
+
+    Tool callables are passed bare to OpenRouter and can't carry config.
+    """
     key = os.environ.get("TAVILY_API_KEY", "")
     if not key:
         msg = "TAVILY_API_KEY not set; --tavily-synthesis path is unavailable"
@@ -147,7 +153,7 @@ def _tavily_api_key() -> str:
 
 
 async def tavily_search_async(q: str, limit: int = 5) -> str:
-    """Search Tavily; return ``- title — url\\n  snippet`` lines or ``"(no results)"``."""
+    r"""Search Tavily; return ``- title — url\n  snippet`` lines or ``"(no results)"``."""
     resp = await safe_post(
         _TAVILY_SEARCH_URL,
         json={"api_key": _tavily_api_key(), "query": q, "max_results": limit},

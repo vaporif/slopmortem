@@ -1,15 +1,10 @@
 """HTML sanitize and extract pipeline for raw source documents.
 
 Pipeline: sanitize HTML → trafilatura → readability fallback → length floor
-(<500 chars ⇒ empty). The sanitizer runs BEFORE trafilatura. Otherwise
+(<500 chars ⇒ empty). The sanitizer runs BEFORE trafilatura — otherwise
 trafilatura treats HTML comments, JSON-LD, hidden nodes, and attribute text
-as visible — an indirect-injection surface.
-
-The stripped surfaces are pinned by the hostile-fixture test in
-``tests/sources/test_extract_visible_text_only.py``: comments, ``<script>``
-/ ``<style>`` / ``<noscript>``, JSON-LD scripts, ``display:none`` /
-``visibility:hidden`` / ``hidden`` nodes, and ``aria-label`` / ``alt`` /
-``title`` attributes.
+as visible, an indirect-injection surface. The exact stripped surfaces are
+pinned by ``tests/sources/test_extract_visible_text_only.py``.
 """
 
 from __future__ import annotations
@@ -35,7 +30,6 @@ _STRIPPED_ATTRS = ("aria-label", "alt", "title")
 
 
 def _drop_node(node: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Detach *node* from its parent, or clear it in place if it's the root."""
     parent = node.getparent()
     if parent is None:
         node.clear()
@@ -44,7 +38,7 @@ def _drop_node(node: Any) -> None:  # pyright: ignore[reportExplicitAny]
 
 
 def _drop_comments(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Remove HTML comments, including ``<!-- IMPORTANT: ... -->`` injections."""
+    """Strip ``<!-- IMPORTANT: ... -->`` injections."""
     for comment in root.xpath("//comment()"):
         _drop_node(comment)
     for comment in list(root.iter(Comment)):
@@ -52,14 +46,12 @@ def _drop_comments(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
 
 
 def _drop_stripped_tags(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Remove ``<script>``, ``<style>``, and ``<noscript>`` (including JSON-LD)."""
     for tag in _STRIPPED_TAGS:
         for node in root.iter(tag):
             _drop_node(node)
 
 
 def _drop_hidden_nodes(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Remove nodes hidden by the ``hidden`` attribute or by display/visibility CSS."""
     for node in list(root.iter()):
         if not isinstance(node.tag, str):
             continue
@@ -72,7 +64,7 @@ def _drop_hidden_nodes(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
 
 
 def _strip_attribute_text(root: Any) -> None:  # pyright: ignore[reportExplicitAny]
-    """Strip ``aria-label``, ``alt``, and ``title`` so trafilatura can't lift their text."""
+    """Strip attributes that trafilatura would otherwise lift as visible text."""
     for node in root.iter():
         if not isinstance(node.tag, str):
             continue
@@ -82,7 +74,6 @@ def _strip_attribute_text(root: Any) -> None:  # pyright: ignore[reportExplicitA
 
 
 def sanitize_html(html: str) -> str:
-    """Strip injection-surface nodes and attributes from *html*."""
     if not html or not html.strip():
         return ""
     try:
@@ -118,7 +109,7 @@ def _readability_extract(html: str) -> str:
 
 
 def extract_clean(html: str) -> str:
-    """Sanitize then extract main content; return ``""`` below :data:`LENGTH_FLOOR`."""
+    """Sanitize then extract main content; return ``""`` below ``LENGTH_FLOOR``."""
     cleaned = sanitize_html(html)
     if not cleaned:
         return ""

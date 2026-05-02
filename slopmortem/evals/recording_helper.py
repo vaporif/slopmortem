@@ -1,4 +1,7 @@
-"""End-to-end cassette recording: ephemeral Qdrant, recording wrappers, atomic dir swap, Tavily forced off."""
+"""End-to-end cassette recording.
+
+Ephemeral Qdrant, recording wrappers, atomic dir swap, Tavily forced off.
+"""
 
 from __future__ import annotations
 

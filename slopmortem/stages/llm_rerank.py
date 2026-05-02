@@ -29,9 +29,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
     model: str | None = None,
     max_tokens: int | None = None,
 ) -> LlmRerankResult:
-    """Rerank ``candidates`` against ``pitch`` via one structured-output LLM call.
-
-    Strict-mode schema constrains shape but not length, so the parsed array
+    """Strict-mode schema constrains shape but not length, so the parsed array
     is re-validated against ``min(N_synthesize, len(candidates))`` — mismatch
     raises :class:`RerankLengthError`.
     """

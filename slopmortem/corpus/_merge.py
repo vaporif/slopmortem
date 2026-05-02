@@ -1,18 +1,13 @@
 # pyright: reportAny=false
 """SQLite-backed merge journal, quarantine table, and alias graph.
 
-All sqlite calls go through :func:`anyio.to_thread.run_sync`; WAL +
+All sqlite calls go through ``anyio.to_thread.run_sync``; WAL +
 ``busy_timeout=5000``.
 
-Terminal-state writers (atomicity contract):
-
-- :meth:`MergeJournal.upsert_pending`
-- :meth:`MergeJournal.upsert_resolver_flipped`
-- :meth:`MergeJournal.upsert_alias_blocked`
-
-Each runs its inserts inside one ``BEGIN; ... COMMIT;`` so a crash commits
-everything or nothing. ``mark_complete`` is the only path from ``pending``
-to ``complete``, and runs after the qdrant and disk writes succeed.
+Terminal-state writers (``upsert_pending``, ``upsert_resolver_flipped``,
+``upsert_alias_blocked``) each run inside one ``BEGIN; ... COMMIT;`` so a
+crash commits everything or nothing. ``mark_complete`` is the only path from
+``pending`` to ``complete``, and runs after the qdrant and disk writes succeed.
 
 Quarantine rows live in a separate table keyed on
 ``(content_sha256, source, source_id)``; quarantined docs are not in the

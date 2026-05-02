@@ -1,12 +1,9 @@
-"""Synthesize stage: per-candidate post-mortem generation with cache-warm fan-out.
+"""Synthesize stage: one candidate → one ``synthesize`` call.
 
-One candidate per ``synthesize`` call. ``synthesize_all`` runs the cache-warm
-pattern (first call alone, then :func:`gather_resilient` on the rest) so one
-candidate's failure can't cancel the others.
-
-The OpenRouter client (``slopmortem/llm/openrouter.py``) drives the tool-call
-loop, wraps tool results in ``<untrusted_document>`` tags, and enforces the
-5-turn bound. This stage is one ``llm.complete(...)`` call.
+``synthesize_all`` uses the cache-warm pattern (first call alone, then
+:func:`gather_resilient` on the rest) so one candidate's failure can't cancel
+the others. The tool-call loop, ``<untrusted_document>`` wrapping, and 5-turn
+bound live in ``slopmortem/llm/openrouter.py``.
 """
 
 from __future__ import annotations
@@ -34,9 +31,7 @@ if TYPE_CHECKING:
 
 
 def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
-    """Build the ``render_prompt("synthesize", ...)`` kwargs for *candidate*.
-
-    Shared by the production stage and tests so both stay in lockstep when
+    """Shared by the production stage and tests so both stay in lockstep when
     the template's variable list changes.
     """
     payload = candidate.payload
@@ -63,7 +58,6 @@ _INJECTION_MARKER = "prompt_injection_attempted"
 
 
 def _emit_event(event: SpanEvent) -> None:
-    """Emit event as a Laminar span event when tracing is initialized."""
     if Laminar.is_initialized():
         Laminar.event(name=str(event))
 
@@ -77,13 +71,13 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
     model: str | None = None,
     max_tokens: int | None = None,
 ) -> Synthesis:
-    """Generate one :class:`Synthesis` for *candidate* against *ctx*'s pitch.
-
-    ``sources`` is passed through from ``candidate.payload.sources`` rather
+    """``sources`` is passed through from ``candidate.payload.sources`` rather
     than asked of the LLM — the LLM never sees provenance URLs, so asking
-    produced empty or hallucinated lists. When ``where_diverged ==
-    "prompt_injection_attempted"`` (the :data:`_INJECTION_MARKER`), fires
-    :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED` on the active Laminar span.
+    produced empty or hallucinated lists.
+
+    When ``where_diverged == "prompt_injection_attempted"`` (the
+    :data:`_INJECTION_MARKER`), fires :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED`
+    on the active Laminar span.
     """
     prompt = render_prompt(
         "synthesize",
