@@ -12,7 +12,7 @@ Public surface (re-exported via `slopmortem.ingest.__init__`): `Corpus`,
 Internal helpers (used by sibling modules across the private boundary):
 `_entry_summary_text`, `_enrich_pipeline`, `_gather_entries`, `_text_id_for`,
 `_skip_key`, `_build_payload`, `_truncate_to_tokens`, `_reliability_for`,
-`_content_sha256`, `_date_from_year`.
+`_date_from_year`.
 """
 
 from __future__ import annotations

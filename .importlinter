@@ -32,7 +32,6 @@ forbidden_modules =
     slopmortem.corpus._qdrant_store
     slopmortem.corpus._reclassify
     slopmortem.corpus._reconcile
-    slopmortem.corpus._schema
     slopmortem.corpus._store
     slopmortem.corpus._summarize
     slopmortem.corpus._tools_impl
