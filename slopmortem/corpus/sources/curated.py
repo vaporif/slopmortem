@@ -1,12 +1,7 @@
-"""Curated source.
+"""Curated source: YAML of hand-vetted post-mortem URLs → ``RawEntry``.
 
-Loads YAML of hand-vetted post-mortem URLs and produces ``RawEntry``. Curated
-entries are explicitly user-vouched, so no host blocklist is applied — the
+Curated entries are user-vouched, so no host blocklist applies — the
 resolver's tier-2 demotion handles multi-tenant hosts.
-
-All outbound HTTP goes through ``safe_get`` (SSRF-hardened), gated by the
-per-host token bucket plus the ``robots.txt`` parser in
-:mod:`slopmortem.corpus.sources._throttle`.
 """
 
 from __future__ import annotations
@@ -45,13 +40,6 @@ class CuratedSource:
         user_agent: str = USER_AGENT,
         rps: float = 1.0,
     ) -> None:
-        """Build a curated source.
-
-        Args:
-            yaml_path: Path to the curated YAML file.
-            user_agent: UA string sent on outbound requests.
-            rps: Per-host throttle budget; defaults to 1 request/second.
-        """
         self.yaml_path = yaml_path
         self.user_agent = user_agent
         self.rps = rps
@@ -66,7 +54,6 @@ class CuratedSource:
         return [r for r in rows if isinstance(r, dict)]
 
     async def fetch(self) -> AsyncIterator[RawEntry]:
-        """Yield ``RawEntry`` for every YAML row that survives the length floor."""
         rows = self._load_rows()
         for row in rows:
             url = row.get("url")

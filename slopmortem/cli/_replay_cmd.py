@@ -1,8 +1,8 @@
 """``slopmortem replay`` subcommand.
 
-Iterates an evals dataset (JSONL, one ``InputContext`` per line) through the
-synthesis pipeline. The missing-dataset path exits with code 2 so CI smoke
-tests can probe the wiring without a fixture corpus.
+Iterates a JSONL evals dataset (one ``InputContext`` per line) through the
+synthesis pipeline. Missing-dataset path exits 2 so CI smoke tests can probe
+the wiring without a fixture corpus.
 """
 
 from __future__ import annotations
@@ -38,12 +38,7 @@ def replay_cmd(
         typer.Argument(help="Dataset name under tests/evals/datasets/."),
     ],
 ) -> None:
-    """Replay a JSONL evals dataset through the synthesis pipeline.
-
-    Each line parses into an :class:`InputContext`; ``run_query`` runs with the
-    same dependency wiring as ``query``; the rendered :class:`Report` for each
-    row goes to stdout. Dataset format: JSONL, one InputContext per line.
-    """
+    """Replay a JSONL evals dataset through the synthesis pipeline."""
     anyio.run(_replay, dataset)
 
 

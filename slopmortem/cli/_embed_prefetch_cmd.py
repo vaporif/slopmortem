@@ -1,8 +1,7 @@
 """``slopmortem embed-prefetch`` subcommand.
 
-Warms the configured embedder's local model cache (useful for CI / first-run).
 Only the local fastembed provider has anything to prefetch; remote providers
-exit with code 1 and a one-line message.
+exit 1 with a one-line message.
 """
 
 from __future__ import annotations

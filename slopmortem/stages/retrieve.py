@@ -39,7 +39,9 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
     k_retrieve: int,
     sparse_encoder: SparseEncoder | None = None,
 ) -> list[Candidate]:
-    """Both dense and sparse queries come from *description* verbatim — no HyDE
+    """Retrieve dense+sparse candidates for *description* from *corpus*.
+
+    Both dense and sparse queries come from *description* verbatim — no HyDE
     expansion, rerank slack absorbs the modality gap.
 
     ``sparse_encoder=None`` lazy-loads the fastembed model on first call;

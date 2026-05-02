@@ -1,9 +1,8 @@
 """Shared helpers used by 2+ subcommand modules.
 
-Lives here so the subcommand files can import without forming circular
-dependencies through ``cli/__init__.py``. T4 / ``_internal/`` migration will
-move this under a private subdir; for now the leading underscore on the
-filename signals "package-private" and the import-linter contract enforces it.
+Lives here so subcommand files can import without forming circular dependencies
+through ``cli/__init__.py``. The leading underscore signals package-private;
+the import-linter contract enforces it.
 """
 
 from __future__ import annotations
@@ -31,11 +30,9 @@ if TYPE_CHECKING:
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import Report
 
-# Underscore-prefixed but exported across the cli package: ``__all__`` tells
-# basedpyright these are intentional package-private exports, suppressing
-# ``reportPrivateUsage`` at the import sites in ``_*_cmd.py`` and
-# ``slopmortem.evals.runner``. The leading-underscore prefix still signals
-# "package-private" to humans and import-linter (T3.6).
+# ``__all__`` flags these underscore-prefixed names as intentional package-private
+# exports so basedpyright stops reporting reportPrivateUsage at the import sites
+# in ``_*_cmd.py`` and ``slopmortem.evals.runner``.
 __all__ = [
     "_QUERY_PHASE_LABELS",
     "RichQueryProgress",
@@ -67,12 +64,7 @@ def _maybe_init_tracing(config: Config) -> None:
 def _build_deps(
     config: Config,
 ) -> tuple[LLMClient, EmbeddingClient, Corpus, Budget]:
-    """Construct production LLM, embedder, corpus, and budget from *config*.
-
-    A helper so CLI smoke tests can monkeypatch one symbol. All credentials and
-    connection settings come from :class:`Config`, which pydantic-settings
-    populates from env vars, ``.env``, and TOML.
-    """
+    """One symbol for CLI smoke tests to monkeypatch."""
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 - heavy dep, lazy import
 
     budget = Budget(cap_usd=config.max_cost_usd_per_query)
@@ -110,14 +102,11 @@ _QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
 
 
 class RichQueryProgress(RichPhaseProgress[QueryPhase]):
-    """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl."""
-
     def __init__(self) -> None:
         super().__init__(_QUERY_PHASE_LABELS)
 
 
 def _render_query_footer(console: Console, report: Report) -> None:
-    """Print a summary panel to *console* after a query run."""
     meta = report.pipeline_meta
     parts = [
         f"cost=${meta.cost_usd_total:.4f}",

@@ -1,8 +1,7 @@
 """Recording wrappers: forward to a real client, write a cassette on success.
 
-Lives under `slopmortem/evals/` rather than `slopmortem/llm/` so production
-LLM modules don't pull in test infrastructure. Import direction is one-way:
-`evals → llm`, never the reverse.
+Lives under ``slopmortem/evals/`` not ``slopmortem/llm/`` so prod doesn't
+pull in test infra. Import direction is one-way: ``evals → llm``.
 """
 
 from __future__ import annotations
@@ -32,13 +31,13 @@ _PREVIEW_CHARS_TEXT = 200
 
 
 def _tool_name(t: object) -> str:
-    """Best-effort string name for a tool object; falls back to `str(t)`."""
+    """Best-effort string name for a tool object; falls back to ``str(t)``."""
     name = getattr(t, "name", None)
     return str(name) if name is not None else str(t)  # pyright: ignore[reportAny]
 
 
 class RecordingLLMClient:
-    """Wrap a real `LLMClient`; write one LLM cassette per `complete()` call."""
+    """Wrap a real ``LLMClient``; write one cassette per ``complete()`` call."""
 
     def __init__(  # noqa: PLR0913 — wrapper exposes every recording knob explicitly
         self,
@@ -50,12 +49,6 @@ class RecordingLLMClient:
         max_cost_usd: float | None = None,
         on_cost: Callable[[float], None] | None = None,
     ) -> None:
-        """Bind ``inner`` and the output directory; ``max_cost_usd`` aborts before inner.
-
-        ``on_cost``, when set, fires after every successful inner call with the
-        per-call USD delta. The recorder helper aggregates these into a running
-        total it pushes to its progress sink.
-        """
         self._inner = inner
         self._out_dir = out_dir
         self._stage = stage
@@ -76,7 +69,6 @@ class RecordingLLMClient:
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
     ) -> CompletionResult:
-        """Forward to ``self._inner.complete`` then persist a cassette on success."""
         if self._max_cost_usd is not None and self._spent_usd >= self._max_cost_usd:
             raise RecordingBudgetExceededError(
                 spent=self._spent_usd,
@@ -123,15 +115,19 @@ class RecordingLLMClient:
         )
         write_llm_cassette(cas, self._out_dir, stage=self._stage)
         self._spent_usd += result.cost_usd
-        # Hook fires after the internal counter so an on_cost handler that
-        # reads back into the wrapper sees a consistent view.
+        # After the counter so handlers reading back into the wrapper see a
+        # consistent view.
         if self._on_cost is not None:
             self._on_cost(result.cost_usd)
         return result
 
 
 class RecordingEmbeddingClient:
-    """Wrap a real `EmbeddingClient`; write one cassette per text per `embed()`."""
+    """Wrap a real ``EmbeddingClient``; write one cassette per text per ``embed()``.
+
+    ``on_cost`` is always called with ``0.0`` under the default fastembed
+    provider; only the OpenAI provider moves the meter.
+    """
 
     def __init__(
         self,
@@ -140,27 +136,17 @@ class RecordingEmbeddingClient:
         out_dir: Path,
         on_cost: Callable[[float], None] | None = None,
     ) -> None:
-        """Bind ``inner`` and the output directory.
-
-        ``on_cost``, when set, fires after every successful inner call with
-        the per-call USD delta from :class:`EmbeddingResult`. Under the
-        default ``embedding_provider="fastembed"`` this is always ``0.0`` —
-        the meter only moves under the OpenAI provider.
-        """
         self._inner = inner
         self._out_dir = out_dir
         self._on_cost = on_cost
 
     @property
     def model(self) -> str:
-        """Forward the wrapped client's ``model`` attribute (not part of the Protocol)."""
-        # The EmbeddingClient Protocol does not expose `.model`, but every concrete
-        # impl (OpenAI/Fake) does. Accept the dynamic attribute access at the seam.
+        """Forward the wrapped client's ``model`` (not in the Protocol; every impl exposes it)."""
         inner_model: object = getattr(self._inner, "model", "")
         return str(inner_model) if inner_model else ""
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        """Forward to ``self._inner.embed`` and write one cassette per text."""
         result = await self._inner.embed(texts, model=model)
         eff_model = model or self.model
         for text, vector in zip(texts, result.vectors, strict=True):
@@ -178,7 +164,7 @@ class RecordingEmbeddingClient:
 
 
 class RecordingSparseEncoder:
-    """Wrap a sparse-encoder callable; write one cassette per `__call__`."""
+    """Wrap a sparse-encoder callable; write one cassette per ``__call__``."""
 
     def __init__(
         self,
@@ -192,7 +178,6 @@ class RecordingSparseEncoder:
         self._model = model
 
     def __call__(self, text: str) -> dict[int, float]:
-        """Run ``inner(text)`` and persist a sparse cassette before returning the result."""
         result = self._inner(text)
         _, text_hash = embed_cassette_key(text=text, model=self._model)
         if result:

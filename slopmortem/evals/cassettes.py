@@ -92,7 +92,7 @@ _IGNORE = ConfigDict(extra="ignore", protected_namespaces=())
 
 
 class LlmCassette(BaseModel):
-    """LLM cassette: flat consumer-facing shape. Validated via Pydantic on load."""
+    """LLM cassette: flat consumer-facing shape, Pydantic-validated on load."""
 
     model_config = _FROZEN_IGNORE
 
@@ -111,8 +111,6 @@ class LlmCassette(BaseModel):
 
 
 class EmbeddingCassette(BaseModel):
-    """Dense embedding cassette."""
-
     model_config = _FROZEN_IGNORE
 
     model: str
@@ -133,9 +131,9 @@ class SparseCassette(BaseModel):
     text_preview: str
 
 
-# Read-side envelope models mirror the on-disk JSON. `extra="ignore"` is the
-# P12 forward-compat hook: a future writer adding `logprobs` or `trace_id`
-# deserializes cleanly under the current reader.
+# Read-side envelope models mirror the on-disk JSON. ``extra="ignore"`` lets
+# a future writer add fields (logprobs, trace_id, …) without breaking older
+# readers.
 
 
 class _LlmKey(BaseModel):
@@ -195,7 +193,7 @@ _EMBED_ADAPTER: TypeAdapter[_EmbedEnvelope] = TypeAdapter(_EmbedEnvelope)
 
 
 def write_llm_cassette(cas: LlmCassette, out_dir: Path, *, stage: str) -> Path:
-    """Write `cas` to `<out_dir>/<stage>__<slug(model)>__<prompt_hash>.json`."""
+    """Write to ``<out_dir>/<stage>__<slug(model)>__<prompt_hash>.json``."""
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{stage}__{_slugify_model(cas.model)}__{cas.prompt_hash}.json"
     path = out_dir / fname
@@ -231,7 +229,7 @@ def write_llm_cassette(cas: LlmCassette, out_dir: Path, *, stage: str) -> Path:
 
 
 def write_embedding_cassette(cas: EmbeddingCassette, out_dir: Path) -> Path:
-    """Write a dense-embedding cassette under `<out_dir>/embed__<slug(model)>__<text_hash>.json`."""
+    """Write to ``<out_dir>/embed__<slug(model)>__<text_hash>.json``."""
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"embed__{_slugify_model(cas.model)}__{cas.text_hash}.json"
     path = out_dir / fname
@@ -255,7 +253,7 @@ def write_embedding_cassette(cas: EmbeddingCassette, out_dir: Path) -> Path:
 
 
 def write_sparse_cassette(cas: SparseCassette, out_dir: Path) -> Path:
-    """Write a sparse-embedding cassette under `<out_dir>/embed__<slug>__<text_hash>.json`."""
+    """Write to ``<out_dir>/embed__<slug>__<text_hash>.json`` (sparse variant)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"embed__{_slugify_model(cas.model)}__{cas.text_hash}.json"
     path = out_dir / fname
@@ -287,18 +285,17 @@ def _read_json_object(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         msg = f"cassette {path} top-level must be an object"
         raise CassetteFormatError(msg)
-    # JSON object keys are always strings. Cast keeps the static type honest.
+    # JSON object keys are always strings; cast keeps static type honest.
     return cast("dict[str, object]", raw)
 
 
 def load_llm_cassettes(
     scope_dir: Path,
 ) -> Mapping[tuple[str, str, str], LlmCassette]:
-    """Load every `<stage>__*.json` (non-`embed__`) under `scope_dir`.
+    """Load every ``<stage>__*.json`` (non-``embed__``) under ``scope_dir``.
 
-    Validates each file via `TypeAdapter[_LlmEnvelope]` (P16): a cassette
-    with the wrong type for `cost_usd` raises `CassetteFormatError` with
-    the path, not a confusing `TypeError` later at use site.
+    A bad type (e.g. ``cost_usd`` as a string) raises ``CassetteFormatError``
+    with the path here, not a confusing ``TypeError`` later at use site.
     """
     out: dict[tuple[str, str, str], LlmCassette] = {}
     if not scope_dir.exists():
@@ -341,7 +338,10 @@ def load_embedding_cassettes(
     Mapping[tuple[str, str], list[float]],
     Mapping[tuple[str, str], tuple[list[int], list[float]]],
 ]:
-    """Load every `embed__*.json` under `scope_dir`; split sparse vs dense via response shape."""
+    """Load every ``embed__*.json`` under ``scope_dir``.
+
+    Splits sparse vs dense via response shape.
+    """
     dense: dict[tuple[str, str], list[float]] = {}
     sparse: dict[tuple[str, str], tuple[list[int], list[float]]] = {}
     if not scope_dir.exists():
@@ -378,12 +378,10 @@ def load_row_fakes(
     scope_dir: Path,
     cfg: Config,
 ) -> tuple[FakeLLMClient, FakeEmbeddingClient, Callable[[str], dict[int, float]]]:
-    """Load cassettes from *scope_dir* and build the LLM/embed/sparse fakes for one row.
+    """Build the ``(fake_llm, fake_embed, sparse_encoder)`` triple for one row from cassettes.
 
-    Returns ``(fake_llm, fake_embed, sparse_encoder)`` ready to pass into
-    ``pipeline.run_query``. The sparse encoder closure raises
-    ``NoCannedEmbeddingError`` on miss; the LLM/dense fakes raise their own
-    miss errors at call time.
+    The sparse encoder closure raises ``NoCannedEmbeddingError`` on miss; the
+    LLM/dense fakes raise their own miss errors at call time.
     """
     llm_canned: dict[tuple[str, str, str], FakeResponse | CompletionResult] = {
         k: FakeResponse(

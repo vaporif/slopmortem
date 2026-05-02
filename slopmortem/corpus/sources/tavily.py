@@ -1,4 +1,4 @@
-"""TavilyEnricher: recovers article bodies via Tavily /extract for empty raw_html."""
+"""TavilyEnricher: Tavily /extract recovery for entries with empty raw_html."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 def _pick_raw_content(payload: object) -> str | None:
-    """Extract ``results[0].raw_content`` from a Tavily /extract JSON payload."""
     if not isinstance(payload, dict):
         return None
     payload_dict = cast("dict[str, object]", payload)
@@ -41,19 +40,7 @@ class TavilyEnricher:
     """[Enricher] Tavily /extract client that recovers article bodies on empty entries."""
 
     async def enrich(self, entry: RawEntry) -> RawEntry:
-        """Populate ``raw_html``/``markdown_text`` from Tavily when the live URL is dead.
-
-        Best-effort. Returns *entry* unchanged on missing API key, missing URL,
-        already-populated raw_html, HTTP error, empty response, or any
-        Tavily-side failure.
-
-        Args:
-            entry: A ``RawEntry`` produced by an upstream :class:`Source`.
-
-        Returns:
-            The same entry, optionally with ``raw_html`` and ``markdown_text``
-            filled from Tavily's recovered content.
-        """
+        """Best-effort. Returns *entry* unchanged on failure or when raw_html is populated."""
         if entry.raw_html is not None and entry.raw_html.strip():
             return entry
         if not entry.url:
@@ -71,7 +58,6 @@ class TavilyEnricher:
         return entry.model_copy(update={"raw_html": raw_content, "markdown_text": markdown_text})
 
     async def _fetch_raw_content(self, url: str, api_key: str) -> str | None:
-        """Hit Tavily /extract and return the recovered article body or ``None``."""
         try:
             resp = await safe_post(
                 TAVILY_EXTRACT_URL,

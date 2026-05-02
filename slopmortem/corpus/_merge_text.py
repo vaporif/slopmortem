@@ -14,8 +14,6 @@ _SEPARATOR = "\n\n---\n\n"
 
 @dataclass(frozen=True, slots=True)
 class Section:
-    """One source's contribution to a canonical entry's combined text."""
-
     text: str
     reliability_rank: int
     source_id: str

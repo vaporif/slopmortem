@@ -1,13 +1,8 @@
 # ruff: noqa: FBT002 - typer signatures are bool flags with False defaults by convention.
 """``slopmortem query`` subcommand.
 
-Production entry point for the synthesis pipeline. Loads :class:`Config`,
-starts Laminar tracing (gated on the endpoint guard in :mod:`slopmortem.tracing`
-plus an env-var API key), builds the real OpenRouter LLM client, the OpenAI
-embedding client, and the Qdrant corpus, then dispatches to
-:func:`slopmortem.pipeline.run_query`. Stage progress goes to stderr
-(TTY-gated); the rendered Markdown report goes to stdout (with ``--stdout``)
-or to ``.slopmortem/runs/<utc-ts>-<slug>.md`` by default.
+Stage progress goes to stderr (TTY-gated); the rendered Markdown report goes to
+stdout (with ``--stdout``) or to ``.slopmortem/runs/<utc-ts>-<slug>.md``.
 """
 
 from __future__ import annotations
@@ -56,13 +51,11 @@ Try broadening the description or removing the `--years` filter."""
 
 
 def _slugify(text: str) -> str:
-    """Lowercase, collapse non-alphanumerics to ``-``, truncate to 40 chars."""
     s = _SLUG_RE.sub("-", text.lower()).strip("-")
     return s[:_SLUG_MAX].rstrip("-") or "run"
 
 
 def _query_run_path(ctx: InputContext) -> Path:
-    """Return ``.slopmortem/runs/<utc-ts>-<slug>.md`` for this run."""
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     base = ctx.name if ctx.name and ctx.name != "(unnamed)" else ctx.description
     return _RUNS_DIR / f"{ts}-{_slugify(base)}.md"
@@ -133,7 +126,6 @@ async def _query(
     debug_retrieve: bool = False,
     to_stdout: bool = False,
 ) -> None:
-    """Async impl for ``slopmortem query``. Wires production deps and dispatches."""
     config = load_config()
     _maybe_init_tracing(config)
     llm, embedder, corpus, budget = _build_deps(config)
@@ -196,7 +188,6 @@ async def _debug_retrieve(
     corpus: Corpus,
     config: Config,
 ) -> None:
-    """Run facet_extract + retrieve and print the candidate list to stdout."""
     facets = await extract_facets(
         ctx.description,
         llm,

@@ -1,10 +1,7 @@
-"""Wayback enricher. Recovers content for curated rows whose live URL is dead.
+"""Wayback enricher: recovers content for entries whose live URL is dead.
 
-Narrow v1 role: take a ``RawEntry`` whose ``raw_html`` is empty, hit the
-Wayback availability API
-(``https://archive.org/wayback/available?url=<url>``), and if there's a
-snapshot, fetch it and stash the response in ``raw_html`` + ``markdown_text``.
-No-op when ``raw_html`` is already populated.
+Hits the availability API; on a snapshot, fetches it into ``raw_html`` +
+``markdown_text``. No-op when ``raw_html`` is already populated.
 """
 
 from __future__ import annotations
@@ -39,7 +36,6 @@ def _availability_url(target: str) -> str:
 def _pick_snapshot_url(
     payload: dict[str, Any] | None,  # pyright: ignore[reportExplicitAny]
 ) -> str | None:
-    """Return the closest available snapshot URL from a Wayback availability payload."""
     if not payload:
         return None
     snapshots: object = payload.get("archived_snapshots") or {}
@@ -67,12 +63,6 @@ class WaybackEnricher:
         user_agent: str = USER_AGENT,
         rps: float = 1.0,
     ) -> None:
-        """Build a Wayback enricher.
-
-        Args:
-            user_agent: UA string sent on outbound requests.
-            rps: Per-host throttle budget; defaults to 1 request/second.
-        """
         self.user_agent = user_agent
         self.rps = rps
 
@@ -103,7 +93,6 @@ class WaybackEnricher:
         if resp.status_code >= HTTP_BAD_REQUEST:
             return None
         try:
-            # Wayback returns a JSON object; downstream narrows with isinstance.
             payload = cast(
                 "dict[str, Any]",  # pyright: ignore[reportExplicitAny]
                 resp.json(),
@@ -113,22 +102,12 @@ class WaybackEnricher:
         return payload
 
     async def enrich(self, entry: RawEntry) -> RawEntry:
-        """Populate ``raw_html``/``markdown_text`` from Wayback when the live URL is dead.
+        """Skip when *any* body is already present.
 
-        Skipped when *any* body content is already present, either ``raw_html``
-        (curated path) or ``markdown_text`` (HN path, where the source supplied
-        title + story_text directly). Without the markdown_text guard, a
-        successful Wayback recovery would *overwrite* HN's own body with whatever
-        the linked URL's snapshot happened to be, a quality regression on top of
-        the latency cost (archive.org is ~5x slower for deep-linked HN URLs than
-        for the root-domain Crunchbase URLs Wayback was actually designed for).
-
-        Args:
-            entry: A ``RawEntry`` produced by an upstream :class:`Source`.
-
-        Returns:
-            The same entry, optionally with ``raw_html`` and ``markdown_text`` filled
-            from the closest available Wayback snapshot.
+        The ``markdown_text`` guard matters for HN: without it, a Wayback
+        recovery would overwrite HN's own title+story_text with whatever the
+        linked URL's snapshot happened to be — quality regression on top of
+        the latency cost (archive.org is ~5x slower for deep-linked HN URLs).
         """
         if entry.raw_html is not None and entry.raw_html.strip():
             return entry

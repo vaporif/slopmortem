@@ -1,6 +1,8 @@
-"""Consolidate-risks stage: one Sonnet call sees the pitch plus every per-candidate
-lesson and returns up to 10 risks that apply, each with a severity bucket and the
-comparables that raised it.
+"""Consolidate-risks stage.
+
+One Sonnet call sees the pitch plus every per-candidate lesson and returns
+up to 10 risks that apply, each with a severity bucket and the comparables
+that raised it.
 """
 
 from __future__ import annotations
@@ -41,7 +43,9 @@ async def consolidate_risks(  # noqa: PLR0913 — every dep is required wiring a
     model: str,
     max_tokens: int,
 ) -> TopRisks:
-    """Returns an empty :class:`TopRisks` when ``syntheses`` is empty or when any
+    """Consolidate per-candidate lessons into a deduplicated risk list.
+
+    Returns an empty :class:`TopRisks` when ``syntheses`` is empty or when any
     upstream synthesis flagged an injection attempt.
     """
     if not syntheses:

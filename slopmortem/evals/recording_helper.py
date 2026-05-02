@@ -51,8 +51,6 @@ _FIXED_TICKS_PER_ROW = 3
 
 @dataclass(frozen=True, slots=True)
 class RecordResult:
-    """Aggregate counters for one ``record_cassettes_for_inputs`` invocation."""
-
     rows_total: int
     rows_succeeded: int
     cassettes_written: int
@@ -60,7 +58,7 @@ class RecordResult:
 
 
 def _sweep_stale_recording_dirs(root: Path, *, max_age_seconds: int) -> None:
-    """Best-effort: remove ``*.recording`` dirs under ``root`` older than ``max_age_seconds``."""
+    """Best-effort: remove ``*.recording`` dirs older than ``max_age_seconds``."""
     if not root.exists():
         return
     cutoff = time.time() - max_age_seconds
@@ -73,7 +71,7 @@ def _sweep_stale_recording_dirs(root: Path, *, max_age_seconds: int) -> None:
 
 
 def _atomic_swap(*, tmp_dir: Path, real_dir: Path) -> None:
-    """Two-step rename so a SIGKILL leaves either ``real_dir`` or ``real_dir.old`` intact, never a half-written canonical dir."""
+    """Two-step rename so SIGKILL always leaves ``real_dir`` or ``real_dir.old`` intact."""
     old = real_dir.parent / (real_dir.name + ".old")
     if old.exists():
         shutil.rmtree(old, ignore_errors=True)
@@ -86,7 +84,7 @@ def _atomic_swap(*, tmp_dir: Path, real_dir: Path) -> None:
 
 @contextmanager
 def _tavily_off(config: Config) -> Generator[Config]:
-    """Yield a ``Config`` copy with ``enable_tavily_synthesis=False`` (Risk 6)."""
+    """Yield a ``Config`` copy with ``enable_tavily_synthesis=False``."""
     yield config.model_copy(update={"enable_tavily_synthesis": False})
 
 
@@ -103,12 +101,12 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
 ) -> RecordResult:
     """Record cassettes for every input in ``inputs`` under ``output_dir/<scope>/``.
 
-    Rows run under ``CapacityLimiter(max_concurrent_rows)``; the default
-    keeps in-flight Sonnet calls under typical OpenRouter per-key limits.
-    Failed rows clean their tmp dirs; the first failure re-raises after the
-    others settle. Tavily is forced off.
+    Rows run under ``CapacityLimiter(max_concurrent_rows)`` — default keeps
+    in-flight Sonnet calls under typical OpenRouter per-key limits. Failed
+    rows clean their tmp dirs; the first failure re-raises after siblings
+    settle. Tavily is forced off.
     """
-    # Lazy: ``runner`` imports back into this module.
+    # Lazy: runner imports back into this module.
     from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
     from slopmortem.evals.runner import (  # noqa: PLC0415
         _row_id,  # pyright: ignore[reportPrivateUsage]
@@ -134,9 +132,8 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             qdrant_url=qdrant_url,
         ) as corpus:
             set_query_corpus(corpus)
-            # Shared Budget sized to the worst-case run total so it never
-            # starves a row; per-row caps are enforced by each
-            # ``RecordingLLMClient`` via its own ``max_cost_usd``.
+            # Shared Budget sized to worst-case run total so it never starves
+            # a row; per-row caps live on each RecordingLLMClient.
             budget = Budget(
                 cap_usd=max(
                     cfg.max_cost_usd_per_query,
@@ -163,8 +160,8 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             async def _record_row(ctx: InputContext) -> None:
                 nonlocal cassettes_written, rows_succeeded
                 async with limiter:
-                    # Share dir naming with replay (``runner._row_id``) so
-                    # anonymous inputs hit the same ``<sha1[:8]>`` slot.
+                    # Share dir naming with replay (runner._row_id) so
+                    # anonymous inputs land in the same <sha1[:8]> slot.
                     scope_name = _row_id(ctx)
                     real_dir = output_dir / scope_name
                     tmp_dir = (
@@ -265,7 +262,6 @@ class _ByModelLLM:
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
     ) -> CompletionResult:
-        """Forward ``complete`` to the wrapper keyed by ``model`` (raises ``KeyError`` if unmapped)."""
         if model is None or model not in self._by_model:
             msg = f"no recording wrapper for model={model!r}"
             raise KeyError(msg)
@@ -282,12 +278,12 @@ class _ByModelLLM:
 
 
 class _AggregateProgressBridge:
-    """Funnel one row's :class:`QueryPhase` advances into the shared ROWS bar.
+    """Funnel one row's ``QueryPhase`` advances into the shared ROWS bar.
 
-    The sink's total is pre-summed across rows so percentage tracks subtask
-    completion. Inline ``set_phase_status`` is dropped under parallel mode
-    (concurrent rows would race the status line). :meth:`top_up` settles
-    rows that fire fewer SYNTHESIZE advances than budgeted.
+    Sink total is pre-summed across rows so percentage tracks subtask
+    completion. ``set_phase_status`` is a no-op under parallel mode
+    (concurrent rows would race the status line). ``top_up`` settles rows
+    that fire fewer SYNTHESIZE advances than budgeted.
     """
 
     def __init__(self, sink: RecordProgress, ticks_per_row: int) -> None:

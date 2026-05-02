@@ -1,9 +1,9 @@
-"""Pure predicates over a Synthesis. Eval runner owns regression semantics.
+"""Pure predicates over a Synthesis; the eval runner owns regression semantics.
 
 In ``--live`` mode the Corpus Protocol exposes neither payload sources nor
 bodies, so the runner skips ``all_sources_in_allowed_domains`` /
-``claims_grounded_in_body`` (they'd vacuously pass) and constructs the
-allowlist itself.
+``claims_grounded_in_body`` (they'd vacuously pass) and builds the allowlist
+itself.
 """
 
 from __future__ import annotations
@@ -17,16 +17,11 @@ if TYPE_CHECKING:
 
 
 def where_diverged_nonempty(s: Synthesis) -> bool:
-    """True iff where_diverged has at least one non-whitespace char."""
     return bool(s.where_diverged and s.where_diverged.strip())
 
 
 def all_sources_in_allowed_domains(s: Synthesis, allowed_hosts: set[str]) -> bool:
-    """True iff every URL in s.sources resolves to a host in allowed_hosts.
-
-    Empty s.sources is vacuously True. URLs that urlparse cannot resolve
-    to a hostname count as a miss.
-    """
+    """Empty ``s.sources`` is vacuously True; an unresolvable hostname counts as a miss."""
     for url in s.sources:
         host = urlparse(url).hostname
         if host is None:
@@ -37,15 +32,14 @@ def all_sources_in_allowed_domains(s: Synthesis, allowed_hosts: set[str]) -> boo
 
 
 def lifespan_months_positive(s: Synthesis) -> bool:
-    """True iff lifespan_months is None or strictly positive."""
     if s.lifespan_months is None:
         return True
     return s.lifespan_months > 0
 
 
 # Trailing-word capture catches fabricated qualifiers: "1.7 million US customers"
-# matches as "1.7 million US", which then fails the substring check against body
-# "1.7 million customers". re.VERBOSE allows the inline `#` annotations.
+# matches as "1.7 million US", which then fails the substring check against
+# body "1.7 million customers".
 _NUMERIC_CLAIM_RE = re.compile(
     r"""
     \$?(?:\d[\d,.]*\d|\d)                          # currency-prefixed digit cluster
@@ -57,7 +51,7 @@ _NUMERIC_CLAIM_RE = re.compile(
 
 
 def claims_grounded_in_body(s: Synthesis, body: str) -> bool:
-    """True iff every numeric-looking claim in ``s`` appears verbatim in ``body``.
+    """Every numeric-looking claim in ``s`` appears verbatim in ``body``.
 
     Tolerant of false positives; re-record the baseline if the rule
     legitimately disagrees.

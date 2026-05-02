@@ -31,7 +31,9 @@ if TYPE_CHECKING:
 
 
 def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
-    """Shared by the production stage and tests so both stay in lockstep when
+    """Build the kwargs dict for the ``synthesize`` prompt template.
+
+    Shared by the production stage and tests so both stay in lockstep when
     the template's variable list changes.
     """
     payload = candidate.payload
@@ -71,7 +73,9 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
     model: str | None = None,
     max_tokens: int | None = None,
 ) -> Synthesis:
-    """``sources`` is passed through from ``candidate.payload.sources`` rather
+    """Synthesize one candidate against *ctx*.
+
+    ``sources`` is passed through from ``candidate.payload.sources`` rather
     than asked of the LLM — the LLM never sees provenance URLs, so asking
     produced empty or hallucinated lists.
 
@@ -127,12 +131,11 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     max_tokens: int | None = None,
     on_candidate_done: Callable[[BaseException | None], None] | None = None,
 ) -> list[Synthesis | BaseException]:
-    """Cache-warm fan-out: one warm call, then :func:`gather_resilient` for the rest.
+    """Fan out :func:`synthesize` across *candidates* with cache-warm + resilient gather.
 
     First call runs alone so the prompt cache is populated before parallel
-    calls race to write it. Remaining calls use :func:`gather_resilient` so
-    a single failure doesn't cancel siblings — exceptions are returned
-    in-list, not raised.
+    calls race to write it. The rest use :func:`gather_resilient` so a single
+    failure doesn't cancel siblings — exceptions are returned in-list.
     """
     if not candidates:
         return []

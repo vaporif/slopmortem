@@ -21,7 +21,9 @@ async def extract_facets(
     *,
     max_tokens: int | None = None,
 ) -> Facets:
-    """Malformed or out-of-taxonomy output raises Pydantic ``ValidationError``;
+    """Extract :class:`Facets` from *text*.
+
+    Malformed or out-of-taxonomy output raises Pydantic ``ValidationError``;
     per-entry ingest isolation absorbs this without aborting the run.
     """
     prompt = render_prompt("facet_extract", description=text)

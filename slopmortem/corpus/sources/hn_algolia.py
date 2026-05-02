@@ -1,29 +1,13 @@
-"""HN Algolia source. Chronological obituary coverage via the Algolia REST API.
+"""HN Algolia source: chronological obituary coverage via the Algolia REST API.
 
-Endpoint pinned to ``/api/v1/search_by_date`` (chronological, newest-first),
-not ``/search`` (relevance-ranked). Relevance ranking would re-surface the
-same long-tail popular threads on every ingest.
+Endpoint pinned to ``/search_by_date`` (chronological), not ``/search``
+(relevance-ranked) — relevance ranking would re-surface the same long-tail
+popular threads on every ingest.
 
-Query params:
-* ``tags=story``
-* ``query=<term>``
-* ``numericFilters=created_at_i>=<since-epoch>`` for incremental ingest
-* paginated via ``page=<n>`` until ``nbPages`` is exhausted
-
-All HTTP goes through :func:`safe_get` (SSRF-hardened) with the configured
-``slopmortem/<version> (+<repo>)`` UA, gated by the per-host throttle and
-robots.txt check from :mod:`._throttle`.
-
-Why not the official ``algoliasearch`` Python client?
-* HN's Algolia mirror is a public read-only REST endpoint (no ``app_id`` /
-  ``api_key`` pair). The official client is built around app-keyed indices
-  and cluster discovery, so configuring it would just route back to the same
-  URL through more layers.
-* The official client ships its own httpx/aiohttp transport with retry and
-  failover. That would bypass :func:`safe_get`, which is the project's single
-  SSRF chokepoint for outbound HTTP from sources.
-* vcrpy cassettes record cleanly against direct ``safe_get`` calls; the
-  client's connection pooling and retry logic make cassettes brittle.
+Direct ``safe_get`` calls instead of the official ``algoliasearch`` client:
+HN's mirror is a public read-only REST endpoint (no app_id/api_key), the
+official client would bypass our single SSRF chokepoint, and vcrpy cassettes
+record cleanly without its retry/pooling layer.
 """
 
 from __future__ import annotations
@@ -61,35 +45,20 @@ class HNAlgoliaSource:
         user_agent: str = USER_AGENT,
         rps: float = 1.0,
     ) -> None:
-        """Build an HN Algolia source.
-
-        Args:
-            query: Search term passed as ``query=``.
-            since_epoch: Optional ``created_at_i>=`` lower bound for incremental ingest.
-            user_agent: UA string sent on outbound requests.
-            rps: Per-host throttle budget; defaults to 1 request/second.
-        """
         self.query = query
         self.since_epoch = since_epoch
         self.user_agent = user_agent
         self.rps = rps
 
     def build_url(self, *, page: int) -> str:
-        """Construct the request URL for *page*.
-
-        Args:
-            page: Zero-based page index.
-
-        Returns:
-            Fully-qualified URL pointing at the ``search_by_date`` endpoint.
-        """
+        """*page* is zero-based."""
         params = [
             f"query={quote_plus(self.query)}",
             "tags=story",
             f"page={page}",
         ]
         if self.since_epoch is not None:
-            # numericFilters=created_at_i>=<epoch>; the >= must be URL-encoded.
+            # numericFilters=created_at_i>=<epoch>; the ``>=`` must be URL-encoded.
             params.append(f"numericFilters={quote_plus(f'created_at_i>={self.since_epoch}')}")
         return f"{ENDPOINT}?{'&'.join(params)}"
 
@@ -115,7 +84,6 @@ class HNAlgoliaSource:
         )
 
     async def fetch(self) -> AsyncIterator[RawEntry]:
-        """Yield ``RawEntry`` per ``hits`` row across every page until ``nbPages``."""
         page = 0
         while True:
             url = self.build_url(page=page)
@@ -127,7 +95,6 @@ class HNAlgoliaSource:
             if resp.status_code >= HTTP_BAD_REQUEST:
                 logger.warning("hn_algolia: HTTP %s for %s", resp.status_code, url)
                 return
-            # Algolia returns a JSON object; we narrow with isinstance below.
             payload = cast(
                 "dict[str, Any]",  # pyright: ignore[reportExplicitAny]
                 resp.json(),

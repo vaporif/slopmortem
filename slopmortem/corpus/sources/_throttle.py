@@ -1,15 +1,9 @@
 """Per-host throttle and robots.txt cache for source adapters.
 
-* :func:`throttle_for` — process-wide token bucket keyed on host. Default
-  budget: 1 req/sec/host. In-memory dict instead of ``aiolimiter`` because the
-  call surface is ~30 LOC and a new dep isn't worth it.
-* :func:`respect_robots` — fetch and parse the host's ``robots.txt`` once per
-  process, then ask :class:`urllib.robotparser.RobotFileParser` whether *url*
-  is permitted for the configured user agent.
-
-Both helpers send outbound HTTP through :func:`slopmortem.http.safe_get` and
-don't care which source adapter calls them. Curated, HN, and Wayback all
-share one instance. Crunchbase CSV reads the filesystem and skips both.
+Process-wide token bucket keyed on host (default 1 req/sec/host) plus a
+per-host ``robots.txt`` cache. Outbound HTTP goes through ``safe_get``; one
+shared instance for curated, HN, and Wayback. Crunchbase CSV is filesystem-
+only and skips both.
 """
 
 from __future__ import annotations
@@ -51,16 +45,7 @@ def _host_of(url: str) -> str:
 
 
 async def throttle_for(url: str, *, rps: float = DEFAULT_RPS) -> None:
-    """Sleep just long enough that the next outbound call to *url*'s host respects *rps*.
-
-    The token bucket is process-wide and keyed on hostname. Sequential calls to
-    the same host are at least ``1/rps`` seconds apart; calls to different hosts
-    are independent.
-
-    Args:
-        url: The URL about to be fetched.
-        rps: Requests-per-second budget for this host. Defaults to 1.0.
-    """
+    """Sequential calls to the same host stay at least ``1/rps`` apart; hosts run independently."""
     host = _host_of(url)
     interval = 1.0 / max(rps, 1e-6)
     async with _throttle_lock:
@@ -73,7 +58,7 @@ async def throttle_for(url: str, *, rps: float = DEFAULT_RPS) -> None:
 
 
 def reset_throttle_state() -> None:
-    """Clear the per-host throttle and robots cache. Tests use this between cases."""
+    """Tests use this between cases to clear the per-host throttle and robots cache."""
     _last_call.clear()
     _robots_cache.clear()
 
@@ -83,7 +68,7 @@ async def _load_robots(host: str, scheme: str) -> RobotFileParser | None:
     try:
         resp = await safe_get(robots_url)
     except (SSRFBlockedError, httpx.HTTPError):
-        # No robots fetched. Default to "allowed" by returning None.
+        # No robots fetched → default to allowed.
         return None
     if resp.status_code >= HTTP_BAD_REQUEST:
         return None
@@ -93,19 +78,7 @@ async def _load_robots(host: str, scheme: str) -> RobotFileParser | None:
 
 
 async def respect_robots(url: str, *, user_agent: str = USER_AGENT) -> bool:
-    """Return whether *user_agent* is allowed to fetch *url* per robots.txt.
-
-    Returns ``True`` on any failure to fetch or parse robots.txt. Robots is
-    etiquette, not a security boundary; the SSRF wrapper is the real
-    outbound-network gate.
-
-    Args:
-        url: The URL the caller wants to fetch.
-        user_agent: UA token to check rules against.
-
-    Returns:
-        ``True`` if the URL is permitted (or robots is unreachable), else ``False``.
-    """
+    """Returns ``True`` on any failure — robots is etiquette; the SSRF wrapper is the boundary."""
     parsed = urlparse(url)
     host = parsed.hostname
     scheme = parsed.scheme or "https"

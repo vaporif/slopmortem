@@ -1,8 +1,4 @@
-"""Async context manager for an ephemeral Qdrant collection.
-
-Spins a uniquely-named collection, populates it from a JSONL fixture, and
-drops it on exit.
-"""
+"""Async context manager for an ephemeral Qdrant collection: spin, populate from JSONL, drop."""
 
 from __future__ import annotations
 
@@ -33,12 +29,11 @@ async def setup_ephemeral_qdrant(
 ) -> AsyncGenerator[QdrantCorpus]:
     """Spin a uniquely-named collection, populate from JSONL, drop on exit.
 
-    Collection name embeds ``pid + uuid4`` so a leak from ``kill -9`` is
-    identifiable and droppable manually. No startup sweep — a prefix-wide
-    sweep is unsafe under pytest-xdist (a sibling worker's still-active
-    collection would get dropped). ``post_mortems_root`` defaults to
-    ``/tmp/slopmortem_eval`` and is only used by ``get_post_mortem``, which
-    the recording path doesn't exercise.
+    Name embeds ``pid + uuid4`` so a ``kill -9`` leak is identifiable and
+    droppable manually. No startup sweep — under pytest-xdist a prefix-wide
+    sweep would drop a sibling worker's still-active collection.
+    ``post_mortems_root`` only matters for ``get_post_mortem``, which the
+    recording path doesn't exercise.
     """
     name = f"{collection_prefix}{os.getpid()}_{uuid.uuid4().hex}"
     client = AsyncQdrantClient(url=qdrant_url)

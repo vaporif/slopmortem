@@ -84,7 +84,9 @@ async def _facet_summarize_fanout(
     config: Config,
     progress: IngestProgress | None = None,
 ) -> list[_FanoutResult | Exception]:
-    """Facet and summarize for the same entry run sequentially so two LLM calls
+    """Run facet+summarize across entries with bounded concurrency.
+
+    Facet and summarize for the same entry run sequentially so two LLM calls
     never share one limiter slot. Returns one :class:`_FanoutResult` per entry
     in order, or the exception that aborted it.
     """

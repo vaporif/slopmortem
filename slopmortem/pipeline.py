@@ -77,7 +77,9 @@ class NullQueryProgress:
 
 
 def cutoff_iso(years_filter: int | None) -> str | None:
-    """Floor to ``date()`` keeps the cutoff stable across the query's hour;
+    """Compute the ISO date cutoff for *years_filter*.
+
+    Floor to ``date()`` keeps the cutoff stable across the query's hour;
     retrieve takes dates (``YYYY-MM-DD``), not timestamps.
     """
     if years_filter is None:
@@ -180,7 +182,9 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     progress: QueryProgress | None = None,
     sparse_encoder: SparseEncoder | None = None,
 ) -> Report:
-    """Per-candidate synthesis exceptions are dropped silently; ``BudgetExceededError``
+    """Run the query pipeline end-to-end and assemble the :class:`Report`.
+
+    Per-candidate synthesis exceptions are dropped silently; ``BudgetExceededError``
     truncates the run and surfaces as ``pipeline_meta.budget_exceeded=True``.
     """
     t0 = time.monotonic()

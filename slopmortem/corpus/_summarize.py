@@ -1,8 +1,8 @@
 """LLM-backed summarizer that produces ``payload.summary`` for the rerank stage.
 
-The 400-token / 120-word output cap is a prompt-level contract in
-``slopmortem/llm/prompts/summarize.j2`` — the rerank stage budgets
-``K * summary`` tokens against it.
+The 400-token / 120-word cap is a prompt-level contract in
+``llm/prompts/summarize.j2``; the rerank stage budgets ``K * summary``
+tokens against it.
 """
 
 from __future__ import annotations
@@ -23,10 +23,7 @@ async def summarize_for_rerank(
     source_id: str = "",
     max_tokens: int | None = None,
 ) -> str:
-    """Produce ``payload.summary`` for the rerank stage.
-
-    ``source_id`` is embedded in the prompt's ``<untrusted_document>`` tag.
-    """
+    """``source_id`` is embedded in the prompt's ``<untrusted_document>`` tag."""
     prompt = render_prompt("summarize", body=text, source_id=source_id)
     result = await llm.complete(
         prompt,

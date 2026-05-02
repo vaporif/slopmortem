@@ -415,7 +415,7 @@ def _looks_tier1(canonical_id: str) -> bool:
 
 
 async def _is_parent_subsidiary_suspect(journal: MergeJournal, domain: str, new_name: str) -> bool:
-    """Flag a suffix-delta when the bare domain is journal-resident and the new name carries a corporate suffix.
+    """Flag a suffix-delta when the bare domain is in the journal and the name has a corp suffix.
 
     No per-row display-name persistence yet, so the heuristic is conservative.
     ``corporate_hierarchy_overrides.yml`` seeds explicit parent/subsidiary pairs
@@ -567,7 +567,10 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
     is_tier2: bool,
     tiebreaker_max_tokens: int | None = None,
 ) -> str:
-    """Only fires when ``is_tier2`` is True and a same-sector tier-2 sibling exists; ``same`` collapses onto it."""
+    """Collapse a tier-2 candidate onto a same-sector tier-2 sibling when ``same`` fires.
+
+    Only runs when ``is_tier2`` is True.
+    """
     if not is_tier2:
         return candidate_id
     rows = await journal.fetch_all()

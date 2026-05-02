@@ -1,15 +1,13 @@
 """Re-score quarantined docs; declassify survivors out of the quarantine tree.
 
-Survivors move from ``<post_mortems_root>/quarantine/<sha>.md`` to
-``<post_mortems_root>/raw/<source>/<text_id>.md`` (text_id = first 16 hex of
-content_sha256, matching :func:`slopmortem.ingest._text_id_for`); the
-quarantine row is dropped via :meth:`MergeJournal.drop_quarantine_row`.
+Survivors move from ``quarantine/<sha>.md`` to ``raw/<source>/<text_id>.md``
+(text_id = first 16 hex of content_sha256, matching ``ingest._text_id_for``);
+the quarantine row is dropped.
 
-No ``merge_state="pending"`` row is written here: the schema's
-``canonical_id TEXT NOT NULL`` constraint plus the resolver-flip semantics in
-:func:`slopmortem.corpus._entity_resolution.resolve_entity` need a real
-canonical_id, which only entity resolution can assign. The next normal ingest
-re-fetches through the source adapter and resolves from scratch.
+No ``merge_state="pending"`` row is written here — the schema's NOT NULL
+canonical_id constraint plus resolver-flip semantics need a real canonical_id,
+which only entity resolution can assign. The next ingest re-fetches and
+resolves from scratch.
 """
 
 from __future__ import annotations
@@ -35,8 +33,6 @@ _TEXT_ID_LEN = 16
 
 @dataclass
 class _Pending:
-    """A quarantine row whose body has been read and is ready to score."""
-
     sha: str
     source: str
     source_id: str
@@ -46,8 +42,6 @@ class _Pending:
 
 def _row_to_pending(row: dict[str, object], post_mortems_root: Path) -> _Pending | None:
     """Validate one ``quarantine_journal`` row and read its body; ``None`` on any failure."""
-    # journal cells come back as sqlite-Row values; narrow each key to ``str``
-    # before using it.
     sha = row["content_sha256"]
     source = row["source"]
     source_id = row["source_id"]
@@ -76,12 +70,7 @@ def _row_to_pending(row: dict[str, object], post_mortems_root: Path) -> _Pending
 async def _score_all(
     pending: list[_Pending], slop_classifier: SlopClassifier
 ) -> list[float | BaseException]:
-    """Score every pending body.
-
-    The first call is awaited in isolation before fan-out so any one-time
-    setup in the classifier (cache warm, HTTP connection pool, lazy model
-    load) happens once instead of in N racing copies.
-    """
+    """First call awaited alone so cache warm / lazy model load doesn't race the fan-out."""
     if not pending:
         return []
     scores: list[float | BaseException] = []
@@ -100,14 +89,7 @@ async def reclassify_quarantined(
     post_mortems_root: Path,
     slop_threshold: float,
 ) -> ReclassifyReport:
-    """Re-run the slop classifier against every row in ``quarantine_journal``.
-
-    Survivors (score < ``slop_threshold``, strict) are dropped from the
-    quarantine journal and their markdown files moved into
-    ``raw/<source>/<text_id>.md``. Docs that still score over threshold stay
-    in quarantine. Missing files or invalid paths bump ``errors`` and the
-    loop continues.
-    """
+    """Survivors (``< slop_threshold``) leave quarantine; missing/invalid files bump ``errors``."""
     rows = await journal.fetch_quarantined()
     total = len(rows)
     pending: list[_Pending] = []
@@ -129,8 +111,8 @@ async def reclassify_quarantined(
         if score >= slop_threshold:
             still_slop += 1
             continue
-        # Declassify: 16-char text_id matches ``slopmortem.ingest._text_id_for``
-        # so the next ingest pass sees a consistent path layout.
+        # text_id matches ``ingest._text_id_for`` so the next ingest pass sees
+        # a consistent path layout.
         text_id = p.sha[:_TEXT_ID_LEN]
         try:
             raw_path = safe_path(post_mortems_root, kind="raw", text_id=text_id, source=p.source)

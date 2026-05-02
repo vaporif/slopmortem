@@ -1,6 +1,8 @@
-"""Warm-cache pattern: first entry runs alone so the prompt prefix lands in the
-OpenRouter cache, the rest fan out concurrently. Preserves the
-CACHE_READ_RATIO_LOW invariant (see CLAUDE.md).
+"""Warm-cache pattern for ingest.
+
+First entry runs alone so the prompt prefix lands in the OpenRouter cache,
+the rest fan out concurrently. Preserves the CACHE_READ_RATIO_LOW invariant
+(see CLAUDE.md).
 """
 
 from __future__ import annotations
@@ -37,8 +39,10 @@ async def cache_warm(
     seed_text: str,
     max_tokens: int | None = None,
 ) -> tuple[bool, int, list[str]]:
-    """One serial summarize call to warm the prompt cache. ``warmed`` is True
-    iff ``cache_creation_tokens > 0`` (cache actually got written).
+    """Serial summarize call to warm the prompt cache.
+
+    ``warmed`` is True iff ``cache_creation_tokens > 0`` (cache actually got
+    written).
     """
     span: list[str] = []
     try:
@@ -63,7 +67,9 @@ async def cache_warm(
 
 
 def cache_read_ratio_event(fanout: Sequence[_CacheRatioResult]) -> str | None:
-    """Probes only the first :data:`_CACHE_READ_RATIO_PROBE_N` results; returns
+    """Emit a span event if the probe's cache-read ratio falls under the threshold.
+
+    Probes only the first :data:`_CACHE_READ_RATIO_PROBE_N` results; returns
     ``None`` when no tokens flowed or the probe is empty.
     """
     probe = list(fanout)[:_CACHE_READ_RATIO_PROBE_N]

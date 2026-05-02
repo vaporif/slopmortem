@@ -1,10 +1,8 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportExplicitAny=false, reportAttributeAccessIssue=false
-"""JSONL dump/restore + SHA for the eval corpus fixture.
+"""JSONL dump/restore + SHA for the eval corpus fixture (regen via ``just eval-record-corpus``).
 
-Regenerable via ``just eval-record-corpus``.
-
-Per-file pyright silences mirror ``slopmortem/corpus/qdrant_store.py``:
-SDK-boundary code, Qdrant types are loose.
+Pyright silences mirror ``slopmortem/corpus/qdrant_store.py``: SDK-boundary
+code, Qdrant types are loose.
 """
 
 from __future__ import annotations
@@ -27,7 +25,6 @@ _SHA_CHUNK = 64 * 1024
 
 
 def compute_fixture_sha256(path: Path) -> str:
-    """Return the sha256 hex digest of ``path``."""
     h = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(_SHA_CHUNK), b""):
@@ -38,10 +35,7 @@ def compute_fixture_sha256(path: Path) -> str:
 async def dump_collection_to_jsonl(
     client: AsyncQdrantClient, collection: str, out_path: Path
 ) -> None:
-    """Scroll ``collection`` to JSONL.
-
-    One JSON object per line, sorted by ``canonical_id`` for stable diffs.
-    """
+    """Scroll ``collection`` to JSONL, sorted by ``canonical_id`` for stable diffs."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     offset: Any = None
     rows: list[dict[str, object]] = []
@@ -81,10 +75,7 @@ async def dump_collection_to_jsonl(
 async def restore_jsonl_to_collection(
     client: AsyncQdrantClient, collection: str, jsonl_path: Path
 ) -> None:
-    """Bulk-upsert every line of ``jsonl_path`` into ``collection``.
-
-    ``collection`` must already exist with the right vector config.
-    """
+    """Bulk-upsert ``jsonl_path`` into ``collection`` (must pre-exist with right vector config)."""
     from qdrant_client.models import PointStruct, SparseVector  # noqa: PLC0415
 
     points: list[PointStruct] = []

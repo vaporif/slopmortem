@@ -322,7 +322,10 @@ def _assistant_with_tools(message: object) -> dict[str, Any]:  # pyright: ignore
 
 
 def is_transient_http(exc: BaseException) -> bool:
-    """Classify openai SDK exceptions as transient or fatal (duck-typed; no SDK internals imported)."""
+    """Classify openai SDK exceptions as transient or fatal.
+
+    Duck-typed; no SDK internals imported.
+    """
     name = type(exc).__name__
     if name in ("APIConnectionError", "APITimeoutError", "RateLimitError"):
         return True

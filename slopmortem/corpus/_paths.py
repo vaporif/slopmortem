@@ -51,10 +51,10 @@ def safe_path(
     source: str | None = None,
     content_sha256: str | None = None,
 ) -> Path:
-    """Build a validated path under *base* for the given doc *kind*; refuse traversal."""
+    """Build a validated path under *base*; raise ``ValueError`` on traversal or bad ids."""
     base = Path(base).resolve()
-    # Cast lets us inspect at runtime; callers may pass an unknown string and
-    # we want a friendly ValueError rather than a Literal-typing assert.
+    # Cast so an unknown runtime *kind* yields a friendly ValueError instead of
+    # a Literal-typing assert.
     match cast("str", kind):
         case "raw":
             candidate = _raw_candidate(base, text_id, source)

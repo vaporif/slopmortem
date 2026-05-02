@@ -1,8 +1,7 @@
 """Progress Protocol for the eval cassette recorder.
 
-Single phase task ``ROWS``: inner ``run_query`` phases collapse onto it as
-transient status ticks via :class:`_AggregateProgressBridge` in
-``recording_helper``.
+Single phase ``ROWS``: inner ``run_query`` phases collapse onto it as
+transient ticks via ``_AggregateProgressBridge``.
 """
 
 from __future__ import annotations
@@ -12,14 +11,12 @@ from typing import Protocol, runtime_checkable
 
 
 class RecordPhase(StrEnum):
-    """Phase keys driven by :func:`record_cassettes_for_inputs`."""
-
     ROWS = "rows"
 
 
 @runtime_checkable
 class RecordProgress(Protocol):
-    """Phase-level progress hooks; :class:`NullRecordProgress` decouples the recorder from any UI."""
+    """Phase-level progress hooks; ``NullRecordProgress`` decouples the recorder from any UI."""
 
     def start_phase(self, phase: RecordPhase, total: int | None) -> None: ...
 
@@ -35,7 +32,7 @@ class RecordProgress(Protocol):
 
 
 class NullRecordProgress:
-    """No-op :class:`RecordProgress` used when no display surface is attached."""
+    """No-op ``RecordProgress`` for when no display surface is attached."""
 
     def start_phase(self, phase: RecordPhase, total: int | None) -> None: ...
 

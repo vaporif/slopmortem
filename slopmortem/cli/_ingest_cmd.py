@@ -1,15 +1,10 @@
 # ruff: noqa: FBT002 - typer signatures are bool flags with False defaults by convention.
 """``slopmortem ingest`` subcommand.
 
-Assembles real :class:`Source`, :class:`Enricher`, :class:`MergeJournal`,
-:class:`Corpus`, :class:`LLMClient`, :class:`EmbeddingClient`, and
-:class:`SlopClassifier` from :class:`Config` and env vars, then dispatches to
-:func:`slopmortem.ingest.ingest`. Read-only modes: ``--list-review`` queries
-:class:`MergeJournal` for the pending entity-resolution review queue.
-``--reconcile`` runs the six-drift-class scan with ``repair=True`` and prints
-the report. ``--reclassify`` re-runs the slop classifier on every quarantine
-row and routes survivors back out of the quarantine tree. ``--tavily-enrich``
-appends a :class:`TavilyEnricher` to the enrichers list.
+Read-only modes: ``--list-review`` shows the pending entity-resolution review
+queue. ``--reconcile`` runs the six-drift-class scan with ``repair=True`` and
+prints the report. ``--reclassify`` re-runs the slop classifier on every
+quarantine row and routes survivors back out of the quarantine tree.
 """
 
 from __future__ import annotations
@@ -121,13 +116,7 @@ def ingest_cmd(  # noqa: PLR0913 - every flag mirrors the spec; user types kwarg
         ),
     ] = None,
 ) -> None:
-    """Run the ingest pipeline against the configured sources.
-
-    Wires user flags into :func:`slopmortem.ingest.ingest`. Config knobs
-    (slop_threshold, ingest_concurrency, embed_model_id, taxonomy_version,
-    reliability_rank_version, ...) come from
-    :func:`slopmortem.config.load_config`.
-    """
+    """Run the ingest pipeline against the configured sources."""
     anyio.run(
         functools.partial(
             _run_ingest,
@@ -146,7 +135,6 @@ def ingest_cmd(  # noqa: PLR0913 - every flag mirrors the spec; user types kwarg
 
 
 async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
-    """Re-run the slop classifier across quarantined rows and print the summary."""
     journal = await _build_journal(config, post_mortems_root)
     # reclassify hits the live slop judge, so we need the LLM but neither the
     # embedder nor qdrant.
@@ -174,7 +162,6 @@ async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
 
 
 async def _run_reconcile(config: Config, post_mortems_root: Path) -> None:
-    """Run the six-drift-class scan with ``repair=True`` and print the report."""
     journal = await _build_journal(config, post_mortems_root)
     corpus = await _build_ingest_corpus(config, post_mortems_root)
     report = await reconcile(
@@ -202,7 +189,6 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
     tavily_enrich: bool,
     post_mortems_root: Path,
 ) -> None:
-    """Async impl behind ``slopmortem ingest``. Resolves wiring then dispatches."""
     config = load_config()
     _maybe_init_tracing(config)
 
@@ -292,16 +278,14 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
 
 
 def _default_curated_yaml() -> Path:
-    """Return the in-tree curated post-mortem YAML path shipped with the package."""
     return Path(__file__).parent.parent / "corpus" / "sources" / "curated" / "post_mortems_v0.yml"
 
 
 async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJournal:
-    """Construct and schema-initialize the merge journal.
+    """Build the merge journal, calling :meth:`MergeJournal.init`.
 
-    ``init()`` is idempotent (``CREATE TABLE IF NOT EXISTS``), so calling it
-    every CLI invocation is cheap and means fresh dev databases work without
-    an explicit setup step.
+    ``init()`` is idempotent so calling it every CLI invocation is cheap and
+    fresh dev databases work without an explicit setup step.
     """
     from slopmortem.corpus import MergeJournal  # noqa: PLC0415
 
@@ -316,11 +300,10 @@ async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJourna
 def _build_slop_classifier(
     *, dry_run: bool, llm: LLMClient, model: str, max_tokens: int | None = None
 ) -> SlopClassifier:
-    """Construct the slop classifier.
+    """Pick a slop classifier based on *dry_run*.
 
-    Dry-run uses :class:`FakeSlopClassifier` — no API key, no LLM cost. Live
-    ingest uses :class:`HaikuSlopClassifier`: one Haiku call per entry,
-    quarantines anything that isn't a specific dead-company narrative.
+    Dry-run uses :class:`FakeSlopClassifier` — no API key, no LLM cost.
+    Live runs use :class:`HaikuSlopClassifier` (one Haiku call per entry).
     """
     if dry_run:
         from slopmortem.ingest import FakeSlopClassifier  # noqa: PLC0415
@@ -332,12 +315,10 @@ def _build_slop_classifier(
 
 
 async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
-    """Construct the Qdrant-backed ingest corpus and ensure its collection exists.
+    """Build the ingest-side :class:`QdrantCorpus`, ensuring the collection exists.
 
-    ``ensure_collection`` is idempotent (creates only when missing), so this is
-    cheap to call every invocation and means fresh dev boxes don't need a
-    separate setup step. Without it, ``upsert_chunk`` fails with
-    ``Collection 'slopmortem' doesn't exist`` on the first write.
+    Without ``ensure_collection`` (idempotent), ``upsert_chunk`` fails with
+    ``Collection 'slopmortem' doesn't exist`` on a fresh dev box's first write.
     """
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 - heavy dep, lazy import
 
@@ -366,12 +347,12 @@ async def _build_ingest_deps(
     *,
     dry_run: bool,
 ) -> tuple[LLMClient, EmbeddingClient, IngestCorpus, Budget, MergeJournal, SlopClassifier]:
-    """Construct the full ingest-side wiring: LLM, embed, corpus, budget, journal, classifier.
+    """Build the ingest-side dependency tuple.
 
     Mirrors :func:`_build_deps` but caps the budget at
-    ``max_cost_usd_per_ingest`` and additionally builds a
-    :class:`MergeJournal` plus the slop classifier. ``dry_run=True`` swaps in
-    :class:`FakeSlopClassifier` so the run needs no real API key.
+    ``max_cost_usd_per_ingest`` and additionally builds a journal plus the
+    slop classifier. ``dry_run=True`` swaps in :class:`FakeSlopClassifier` so
+    the run needs no real API key.
     """
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
 
@@ -399,14 +380,11 @@ async def _build_ingest_deps(
 
 
 class RichIngestProgress(RichPhaseProgress[IngestPhase]):
-    """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl."""
-
     def __init__(self) -> None:
         super().__init__(INGEST_PHASE_LABELS)
 
 
 def _render_ingest_result(console: Console, result: IngestResult, budget: Budget) -> None:
-    """Print ``IngestResult`` as a two-column Rich table on *console*."""
     rows: list[tuple[str, str]] = [
         ("seen", str(result.seen)),
         ("processed", str(result.processed)),

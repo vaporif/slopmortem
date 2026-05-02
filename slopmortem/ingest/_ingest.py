@@ -65,7 +65,9 @@ def _emit_collected_events(result: IngestResult) -> None:
 
 
 def _record_error(result: IngestResult, entry_label: str, exc: BaseException) -> None:
-    """Without this, swallowed per-entry exceptions only surface in stderr; the
+    """Record per-entry failures on the parent ingest span.
+
+    Without this, swallowed per-entry exceptions only surface in stderr; the
     parent ingest span returns OK and INGEST_ENTRY_FAILED carries no payload.
     """
     if not Laminar.is_initialized():

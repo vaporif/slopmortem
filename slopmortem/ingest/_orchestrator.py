@@ -92,8 +92,10 @@ INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 
 @runtime_checkable
 class IngestProgress(Protocol):
-    """Phase-level progress hooks. Default :class:`NullProgress` keeps the
-    orchestrator decoupled from any UI library; the CLI wires a Rich impl.
+    """Phase-level progress hooks.
+
+    Default :class:`NullProgress` keeps the orchestrator decoupled from any
+    UI library; the CLI wires a Rich impl.
     """
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None:
@@ -173,7 +175,9 @@ class FakeSlopClassifier:
 
 @dataclass
 class HaikuSlopClassifier:
-    """Asks Haiku whether a text describes a dead company; returns 0.0 if yes,
+    """LLM-backed slop classifier.
+
+    Asks Haiku whether a text describes a dead company; returns 0.0 if yes,
     else 1.0 (above the default ``slop_threshold=0.7``, so quarantines).
 
     ``char_limit=6000`` so the demise narrative falls inside the window for long
@@ -265,7 +269,9 @@ def _skip_key(  # noqa: PLR0913 - the contract tuple is wide  # pyright: ignore[
 
 
 def _truncate_to_tokens(text: str, max_tokens: int) -> str:
-    """Anthropic's tokenizer isn't published; cl100k_base agrees within ~10%
+    """Truncate *text* to *max_tokens* via cl100k_base.
+
+    Anthropic's tokenizer isn't published; cl100k_base agrees within ~10%
     on English prose, well inside the truncation budget's headroom.
     """
     if max_tokens <= 0:
@@ -280,8 +286,10 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
 
 
 def _entry_summary_text(entry: RawEntry, *, max_tokens: int) -> str:  # pyright: ignore[reportUnusedFunction]  -- imported by _ingest.py
-    """Clipped to *max_tokens* to bound LLM input cost on long-tail articles
-    (Wikipedia entries can run 60KB+ after trafilatura).
+    """Return entry body text, clipped to *max_tokens*.
+
+    Clipped to bound LLM input cost on long-tail articles (Wikipedia entries
+    can run 60KB+ after trafilatura).
     """
     if entry.markdown_text:
         return _truncate_to_tokens(entry.markdown_text, max_tokens)

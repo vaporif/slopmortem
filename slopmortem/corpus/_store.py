@@ -21,16 +21,11 @@ class Corpus(Protocol):
         cutoff_iso: str | None,
         strict_deaths: bool,
         k_retrieve: int,
-    ) -> list[Candidate]:
-        """Hybrid retrieve top-K candidates by dense and sparse vectors, filtered by facets."""
-        ...
+    ) -> list[Candidate]: ...
 
-    async def get_post_mortem(self, canonical_id: str) -> str:
-        """Fetch the full canonical post-mortem text for *canonical_id*."""
-        ...
+    async def get_post_mortem(self, canonical_id: str) -> str: ...
 
     async def search_corpus(
         self, q: str, facets: dict[str, str] | None = None
     ) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]  # Protocol — implementations vary
-        """Plain-text search for additional candidates, optionally filtered by facets."""
         ...
