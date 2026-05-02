@@ -38,5 +38,5 @@ class LLMClient(Protocol):
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
     ) -> CompletionResult:
-        """Run a completion; the implementation may handle tool calls and retries internally."""
+        # Implementations may handle tool calls and retries internally.
         ...
