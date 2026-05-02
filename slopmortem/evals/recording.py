@@ -32,6 +32,12 @@ _PREVIEW_CHARS_PROMPT = 500
 _PREVIEW_CHARS_TEXT = 200
 
 
+def _tool_name(t: object) -> str:
+    """Best-effort string name for a tool object; falls back to `str(t)`."""
+    name = getattr(t, "name", None)
+    return str(name) if name is not None else str(t)  # pyright: ignore[reportAny]
+
+
 class RecordingLLMClient:
     """Wrap a real `LLMClient`; write one LLM cassette per `complete()` call."""
 
@@ -101,10 +107,7 @@ class RecordingLLMClient:
                 template_sha=template_sha,
                 model=eff_model,
             )
-        tool_names: list[str] = []
-        for t in tools or []:  # pyright: ignore[reportAny]
-            name_attr: object = getattr(t, "name", None)  # pyright: ignore[reportAny]
-            tool_names.append(str(name_attr) if name_attr is not None else str(t))  # pyright: ignore[reportAny]
+        tool_names: list[str] = [_tool_name(t) for t in tools or []]  # pyright: ignore[reportAny]
         cas = LlmCassette(
             template_sha=template_sha,
             model=eff_model,

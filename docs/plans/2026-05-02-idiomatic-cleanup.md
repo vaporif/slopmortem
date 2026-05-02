@@ -354,7 +354,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
 **Steps:**
 
-- [ ] **Step 1: Add a module-private helper above the recording method.**
+- [x] **Step 1: Add a module-private helper above the recording method.**
 
   Before the function containing lines 104-107, add:
 
@@ -365,7 +365,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
       return str(name) if name is not None else str(t)  # pyright: ignore[reportAny]
   ```
 
-- [ ] **Step 2: Replace lines 104-107 in the consuming function.**
+- [x] **Step 2: Replace lines 104-107 in the consuming function.**
 
   Current:
 
@@ -384,11 +384,11 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   (One ignore on the comprehension covers the untyped `tools` iteration.)
 
-- [ ] **Step 3: Verify.**
+- [x] **Step 3: Verify.**
 
   Run `just typecheck` (basedpyright must remain green; the helper's narrowing closes off two of the three sites). Run `just test -k "recording or cassette"`.
 
-- [ ] **Step 4: Commit.** Subject: `cleanup: _tool_name helper in recording.py`.
+- [x] **Step 4: Commit.** Subject: `cleanup: _tool_name helper in recording.py`.
 
 ---
 
