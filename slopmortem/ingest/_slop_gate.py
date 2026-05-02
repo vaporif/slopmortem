@@ -69,7 +69,6 @@ async def _quarantine(
     slop_score: float,
     post_mortems_root: Path,
 ) -> None:
-    """Write quarantine markdown + journal row for a slop-flagged entry."""
     sha = _content_sha256(body)
     path = safe_path(post_mortems_root, kind="quarantine", content_sha256=sha)
 

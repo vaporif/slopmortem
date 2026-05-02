@@ -29,7 +29,9 @@ if TYPE_CHECKING:
 
 
 class _StackedBar:
-    """Rich's ``ProgressBar`` yields segments without a trailing newline, so a
+    """Stack one ``ProgressBar`` vertically across N rows.
+
+    Rich's ``ProgressBar`` yields segments without a trailing newline, so a
     ``Group`` of N bars renders inline. Explicit ``Segment.line`` between
     copies stacks them vertically.
     """

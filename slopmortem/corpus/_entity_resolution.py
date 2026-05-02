@@ -411,13 +411,11 @@ def _looks_tier1(canonical_id: str) -> bool:
 
 
 async def _is_parent_subsidiary_suspect(journal: MergeJournal, domain: str, new_name: str) -> bool:
-    """Heuristic: tier-1 hit on *domain* + new name carries a corporate suffix.
+    """Flag a suffix-delta when the bare domain is journal-resident and the new name carries a corporate suffix.
 
-    No per-row display-name persistence yet, so we conservatively flag a
-    suffix-delta when (a) the bare domain is already journal-resident in
-    pending or complete state, and (b) the new entry's name carries a
-    known corporate suffix. :file:`corporate_hierarchy_overrides.yml` also
-    seeds explicit parent/subsidiary pairs (ships empty in v1).
+    No per-row display-name persistence yet, so the heuristic is conservative.
+    ``corporate_hierarchy_overrides.yml`` seeds explicit parent/subsidiary pairs
+    (ships empty in v1).
     """
     if domain in _HIERARCHY_OVERRIDES:
         return True

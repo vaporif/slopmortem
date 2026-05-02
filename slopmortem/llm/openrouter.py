@@ -104,9 +104,9 @@ class OpenRouterClient:
         max_tokens: int | None = None,
     ) -> CompletionResult:
         """Run a chat completion, including the tool-call loop and transient-error retries."""
-        # Cheap pre-call gate so a runaway loop stops issuing calls once the
-        # budget is exhausted. Concurrent fan-out can still tail-overshoot by
-        # up to N_synthesize x per-call cost.
+        # Pre-call gate: a runaway loop stops issuing calls once the budget is
+        # exhausted. Concurrent fan-out can still tail-overshoot by up to
+        # N_synthesize x per-call cost.
         if self._budget.remaining <= 0.0:
             msg = f"budget exhausted: remaining {self._budget.remaining:.4f}"
             raise BudgetExceededError(msg)

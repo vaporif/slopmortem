@@ -180,11 +180,8 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     progress: QueryProgress | None = None,
     sparse_encoder: SparseEncoder | None = None,
 ) -> Report:
-    """Run the full retrieve + rerank + synthesize pipeline against *input_ctx*.
-
-    Per-candidate synthesis exceptions are dropped silently;
-    :class:`BudgetExceededError` truncates the run and surfaces as
-    ``pipeline_meta.budget_exceeded=True`` on the returned :class:`Report`.
+    """Per-candidate synthesis exceptions are dropped silently; ``BudgetExceededError``
+    truncates the run and surfaces as ``pipeline_meta.budget_exceeded=True``.
     """
     t0 = time.monotonic()
     successes: list[Synthesis] = []
