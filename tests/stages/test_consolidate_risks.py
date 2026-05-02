@@ -22,8 +22,8 @@ from slopmortem.models import (
     SimilarityScores,
     Synthesis,
 )
+import slopmortem.stages.consolidate_risks as cr_module
 from slopmortem.stages import consolidate_risks
-from slopmortem.stages import consolidate_risks as cr_module
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:

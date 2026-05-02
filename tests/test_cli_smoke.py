@@ -80,7 +80,7 @@ def _build_fake_deps(_config: Config) -> tuple[object, object, object, Budget]:
 
 
 def _noop_set_corpus(_corpus: object) -> None:
-    """Stand-in for :func:`slopmortem.corpus.tools_impl._set_corpus`."""
+    """Stand-in for :func:`slopmortem.corpus.set_query_corpus`."""
     return
 
 
@@ -96,7 +96,7 @@ def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Swap dep-construction so the test doesn't need real OPENROUTER_API_KEY etc.
     monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
 
     runner = CliRunner()
@@ -113,7 +113,7 @@ def test_query_smoke_default_unnamed(monkeypatch: pytest.MonkeyPatch) -> None:
         return _fixture_report(name=input_ctx.name)
 
     monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
 
     runner = CliRunner()
@@ -129,7 +129,7 @@ def test_query_default_writes_to_runs_dir(monkeypatch: pytest.MonkeyPatch, tmp_p
         return _fixture_report(name=input_ctx.name)
 
     monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
     monkeypatch.chdir(tmp_path)
 
@@ -155,7 +155,7 @@ def test_query_empty_candidates_exits_nonzero(
         return _fixture_report(name=input_ctx.name).model_copy(update={"candidates": []})
 
     monkeypatch.setattr("slopmortem.cli._build_deps", _build_fake_deps)
-    monkeypatch.setattr("slopmortem.cli._set_corpus", _noop_set_corpus)
+    monkeypatch.setattr("slopmortem.cli.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli.run_query", _fake_run_query)
     monkeypatch.chdir(tmp_path)
 
