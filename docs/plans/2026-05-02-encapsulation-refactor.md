@@ -464,7 +464,7 @@ Expected: green.
 **Files:**
 - Grep-derived list (~30 files in `slopmortem/` and `tests/`); fix the file list at step 1.
 
-- [ ] **Step 1: Generate the file list**
+- [x] **Step 1: Generate the file list**
 
 Run:
 
