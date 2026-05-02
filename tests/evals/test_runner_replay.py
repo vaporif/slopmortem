@@ -25,7 +25,15 @@ def test_runner_replay_passes_with_recorded_cassettes(tmp_path: Path) -> None:
     """Happy path: ephemeral Qdrant + committed cassette dir → exit 0, non-empty rows."""
     dataset = tmp_path / "seed.jsonl"
     dataset.write_text(
-        json.dumps({"name": "ledgermint", "description": "B2B SaaS that automates monthly close."})
+        json.dumps(
+            {
+                "name": "ledgermint",
+                "description": (
+                    "B2B SaaS that automates monthly close for US-based mid-market"
+                    " controllers; charges per-seat with a per-transaction overage tier."
+                ),
+            }
+        )
         + "\n"
     )
     baseline = tmp_path / "baseline.json"
@@ -120,7 +128,15 @@ def test_runner_replay_fails_loud_on_llm_cassette_miss(
 
     dataset = tmp_path / "seed.jsonl"
     dataset.write_text(
-        json.dumps({"name": "ledgermint", "description": "B2B SaaS that automates monthly close."})
+        json.dumps(
+            {
+                "name": "ledgermint",
+                "description": (
+                    "B2B SaaS that automates monthly close for US-based mid-market"
+                    " controllers; charges per-seat with a per-transaction overage tier."
+                ),
+            }
+        )
         + "\n"
     )
     baseline = tmp_path / "baseline.json"

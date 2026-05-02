@@ -40,6 +40,9 @@
 - name: wesabe
   description: Personal-finance startup outpaced by Mint
   url: https://en.wikipedia.org/wiki/Wesabe
+- name: bench-accounting
+  description: Canadian B2B SaaS for SMB bookkeeping/financial-close, shut down Dec 2024
+  url: https://en.wikipedia.org/wiki/Bench_Accounting
 
 # healthtech (covers seed: vitalcue; existing: theranos)
 - name: outcome-health
