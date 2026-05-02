@@ -176,7 +176,7 @@ from slopmortem.ingest._ingest import (
 
 Other re-exports (types, dataclasses, etc.) keep their existing source from `_orchestrator`. Run `just format` after if ruff splits the import block.
 
-- [ ] **Step 6: Run the full gate**
+- [x] **Step 6: Run the full gate**
 
 Run:
 
