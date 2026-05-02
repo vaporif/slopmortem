@@ -128,7 +128,7 @@ Expected: `Skipped: 0 / Kept: 0 / Broken: 0` or equivalent "no contracts" succes
 - Modify: `justfile`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Add a `lint-imports` recipe to the justfile**
+- [x] **Step 1: Add a `lint-imports` recipe to the justfile**
 
 Edit `justfile`. The current `lint` recipe is at lines 46–48:
 
@@ -149,7 +149,7 @@ lint:
     uv run lint-imports
 ```
 
-- [ ] **Step 2: Wire lint-imports into the CI typecheck job**
+- [x] **Step 2: Wire lint-imports into the CI typecheck job**
 
 Edit `.github/workflows/ci.yml`. Append a step to the `typecheck` job (after `uv run basedpyright`):
 
@@ -157,7 +157,7 @@ Edit `.github/workflows/ci.yml`. Append a step to the `typecheck` job (after `uv
       - run: uv run lint-imports
 ```
 
-- [ ] **Step 3: Run `just lint` locally and verify success**
+- [x] **Step 3: Run `just lint` locally and verify success**
 
 Run: `just lint`
 Expected: ruff check, format check, and lint-imports all pass, exit 0.

@@ -25,6 +25,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: uv sync
       - run: uv run basedpyright
+      - run: uv run lint-imports
 
   test:
     runs-on: ubuntu-latest

@@ -46,6 +46,7 @@ eval-record-corpus:
 lint:
     uv run ruff check .
     uv run ruff format --check .
+    uv run lint-imports
 
 format:
     uv run ruff check --fix .
