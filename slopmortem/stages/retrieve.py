@@ -43,30 +43,10 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
 ) -> list[Candidate]:
     """Embed *description* and run hybrid retrieve against *corpus*.
 
-    Args:
-        description: User's pitch text. Both dense and sparse query inputs
-            come from this verbatim. No HyDE expansion — rerank slack absorbs
-            the modality gap.
-        facets: Soft-boost facets from the facet-extract stage. ``"other"``
-            values are skipped inside :meth:`Corpus.query`.
-        corpus: Read-side :class:`Corpus` impl. Production is
-            :class:`QdrantCorpus`.
-        embedding_client: Async dense embedder (OpenAI in production,
-            :class:`FakeEmbeddingClient` in tests).
-        cutoff_iso: ISO-8601 lower bound for the recency filter, or ``None``
-            to disable filtering entirely.
-        strict_deaths: When ``True``, Corpus keeps only docs with a known
-            ``failure_date`` ≥ ``cutoff_iso``.
-        k_retrieve: Final number of parent candidates to return. Caller sets
-            this from ``Config.K_retrieve``.
-        sparse_encoder: BM25 sparse encoder override. ``None`` lazy-loads the
-            production fastembed model on first call. Tests pass a no-op stub
-            so they don't trigger the ~150 MB ONNX download (same pattern as
-            ``ingest()``).
-
-    Returns:
-        Up to ``k_retrieve`` :class:`Candidate` objects in descending
-        retrieval-score order.
+    Both dense and sparse queries come from *description* verbatim — no HyDE
+    expansion, rerank slack absorbs the modality gap. ``sparse_encoder=None``
+    lazy-loads the production fastembed model on first call; tests pass a
+    no-op stub to dodge the ~150 MB ONNX download.
     """
     if sparse_encoder is None:
         from slopmortem.corpus.embed_sparse import encode as _default_encode  # noqa: PLC0415

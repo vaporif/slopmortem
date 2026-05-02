@@ -35,33 +35,11 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
 ) -> LlmRerankResult:
     """Rerank ``candidates`` against ``pitch`` via one structured-output LLM call.
 
-    Sonnet (or whichever model the caller picks) gets every candidate's
-    ``summary`` (NOT ``body``) plus the user pitch and extracted facets, then
-    returns a :class:`LlmRerankResult` whose ``ranked`` length is
-    ``min(Config.N_synthesize, len(candidates))``. Strict-mode JSON schema
-    constrains shape but not length, so this stage re-validates post-parse
-    and raises :class:`RerankLengthError` on mismatch.
-
-    Args:
-        candidates: Up to ``Config.K_retrieve`` candidates from retrieve.
-        pitch: User's input description, passed verbatim into the prompt.
-        facets: Extracted facets, dumped into the prompt as JSON for the
-            rerank rubric.
-        llm: Async :class:`LLMClient`. ``cache=True`` so the shared rubric
-            block hits the prompt cache across calls within the 5-min TTL.
-        config: :class:`Config`. ``N_synthesize`` is the load-bearing knob
-            for the post-parse length check.
-        model: Optional override of the LLM client's default model. ``None``
-            lets the client pick.
-        max_tokens: Optional cap on completion tokens. ``None`` keeps the
-            client default (no cap sent upstream).
-
-    Returns:
-        Parsed :class:`LlmRerankResult` with ``ranked`` length equal to
-        ``min(Config.N_synthesize, len(candidates))``.
-
-    Raises:
-        RerankLengthError: LLM returned an array of the wrong length.
+    The LLM sees each candidate's ``summary`` (not ``body``) plus the pitch
+    and extracted facets. Strict-mode JSON schema constrains shape but not
+    length, so the parsed ``ranked`` array gets re-validated against
+    ``min(N_synthesize, len(candidates))`` — mismatch raises
+    :class:`RerankLengthError`.
     """
     Laminar.set_span_attributes(
         {

@@ -23,9 +23,7 @@ import pytest
 from conftest import llm_canned_key
 from slopmortem.budget import Budget
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import (
     Candidate,
     CandidatePayload,
@@ -45,12 +43,12 @@ from slopmortem.pipeline import (
     cutoff_iso,
     run_query,
 )
-from slopmortem.stages.synthesize import synthesize_prompt_kwargs
+from slopmortem.stages import synthesize_prompt_kwargs
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from slopmortem.llm.client import CompletionResult
+    from slopmortem.llm import CompletionResult
 
 _FACET_MODEL = "test-facet"
 _RERANK_MODEL = "test-rerank"
