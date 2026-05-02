@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slopmortem.evals.recording_helper import (
+    _AggregateProgressBridge,
     _atomic_swap,
-    _QueryProgressBridge,
     _sweep_stale_recording_dirs,
     record_cassettes_for_inputs,
 )
@@ -23,9 +23,6 @@ from slopmortem.pipeline import QueryPhase
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
-_NO_INNER_TASKS_MSG = "bridge must not create inner-phase tasks"
 
 
 def test_sweep_removes_only_stale_recording_dirs(tmp_path: Path) -> None:
