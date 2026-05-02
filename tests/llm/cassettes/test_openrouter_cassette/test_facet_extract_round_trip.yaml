@@ -39,20 +39,21 @@ interactions:
     uri: https://openrouter.ai/api/v1/chat/completions
   response:
     body:
-      string: '{"error":{"message":"User not found.","code":401}}'
+      string: "\x1F\uFFFD\b\0\0\0\0\0\0\uFFFD\uFFFDR\uFFFD\x01.\0\0\0\0\uFFFD\uFFFD\uFFFDB0\x01\0\0\0\uFFFD\uFFFDBb\x02\0\0\0\uFFFD\uFFFDBb\x02\0\0\0\uFFFD\uFFFDBb\x02\0\0\0\uFFFD\uFFFD}TaO\uFFFD0\x10\uFFFD+V\uFFFD\uFFFDI\r\uFFFD\x1DP\uFFFDo\x14\x01\uFFFDD\uFFFD\t\uFFFD\uFFFDiL\uFFFDq\uFFFD\uFFFD\uFFFDcG\uFFFD\uFFFD\uFFFDP\uFFFD\uFFFD\uFFFD\uFFFD4M\x11\u06B7\uFFFD\uFFFD\u077B\uFFFDwwy\uFFFDd\x1A\u0362\x15\uFFFDx4\uFFFDLN\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFDrg\uFFFD\uFFFD\uFFFD\u04F0\uFFFD>>\uFFFD9\uFFFDl.\uFFFDAd\x1E\uFFFDHx\uFFFDE\uFFFD\uFFFD\uFFFD0y\uFFFD\uFFFDK\uFFFD\uFFFD$,qO\uFFFD\u06B1\f\uFFFD\u0724\uFFFD\0\uFFFD\uFFFDg\uFFFD\x14R\x1C\t\uFFFD\u02D4\uFFFD\uFFFD\xD38\uFFFDr]\uFFFD\uFFFD\uFFFD\uFFFDd4\x1C\uFFFD@QX\uFFFD,S\uFFFD\b8\uFFFD\uFFFD_\uFFFD\u065CRk\uFFFD\x1Ao\uFFFDr\uFFFD\uFFFDd)\uFFFD\uFFFDla\uFFFDF\x15\uFFFDT\n\uFFFD3#\x05\uFFFDh\uFFFD\v\uFFFD\uFFFD^\uFFFD\uFFFDp\x10)\uFFFD\x02\u0763\u06E2\x10(]\uFFFD\uFFFDH\uFFFDrg\uFFFD\uFFFD\0\uFFFD\uFFFD^>S\uFFFD\uFFFD\uFFFDt\uFFFD\uFFFD\u0486\uFFFDrr\uFFFD\uFFFD(\uFFFD\uFFFDF\uFFFD(\n\uFFFD8'\uFFFDGK\uFFFDk\uFFFD=\uFFFDZ\uFFFD\x03v\uFFFD\x05y7c\vn\uFFFD\uFFFD\v\x05\uFFFD-\uFFFDe_tZ:o%W\uFFFDNX^\uFFFD\x05y\uFFFD\x1E\uFFFD>8`\u07ECIK\uFFFD\x16\x10\uFFFD\uFFFD\uFFFDW\x05=\u8E05\uFFFD\r4\uFFFD\uFFFD>\x17\uFFFDWd\uFFFD)]\uFFFD\uFFFD\uFFFD\uFFFDx\uFFFD\uFFFD[\uFFFDi\u3AE3;\f\uFFFD\uFFFD}\uFFFD`-\uFFFD.\uFFFD\\\uFFFDkH\x1C\x1C\uFFFD$*\uFFFDZ\uFFFD\a\uFFFD\uFFFD,\uFFFD\x1AR\uFFFDh\uFFFDe\uFFFD\uFFFDNj\b\uFFFD\x16a\uFFFD\rM\uFFFD|0\uFFFD\uFFFD9\uFFFD\uFFFDC\x1E\uFFFD{\uFFFDSP\uFFFD\uFFFD._\uFFFDM\x18k\uFFFD\t\uFFFDv(\x04k\u05491/\uFFFD\uFFFD\uFFFD;R\u06DAZ\uFFFD\uFFFD\u075A5Y\uFFFDq|wd\uFFFD`\uFFFD\uFFFD!\uFFFD\uFFFD\aWk\uFFFDU\a\x16\"\uFFFD\x01\uFFFDu\uFFFDx\uFFFD\u0626\uFFFDqy\uFFFD\x05\x05\x10\x16\t\v\uFFFDL\uFFFD\ny\uFFFD\uFFFD\uFFFD\uFFFDj\\\u03D5]`\uFFFD+ce\uFFFD\uFFFDS#\u0339*s\uFFFD\u02FA\uFFFD\vS\x14d\e\x02lS\uFFFD\uFFFDR\uFFFD
+        \uFFFDk\"\x1A\uFFFD\uFFFD*]\uFFFDPP\uFFFD\uFFFD\uFFFD\x02\x06\x19\uFFFD\x03\uFFFD\uFFFDK8\x04\uFFFDJ'\uFFFD3\u066A\uFFFD\uFFFD3\x1E\uFFFD\uFFFD\uFFFD\uFFFD\\\uFFFDw\uFFFDu\x12\uFFFDO\uFFFD\uFFFD\uFFFD\uFFFDh\uFFFD^\uFFFDYA\uFFFDL\nl\uFFFDi&pcD\uFFFD'\uFFFD\uFFFD\x02\uFFFD\uFFFD\uFFFDZGm\x17\x14\v\uFFFD[\a.\uFFFD\u04B2t\uFFFDj\uFFFD9-\uFFFDo\x1C\uFFFD\uFFFD\uFFFDATn\x0F\v\x02\uFFFDO<\uFFFD\u0538\uFFFD\uFFFD4\x1C\uFFFD\uFFFD\uFFFD\u04B9\uFFFD#\u07357\uFFFDx\uFFFD\x1A\uFFFDP\uFFFD\x03\x1C\x1E\uFFFD'2<\uFFFD-]\uFFFDX\uFFFDu4[b\uFFFDi\uFFFD\u03DE\uFFFD\x18\uFFFDT.\uFFFD\x15\\d\uFFFDvd`\uFFFD=\uFFFD\x1F+=\uFFFD\uFFFD\uFFFDeI\uFFFDw\uFFFD\uFFFDT\u03F1i\uFFFD\uFFFDs\uFFFD\x05N\uFFFDx\uFFFDH\uFFFD{$-(y[\uFFFD;\uFFFD\uFFFD\uFFFD\x1D\x12\uFFFD\uFFFD\uFFFD;}\uFFFD\x1E\uFFFD\uFFFD\uFFFD\x1D\uFFFD\uFFFD\uFFFDu\uFFFD\uFFFD\uFFFD#sL\uFFFD?\x1Do6\uFFFD\x7FW1\uFFFD__\x06\0\0"
     headers:
       Access-Control-Allow-Origin:
       - '*'
-      Access-Control-Expose-Headers:
-      - X-Generation-Id,cf-ray
       CF-RAY:
-      - 9f549a5b6c3de3d0-LIS
+      - 9f54a045494ae3bd-LIS
       Connection:
       - keep-alive
+      Content-Encoding:
+      - gzip
       Content-Type:
       - application/json
       Date:
-      - Sat, 02 May 2026 05:25:01 GMT
+      - Sat, 02 May 2026 05:29:04 GMT
       Permissions-Policy:
       - payment=(self "https://checkout.stripe.com" "https://connect-js.stripe.com"
         "https://js.stripe.com" "https://*.js.stripe.com" "https://hooks.stripe.com")
@@ -64,7 +65,11 @@ interactions:
       - chunked
       X-Content-Type-Options:
       - nosniff
+      X-Generation-Id:
+      - gen-1777699743-jys8d8Gj0pthn48Y9HoE
+      access-control-expose-headers:
+      - X-Generation-Id,cf-ray
     status:
-      code: 401
-      message: Unauthorized
+      code: 200
+      message: OK
 version: 1

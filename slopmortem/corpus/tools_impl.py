@@ -40,6 +40,7 @@ __all__ = [
     "_set_corpus",
     "get_post_mortem",
     "search_corpus",
+    "set_query_corpus",
     "tavily_extract",
     "tavily_search",
 ]
@@ -109,6 +110,16 @@ def _set_corpus(c: Corpus) -> None:
     """
     global _corpus  # noqa: PLW0603 — the module-level binding is the public init surface
     _corpus = c
+
+
+def set_query_corpus(c: Corpus) -> None:
+    """Bind the corpus the query-side LLM tools should call into.
+
+    Public re-export of the module-private ``_set_corpus``. Required so
+    callers (``cli.py``, ``evals/runner.py``, ``evals/recording_helper.py``)
+    can avoid reaching past the ``corpus`` package façade.
+    """
+    _set_corpus(c)
 
 
 async def _get_post_mortem(canonical_id: str, max_chars: int = 8000) -> str:
