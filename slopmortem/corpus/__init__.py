@@ -1,18 +1,18 @@
-# T1.1 verification (date 2026-05-02): submodule audit results
-#   store        = TYPE_CHECKING-only (3 sites: pipeline.py, cli.py, stages/retrieve.py)
-#   summarize    = external (1 site: tests/corpus/test_summarize.py)
-#   _alias_graph = internal-only, renamed to _alias_graph in T1.7
-#   embed_sparse = external (lazy/runtime sites: ingest.py, evals/recording_helper.py,
-#                  stages/retrieve.py + test monkeypatches in test_observe_redaction.py
-#                  and test_pipeline_e2e.py — none top-level `from … import`)
-#   merge_text   = external (2 sites: ingest.py, tests/corpus/test_merge_deterministic.py)
-#   tools_impl   = external (cli.py + tests: test_tool_signature_contract,
-#                  test_tavily_tools, test_synthesis_tools)
-# T1.7 reads this to decide which modules are safe to underscore.
 """Corpus storage: paths, retrieval, and tool-call implementations."""
 
 from __future__ import annotations
 
+from slopmortem.corpus._schema import (
+    AliasEdge as AliasEdge,
+)
+from slopmortem.corpus._schema import (
+    MergeState as MergeState,
+)
+from slopmortem.corpus._schema import (
+    RawEntry as RawEntry,
+)
+from slopmortem.corpus._store import Corpus as Corpus
+from slopmortem.corpus._summarize import summarize_for_rerank as summarize_for_rerank
 from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION as CHUNK_STRATEGY_VERSION
 from slopmortem.corpus.chunk import Chunk as Chunk
 from slopmortem.corpus.chunk import chunk_markdown as chunk_markdown
@@ -33,15 +33,18 @@ from slopmortem.corpus.reconcile import DRIFT_CLASSES as DRIFT_CLASSES
 from slopmortem.corpus.reconcile import ReconcileReport as ReconcileReport
 from slopmortem.corpus.reconcile import ReconcileRow as ReconcileRow
 from slopmortem.corpus.reconcile import reconcile as reconcile
-from slopmortem.corpus.summarize import summarize_for_rerank as summarize_for_rerank
 from slopmortem.corpus.tools_impl import set_query_corpus as set_query_corpus
 
 __all__ = [
     "CHUNK_STRATEGY_VERSION",
     "DRIFT_CLASSES",
+    "AliasEdge",
     "Chunk",
+    "Corpus",
     "MergeJournal",
+    "MergeState",
     "QdrantCorpus",
+    "RawEntry",
     "ReconcileReport",
     "ReconcileRow",
     "Section",

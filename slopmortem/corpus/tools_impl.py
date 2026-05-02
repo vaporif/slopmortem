@@ -24,7 +24,7 @@ from slopmortem.models import (
 )
 
 if TYPE_CHECKING:
-    from slopmortem.corpus.store import Corpus
+    from slopmortem.corpus._store import Corpus
 
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"

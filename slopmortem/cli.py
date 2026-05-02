@@ -80,9 +80,8 @@ from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
     from slopmortem.config import Config
-    from slopmortem.corpus import MergeJournal
+    from slopmortem.corpus import Corpus, MergeJournal
     from slopmortem.corpus.sources import Enricher, Source
-    from slopmortem.corpus.store import Corpus
     from slopmortem.ingest import Corpus as IngestCorpus
     from slopmortem.ingest import SlopClassifier
     from slopmortem.llm import EmbeddingClient, LLMClient

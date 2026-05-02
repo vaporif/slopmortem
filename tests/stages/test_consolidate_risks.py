@@ -26,7 +26,7 @@ from slopmortem.models import (
 from slopmortem.stages import consolidate_risks
 from slopmortem.tracing import SpanEvent
 
-# `import_module` instead of `import x as` — the façade re-export shadows the submodule.
+# `import x as` returns the façade-shadowed function; use import_module for the module.
 _cr_module = importlib.import_module("slopmortem.stages.consolidate_risks")
 
 if TYPE_CHECKING:

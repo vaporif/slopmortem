@@ -16,7 +16,7 @@ from lmnr import Laminar, observe
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from slopmortem.corpus.store import Corpus
+    from slopmortem.corpus import Corpus
     from slopmortem.llm import EmbeddingClient
     from slopmortem.models import Candidate, Facets
 

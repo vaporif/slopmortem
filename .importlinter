@@ -1,27 +1,11 @@
 [importlinter]
 root_package = slopmortem
 
-# Notes on the contract design (read before adding/removing entries):
-#
-# 1. `allow_indirect_imports = True` everywhere — without it, anything imported
-#    via the package façade `__init__.py` re-exports counts as a transitive
-#    import of the submodule. We want these contracts to fire on DIRECT deep
-#    imports only.
-#
-# 2. Shadowed-name submodules (function name == submodule name, e.g.
-#    `slopmortem.stages.retrieve` vs the function `retrieve` re-exported by the
-#    façade) are intentionally LEFT OUT of `forbidden_modules`. import-linter's
-#    static analysis cannot tell `from slopmortem.stages import retrieve` (the
-#    function) from `from slopmortem.stages import retrieve` (the module) — the
-#    bytecode is identical. Listing them produces unfixable false positives.
-#    Submodules with non-shadowing names stay in the list.
-
 [importlinter:contract:corpus-leaf]
 name = corpus is a leaf package — outside imports go through __init__
 type = forbidden
 allow_indirect_imports = True
-# llm.tools lazy-imports corpus.tools_impl to wrap the private _tavily_*
-# helpers with budget tracking; the cycle is broken on purpose.
+# Cycle break: llm.tools wraps corpus.tools_impl._tavily_* with budget tracking.
 ignore_imports =
     slopmortem.llm.tools -> slopmortem.corpus.tools_impl
 source_modules =

@@ -39,7 +39,7 @@ from slopmortem.tracing import SpanEvent, git_sha, mint_run_id
 if TYPE_CHECKING:
     from slopmortem.budget import Budget
     from slopmortem.config import Config
-    from slopmortem.corpus.store import Corpus
+    from slopmortem.corpus import Corpus
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import Candidate, InputContext, ScoredCandidate, SimilarityScores
     from slopmortem.stages import SparseEncoder

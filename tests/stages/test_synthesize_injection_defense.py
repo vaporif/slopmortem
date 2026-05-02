@@ -16,7 +16,7 @@ from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages import synthesize, synthesize_prompt_kwargs
 from slopmortem.tracing import SpanEvent
 
-# `import_module` instead of `import x as` — the façade re-export shadows the submodule.
+# `import x as` returns the façade-shadowed function; use import_module for the module.
 _synth_module = importlib.import_module("slopmortem.stages.synthesize")
 
 _DEFAULT_MODEL = "test-synth-model"

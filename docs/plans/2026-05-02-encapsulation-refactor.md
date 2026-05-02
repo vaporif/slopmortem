@@ -685,7 +685,7 @@ Expected: green. **Stage and commit only the rename + intra-package import updat
 Run: `grep -rnE "from slopmortem\.corpus(\.schema| import schema)" slopmortem/ tests/ | grep -v "^slopmortem/corpus/"`
 Expected: empty output.
 
-**Result (2026-05-02):** non-empty — `tests/corpus/test_schema_and_store.py:10` does `from slopmortem.corpus import schema, store`. Per the safety rule, schema is NOT internal-only. Step 5 SKIPPED. Deferred follow-up: migrate the test to use the façade re-export, then rename `schema.py → _schema.py` in a follow-up PR.
+**Result (2026-05-02):** non-empty — `tests/corpus/test_schema_and_store.py:10` does `from slopmortem.corpus import schema, store`. Migrated the test to use the façade (`AliasEdge`, `MergeState`, `RawEntry`, `Corpus` re-exported from `corpus/__init__.py`) and proceeded with the rename. Step 5 DONE.
 
 - [x] **Step 5: Rename `schema.py` → `_schema.py`**
 
@@ -701,12 +701,10 @@ For each of `store`, `summarize`, the verification comment in `corpus/__init__.p
 
 For `merge_text`, `embed_sparse`, `tools_impl`: do not rename in this PR (per spec). Document the deferral in the PR description.
 
-**Result (2026-05-02):** Per the verification comment in `corpus/__init__.py`:
-- `store` — TYPE_CHECKING-only callers (3 sites), but `Corpus` is NOT re-exported by the façade. Safety rule fails. SKIPPED.
-- `summarize` — external (non-TYPE_CHECKING) caller `tests/corpus/test_summarize.py`. Safety rule fails. SKIPPED.
-- `merge_text`, `embed_sparse`, `tools_impl` — explicitly deferred per spec.
-
-Deferred follow-up: re-export `Corpus` from `corpus/__init__.py`, then rename `store.py → _store.py`. For `summarize`, migrate the test to use the façade and then rename.
+**Result (2026-05-02):**
+- `store` — added `Corpus` to the façade, swept 4 callers (`pipeline.py`, `cli.py`, `stages/retrieve.py`, `corpus/tools_impl.py`), renamed to `_store.py`. DONE.
+- `summarize` — re-grep showed zero true module-imports (the original verification was confused by the `summarize_for_rerank` symbol). Renamed to `_summarize.py` with no caller changes. DONE.
+- `merge_text`, `embed_sparse`, `tools_impl` — explicitly deferred per spec; not renamed.
 
 - [x] **Step 7: Run the full gate one last time**
 

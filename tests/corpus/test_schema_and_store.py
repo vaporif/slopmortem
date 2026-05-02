@@ -1,21 +1,13 @@
-"""Smoke tests for corpus.schema (re-exports) and corpus.store (Corpus protocol).
+"""Smoke tests for the Corpus protocol re-exported by the corpus façade.
 
-Both modules are type-only; callers import under ``TYPE_CHECKING``, so they
-never run and would show 0% coverage. These tests pin the public surface and
-exercise runtime ``isinstance`` against the Protocol.
+The Corpus protocol lives in `_store` and is type-only (callers import under
+TYPE_CHECKING). These tests pin the public surface and exercise runtime
+isinstance against the Protocol so a refactor can't silently break it.
 """
 
 from __future__ import annotations
 
-from slopmortem.corpus import schema, store
-from slopmortem.models import AliasEdge, MergeState, RawEntry
-
-
-def test_schema_reexports_resolve_to_models():
-    assert schema.AliasEdge is AliasEdge
-    assert schema.MergeState is MergeState
-    assert schema.RawEntry is RawEntry
-    assert set(schema.__all__) == {"AliasEdge", "MergeState", "RawEntry"}
+from slopmortem.corpus import Corpus
 
 
 def test_corpus_protocol_accepts_full_implementation():
@@ -38,7 +30,7 @@ def test_corpus_protocol_accepts_full_implementation():
         async def search_corpus(self, q, facets=None):
             return []
 
-    assert isinstance(_Impl(), store.Corpus)
+    assert isinstance(_Impl(), Corpus)
 
 
 def test_corpus_protocol_rejects_partial_implementation():
@@ -55,4 +47,4 @@ def test_corpus_protocol_rejects_partial_implementation():
         ):
             return []
 
-    assert not isinstance(_Partial(), store.Corpus)
+    assert not isinstance(_Partial(), Corpus)
