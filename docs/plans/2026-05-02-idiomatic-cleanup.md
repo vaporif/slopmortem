@@ -226,7 +226,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
 **Steps:**
 
-- [ ] **Step 1: Replace lines 554-557.**
+- [x] **Step 1: Replace lines 554-557.**
 
   Current code at `cli.py:553-558`:
 
@@ -250,7 +250,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
       return
   ```
 
-- [ ] **Step 2: Drop unused `sys` import if applicable.**
+- [x] **Step 2: Drop unused `sys` import if applicable.**
 
   Check whether `sys` is still used elsewhere in `cli.py` after the edit:
 
@@ -260,11 +260,11 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   If only this site referenced `sys`, remove the import. Otherwise leave it.
 
-- [ ] **Step 3: Verify.**
+- [x] **Step 3: Verify.**
 
   Run `just lint` (the `T201` noqa is gone; ruff must not complain). Run `just test -k "tracing or _maybe_init"` if any such test exists; otherwise smoke-run `just query "anything"` to confirm the CLI still loads.
 
-- [ ] **Step 4: Commit.** Subject: `cleanup: typer.echo for missing-LMNR-key warning`.
+- [x] **Step 4: Commit.** Subject: `cleanup: typer.echo for missing-LMNR-key warning`.
 
 ---
 
@@ -402,7 +402,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
 **Steps:**
 
-- [ ] **Step 1: Replace `cli.py:792` (user-facing string).**
+- [x] **Step 1: Replace `cli.py:792` (user-facing string).**
 
   Current:
 
@@ -418,19 +418,19 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   (Verify the recipe name. `grep "^eval-record" justfile` should match.)
 
-- [ ] **Step 2: Update `cli.py:11` (module docstring).**
+- [x] **Step 2: Update `cli.py:11` (module docstring).**
 
   Current line 11: `` ``replay`` iterates an evals dataset (format + content shipped in Task 11). The ``
 
   Replace `(format + content shipped in Task 11)` with `(JSONL, one InputContext per line)` so the docstring describes the shape rather than referencing a defunct task ID.
 
-- [ ] **Step 3: Update `cli.py:783` (function docstring of `replay`).**
+- [x] **Step 3: Update `cli.py:783` (function docstring of `replay`).**
 
   Current line 783: `    row goes to stdout. Dataset format ships with Task 11.`
 
   Replace `Dataset format ships with Task 11.` with `Dataset format: JSONL, one InputContext per line.`
 
-- [ ] **Step 4: Replace `tests/test_eval_runner.py:218`.**
+- [x] **Step 4: Replace `tests/test_eval_runner.py:218`.**
 
   Current docstring:
 
@@ -444,7 +444,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
   """--record dispatches to record_cassettes_for_inputs via anyio.run."""
   ```
 
-- [ ] **Step 5: Verify.**
+- [x] **Step 5: Verify.**
 
   ```
   grep -n "Task 11\|asyncio.run" slopmortem/cli.py tests/test_eval_runner.py
@@ -454,7 +454,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   Run `just test -k "test_runner_record_flag or test_replay"`.
 
-- [ ] **Step 6: Commit.** Subject: `cleanup: stale Task 11 breadcrumbs and asyncio.run docstring`.
+- [x] **Step 6: Commit.** Subject: `cleanup: stale Task 11 breadcrumbs and asyncio.run docstring`.
 
 ---
 

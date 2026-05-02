@@ -215,7 +215,7 @@ def test_runner_exits_nonzero_on_regression(
 
 
 def test_runner_record_flag_invokes_helper(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """--record dispatches to record_cassettes_for_inputs via asyncio.run."""
+    """--record dispatches to record_cassettes_for_inputs via anyio.run."""
     seed = _write_seed(tmp_path, [{"name": "alpha", "description": "x"}])
     baseline = tmp_path / "baseline.json"
     baseline.write_text("{}")

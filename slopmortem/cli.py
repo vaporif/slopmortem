@@ -8,7 +8,7 @@ LLM client, the OpenAI embedding client, and the Qdrant corpus, then dispatches
 to :func:`slopmortem.pipeline.run_query`. Stage progress goes to stderr
 (TTY-gated); the rendered Markdown report goes to stdout.
 
-``replay`` iterates an evals dataset (format + content shipped in Task 11). The
+``replay`` iterates an evals dataset (JSONL, one InputContext per line). The
 missing-dataset path exits with code 2 so CI smoke tests can probe the wiring
 without a fixture corpus.
 
@@ -551,9 +551,9 @@ def _maybe_init_tracing(config: Config) -> None:
         return
     api_key = config.lmnr_project_api_key.get_secret_value()
     if not api_key:
-        print(  # noqa: T201 - CLI surface; intentional stderr write
+        typer.echo(
             "slopmortem: LMNR_PROJECT_API_KEY missing; tracing disabled",
-            file=sys.stderr,
+            err=True,
         )
         return
     Laminar.initialize(project_api_key=api_key, base_url=base_url)
@@ -701,8 +701,7 @@ async def _build_ingest_deps(
 class RichIngestProgress(RichPhaseProgress[IngestPhase]):
     """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl."""
 
-    def __init__(self) -> None:
-        """Build with ingest phase labels."""
+    def __init__(self) -> None:  # noqa: D107
         super().__init__(INGEST_PHASE_LABELS)
 
 
@@ -739,8 +738,7 @@ _QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
 class RichQueryProgress(RichPhaseProgress[QueryPhase]):
     """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl."""
 
-    def __init__(self) -> None:
-        """Build with query phase labels."""
+    def __init__(self) -> None:  # noqa: D107
         super().__init__(_QUERY_PHASE_LABELS)
 
 
@@ -780,7 +778,7 @@ def replay_cmd(
 
     Each line parses into an :class:`InputContext`; ``run_query`` runs with the
     same dependency wiring as ``query``; the rendered :class:`Report` for each
-    row goes to stdout. Dataset format ships with Task 11.
+    row goes to stdout. Dataset format: JSONL, one InputContext per line.
     """
     anyio.run(_replay, dataset)
 
@@ -789,7 +787,7 @@ def replay_cmd(
 async def _replay(dataset: str) -> None:
     path = Path("tests/evals/datasets") / f"{dataset}.jsonl"
     if not path.exists():
-        typer.echo(f"no dataset at {path}; ship Task 11", err=True)
+        typer.echo(f"no dataset at {path}; run 'just eval-record' to generate it", err=True)
         raise typer.Exit(code=2)
 
     config = load_config()
