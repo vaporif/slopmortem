@@ -19,7 +19,6 @@ from slopmortem.models import (
     Synthesis,
     TopRisks,
 )
-import slopmortem.stages.consolidate_risks as cr_module
 from slopmortem.stages import consolidate_risks
 from slopmortem.tracing.events import SpanEvent
 
@@ -62,7 +61,7 @@ def _synthesis(
 @pytest.fixture
 def captured_events(monkeypatch: pytest.MonkeyPatch) -> list[SpanEvent]:
     events: list[SpanEvent] = []
-    monkeypatch.setattr(cr_module, "_emit_event", events.append)
+    monkeypatch.setattr("slopmortem.stages.consolidate_risks._emit_event", events.append)
     return events
 
 
