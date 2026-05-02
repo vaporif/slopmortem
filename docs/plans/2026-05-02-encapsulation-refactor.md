@@ -214,22 +214,22 @@ Order is load-bearing: expand façades (additive, can't break callers) → migra
 **Files:**
 - Verify only: `slopmortem/llm/fake_embeddings.py`, `slopmortem/llm/cassettes.py`, all of `slopmortem/`
 
-- [ ] **Step 1: Grep for any prod-side import from `slopmortem.evals`**
+- [x] **Step 1: Grep for any prod-side import from `slopmortem.evals`**
 
 Run: `grep -rnE "from slopmortem\.evals" slopmortem/ | grep -vE "^slopmortem/evals/"`
 Expected: empty output (no prod module imports from evals).
 
-- [ ] **Step 2: Confirm `NoCannedEmbeddingError` lives under `slopmortem.llm`**
+- [x] **Step 2: Confirm `NoCannedEmbeddingError` lives under `slopmortem.llm`**
 
 Run: `grep -rn "class NoCannedEmbeddingError" slopmortem/`
 Expected: `slopmortem/llm/cassettes.py:...`
 
-- [ ] **Step 3: Confirm `fake_embeddings.py` imports it from `slopmortem.llm.cassettes`**
+- [x] **Step 3: Confirm `fake_embeddings.py` imports it from `slopmortem.llm.cassettes`**
 
 Run: `grep -n "NoCannedEmbeddingError" slopmortem/llm/fake_embeddings.py`
 Expected: an import line referencing `slopmortem.llm.cassettes`, no reference to `slopmortem.evals`.
 
-- [ ] **Step 4: Stop and report drift if any check fails**
+- [x] **Step 4: Stop and report drift if any check fails**
 
 If any of the three steps above fail, the leak T1.0 thought was closed has reopened. Stop. Report to operator with the failing grep output. Do NOT proceed to T1.1.
 
