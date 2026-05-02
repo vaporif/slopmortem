@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002248,
+    "cost_usd": 0.002263,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"social_communication\", \"business_model\": \"ad_supported\", \"customer_type\": \"consumer\", \"geography\": \"us\", \"monetization\": \"ad_revenue\", \"sub_sector\": \"voice social network\", \"product_type\": \"mobile app\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"social_communication\", \"business_model\": \"ad_supported\", \"customer_type\": \"consumer\", \"geography\": \"us\", \"monetization\": \"ad_revenue\", \"sub_sector\": \"location-based voice social network\", \"product_type\": \"mobile app\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }
