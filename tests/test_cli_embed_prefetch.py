@@ -32,7 +32,7 @@ def test_embed_prefetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_make(_config: Config, _budget: Budget) -> FastEmbedEmbeddingClient:
         return _stub_fastembed_client(load_sync=lambda: sentinel)
 
-    monkeypatch.setattr("slopmortem.cli._app.make_embedder", fake_make)
+    monkeypatch.setattr("slopmortem.cli._embed_prefetch_cmd.make_embedder", fake_make)
     result = CliRunner().invoke(app, ["embed-prefetch"])
     assert result.exit_code == 0, (result.stdout or "") + (result.stderr or "")
     assert "prefetched" in result.stdout
@@ -45,7 +45,7 @@ def test_embed_prefetch_non_fastembed_provider_exits_1(monkeypatch: pytest.Monke
     def fake_make(_config: Config, _budget: Budget) -> object:
         return NotFastEmbed()
 
-    monkeypatch.setattr("slopmortem.cli._app.make_embedder", fake_make)
+    monkeypatch.setattr("slopmortem.cli._embed_prefetch_cmd.make_embedder", fake_make)
     result = CliRunner().invoke(app, ["embed-prefetch"])
     assert result.exit_code == 1
     assert "no local cache to prefetch" in (result.stderr or "")
@@ -59,7 +59,7 @@ def test_embed_prefetch_load_failure_exits_1(monkeypatch: pytest.MonkeyPatch) ->
     def fake_make(_config: Config, _budget: Budget) -> FastEmbedEmbeddingClient:
         return _stub_fastembed_client(load_sync=boom)
 
-    monkeypatch.setattr("slopmortem.cli._app.make_embedder", fake_make)
+    monkeypatch.setattr("slopmortem.cli._embed_prefetch_cmd.make_embedder", fake_make)
     result = CliRunner().invoke(app, ["embed-prefetch"])
     assert result.exit_code == 1
     assert "embed-prefetch failed" in (result.stderr or "")

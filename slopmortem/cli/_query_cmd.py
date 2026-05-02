@@ -1,0 +1,250 @@
+# ruff: noqa: FBT002 - typer signatures are bool flags with False defaults by convention.
+"""``slopmortem query`` subcommand.
+
+Production entry point for the synthesis pipeline. Loads :class:`Config`,
+starts Laminar tracing (gated on the endpoint guard in :mod:`slopmortem.tracing`
+plus an env-var API key), builds the real OpenRouter LLM client, the OpenAI
+embedding client, and the Qdrant corpus, then dispatches to
+:func:`slopmortem.pipeline.run_query`. Stage progress goes to stderr
+(TTY-gated); the rendered Markdown report goes to stdout (with ``--stdout``)
+or to ``.slopmortem/runs/<utc-ts>-<slug>.md`` by default.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import functools
+import re
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Annotated
+
+import anyio
+import typer
+from lmnr import observe
+from rich.console import Console
+
+from slopmortem.cli._app import (
+    RichQueryProgress,
+    _build_deps,
+    _maybe_init_tracing,
+    _render_query_footer,
+    app,
+)
+from slopmortem.config import load_config
+from slopmortem.corpus import set_query_corpus
+from slopmortem.models import InputContext
+from slopmortem.pipeline import cutoff_iso, run_query
+from slopmortem.render import render
+from slopmortem.stages import extract_facets, retrieve
+
+if TYPE_CHECKING:
+    from slopmortem.config import Config
+    from slopmortem.corpus import Corpus
+    from slopmortem.llm import EmbeddingClient, LLMClient
+
+
+_RUNS_DIR = Path(".slopmortem/runs")
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+_SLUG_MAX = 40
+
+_NOT_FOUND_MARKDOWN = """# No matching post-mortems found
+
+The query returned no synthesized candidates above the similarity floor.
+Try broadening the description or removing the `--years` filter."""
+
+
+def _slugify(text: str) -> str:
+    """Lowercase, collapse non-alphanumerics to ``-``, truncate to 40 chars."""
+    s = _SLUG_RE.sub("-", text.lower()).strip("-")
+    return s[:_SLUG_MAX].rstrip("-") or "run"
+
+
+def _query_run_path(ctx: InputContext) -> Path:
+    """Return ``.slopmortem/runs/<utc-ts>-<slug>.md`` for this run."""
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base = ctx.name if ctx.name and ctx.name != "(unnamed)" else ctx.description
+    return _RUNS_DIR / f"{ts}-{_slugify(base)}.md"
+
+
+@app.command("query")
+def query_cmd(
+    description: Annotated[
+        str,
+        typer.Argument(help="The pitch text to analyze."),
+    ],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Optional name for the input pitch."),
+    ] = None,
+    years: Annotated[
+        int | None,
+        typer.Option(
+            "--years",
+            help="Only consider candidates whose failure_date falls within this many years.",
+        ),
+    ] = None,
+    debug_retrieve: Annotated[
+        bool,
+        typer.Option(
+            "--debug-retrieve",
+            help=(
+                "Run facet_extract + retrieve only; print the candidate list and exit. "
+                "Skips rerank and synthesize so retrieval can be inspected in isolation."
+            ),
+        ),
+    ] = False,
+    to_stdout: Annotated[
+        bool,
+        typer.Option(
+            "--stdout",
+            help=(
+                "Print the rendered report to stdout instead of writing it under "
+                ".slopmortem/runs/. Use when piping the report into another tool."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Run the synthesis pipeline against *description* and persist a Markdown report.
+
+    By default the rendered :class:`Report` is written to
+    ``.slopmortem/runs/<utc-timestamp>-<slug>.md`` and only the path is echoed
+    to stdout. Pass ``--stdout`` to dump the report to stdout instead (handy in
+    shell pipelines). When no candidates clear the similarity floor, a short
+    "not found" message goes to stdout and the command exits with code 1 (no
+    file is written). Stage progress streams to stderr (TTY-gated). Laminar
+    tracing is gated on ``Config.enable_tracing`` and a present
+    ``LMNR_PROJECT_API_KEY``; if the key is missing but tracing is enabled, a
+    one-line warning goes to stderr and the run continues untraced.
+    """
+    anyio.run(
+        functools.partial(
+            _query,
+            description=description,
+            name=name,
+            years=years,
+            debug_retrieve=debug_retrieve,
+            to_stdout=to_stdout,
+        )
+    )
+
+
+@observe(name="cli.query")
+async def _query(
+    *,
+    description: str,
+    name: str | None,
+    years: int | None,
+    debug_retrieve: bool = False,
+    to_stdout: bool = False,
+) -> None:
+    """Async impl for ``slopmortem query``. Wires production deps and dispatches."""
+    config = load_config()
+    _maybe_init_tracing(config)
+    llm, embedder, corpus, budget = _build_deps(config)
+    set_query_corpus(corpus)
+    ctx = InputContext(name=name or "(unnamed)", description=description, years_filter=years)
+    if debug_retrieve:
+        await _debug_retrieve(ctx, llm=llm, embedder=embedder, corpus=corpus, config=config)
+        return
+
+    progress_ctx: contextlib.AbstractContextManager[RichQueryProgress | None] = (
+        RichQueryProgress() if sys.stderr.isatty() else contextlib.nullcontext()
+    )
+    err_console = Console(stderr=True)
+    try:
+        with progress_ctx as bar:
+            report = await run_query(
+                ctx,
+                llm=llm,
+                embedding_client=embedder,
+                corpus=corpus,
+                config=config,
+                budget=budget,
+                progress=bar,
+            )
+    except KeyboardInterrupt:
+        err_console.rule("[bold yellow]query cancelled (Ctrl-C)", style="yellow")
+        raise
+    except BaseException:
+        err_console.rule("[bold red]query failed", style="red")
+        err_console.print_exception(show_locals=False)
+        raise
+
+    if bar is not None:
+        _render_query_footer(bar.console, report)
+
+    if not report.candidates:
+        typer.echo(_NOT_FOUND_MARKDOWN)
+        raise typer.Exit(code=1)
+
+    rendered = render(report)
+    if to_stdout:
+        typer.echo(rendered)
+        return
+    out_path = _query_run_path(ctx)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = out_path.write_text(rendered, encoding="utf-8")
+    err_console.print(f"[bold green]Report saved to[/bold green] {out_path.resolve()}")
+    if not sys.stdout.isatty():
+        typer.echo(str(out_path))
+
+
+_DEBUG_SUMMARY_MAX = 200
+
+
+async def _debug_retrieve(
+    ctx: InputContext,
+    *,
+    llm: LLMClient,
+    embedder: EmbeddingClient,
+    corpus: Corpus,
+    config: Config,
+) -> None:
+    """Run facet_extract + retrieve and print the candidate list to stdout."""
+    facets = await extract_facets(
+        ctx.description,
+        llm,
+        model=config.model_facet,
+        max_tokens=config.max_tokens_facet,
+    )
+    cutoff = cutoff_iso(ctx.years_filter)
+    candidates = await retrieve(
+        description=ctx.description,
+        facets=facets,
+        corpus=corpus,
+        embedding_client=embedder,
+        cutoff_iso=cutoff,
+        strict_deaths=config.strict_deaths,
+        k_retrieve=config.K_retrieve,
+    )
+
+    typer.echo(f"# debug-retrieve  input={ctx.name!r}  cutoff={cutoff or 'none'}")
+    typer.echo(f"facets.closed: sector={facets.sector} business_model={facets.business_model}")
+    typer.echo(f"               customer_type={facets.customer_type} geography={facets.geography}")
+    typer.echo(f"               monetization={facets.monetization}")
+    typer.echo(f"facets.open:   sub_sector={facets.sub_sector} product_type={facets.product_type}")
+    typer.echo(f"               price_point={facets.price_point}")
+    typer.echo(f"facets.years:  founding={facets.founding_year} failure={facets.failure_year}")
+    typer.echo(f"retrieved: {len(candidates)} (k_retrieve={config.K_retrieve})")
+    typer.echo("")
+    for i, c in enumerate(candidates, start=1):
+        p = c.payload
+        founded = p.founding_date.isoformat() if p.founding_date else "?"
+        failed = p.failure_date.isoformat() if p.failure_date else "?"
+        summary = p.summary.replace("\n", " ").strip()
+        if len(summary) > _DEBUG_SUMMARY_MAX:
+            summary = summary[: _DEBUG_SUMMARY_MAX - 3] + "..."
+        meta = f"{p.facets.sector}/{p.facets.business_model}, founded={founded}, failed={failed}"
+        typer.echo(f"[{i}] score={c.score:.4f}  {p.name}  ({meta})")
+        typer.echo(f"    id={c.canonical_id}  provenance={p.provenance}  slop={p.slop_score:.2f}")
+        if c.alias_canonicals:
+            typer.echo(f"    aliases: {', '.join(c.alias_canonicals)}")
+        if p.sources:
+            extra = f" +{len(p.sources) - 1}" if len(p.sources) > 1 else ""
+            typer.echo(f"    sources: {p.sources[0]}{extra}")
+        elif p.provenance_id:
+            typer.echo(f"    provenance: {p.provenance_id}")
+        typer.echo(f"    summary: {summary}")
+        typer.echo("")

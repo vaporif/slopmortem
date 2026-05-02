@@ -1309,7 +1309,7 @@ The four `@app.command(...)` registrations in `_app.py` are: `ingest`, `query`, 
 
 **Import order in `cli/__init__.py` determines `--help` listing order.** Preserve the current ordering: `_ingest_cmd`, `_query_cmd`, `_replay_cmd`, `_embed_prefetch_cmd`.
 
-- [ ] **Step 1: Extract `_ingest_cmd.py` (one commit)**
+- [x] **Step 1: Extract `_ingest_cmd.py` (one commit)**
 
 Move the `ingest_cmd` function and its `@app.command("ingest")` decorator into `slopmortem/cli/_ingest_cmd.py`. Also move:
 - `RichIngestProgress` (single-consumer)
@@ -1346,7 +1346,7 @@ Expected: byte-identical help output.
 
 Stage and commit just this extraction.
 
-- [ ] **Step 2: Extract `_query_cmd.py` (one commit)**
+- [x] **Step 2: Extract `_query_cmd.py` (one commit)**
 
 Move `query_cmd` into `slopmortem/cli/_query_cmd.py`. Note: `RichQueryProgress`, `_QUERY_PHASE_LABELS`, and `_render_query_footer` are dual-consumer — DO NOT move them here. T3.3 puts them in `_common.py`. For now, leave them in `_app.py` and have `_query_cmd.py` import them from there as a temporary measure (T3.3 fixes the location).
 
@@ -1359,15 +1359,15 @@ from slopmortem.cli import _query_cmd   # noqa: F401
 
 Verify `--help`. Commit.
 
-- [ ] **Step 3: Extract `_replay_cmd.py` (one commit)**
+- [x] **Step 3: Extract `_replay_cmd.py` (one commit)**
 
 Move `replay_cmd`. It also consumes `RichQueryProgress` — same temporary import strategy as step 2. Verify `--help`. Commit.
 
-- [ ] **Step 4: Extract `_embed_prefetch_cmd.py` (one commit)**
+- [x] **Step 4: Extract `_embed_prefetch_cmd.py` (one commit)**
 
 Move `embed_prefetch_cmd`. Verify `--help`. Commit.
 
-- [ ] **Step 5: Run the full gate after all four extractions**
+- [x] **Step 5: Run the full gate after all four extractions**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green. `_app.py` is now mostly empty except for the `app = typer.Typer(...)` definition and the dual-consumer Rich helpers.

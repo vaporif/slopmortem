@@ -307,9 +307,7 @@ async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, d
     # (e.g. slopmortem/deps.py) so evals can consume it without reaching into
     # slopmortem.cli internals. Until then, T3.6's importlinter contract needs
     # an ignore_imports exception for slopmortem.evals.runner -> slopmortem.cli._app.
-    from slopmortem.cli._app import (  # noqa: PLC0415
-        _build_deps,  # pyright: ignore[reportPrivateUsage]
-    )
+    from slopmortem.cli._app import _build_deps  # noqa: PLC0415
     from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
 
     cfg = load_config()
