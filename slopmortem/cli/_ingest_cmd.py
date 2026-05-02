@@ -28,7 +28,8 @@ from rich.console import Console
 from rich.table import Table
 
 from slopmortem.budget import Budget
-from slopmortem.cli._app import _maybe_init_tracing, app
+from slopmortem.cli import app
+from slopmortem.cli._common import _maybe_init_tracing
 from slopmortem.cli_progress import RichPhaseProgress
 from slopmortem.config import load_config
 from slopmortem.corpus import (

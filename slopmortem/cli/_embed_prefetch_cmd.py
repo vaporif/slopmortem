@@ -11,7 +11,7 @@ import anyio
 import typer
 
 from slopmortem.budget import Budget
-from slopmortem.cli._app import app
+from slopmortem.cli import app
 from slopmortem.config import load_config
 from slopmortem.llm import FastEmbedEmbeddingClient, make_embedder
 

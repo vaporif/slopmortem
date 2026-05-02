@@ -1380,7 +1380,7 @@ Expected: green. `_app.py` is now mostly empty except for the `app = typer.Typer
 - Modify: `slopmortem/cli/_query_cmd.py`
 - Modify: `slopmortem/cli/_replay_cmd.py`
 
-- [ ] **Step 1: Inventory shared helpers**
+- [x] **Step 1: Inventory shared helpers**
 
 The dual-consumer / shared helpers identified by the spec:
 - `RichQueryProgress` (consumed by `query_cmd` and `replay_cmd`)
@@ -1393,18 +1393,18 @@ Plus any argument-type helpers (e.g. typer Option/Argument factories), Rich cons
 grep -lrn "_render_query_footer\|_QUERY_PHASE_LABELS\|RichQueryProgress" slopmortem/cli/
 ```
 
-- [ ] **Step 2: Move them into `_common.py`**
+- [x] **Step 2: Move them into `_common.py`**
 
 Create `slopmortem/cli/_common.py` and move the helpers in. Update the importers in `_query_cmd.py` and `_replay_cmd.py` to import from `slopmortem.cli._common` instead of `slopmortem.cli._app`.
 
 Preserve the lazy `noqa: PLC0415` imports inside helper functions (the late-load pattern that keeps `--help` fast).
 
-- [ ] **Step 3: Verify `--help` is still byte-stable**
+- [x] **Step 3: Verify `--help` is still byte-stable**
 
 Run: same diffs as T3.1 step 5.
 Expected: empty diffs.
 
-- [ ] **Step 4: Run the full gate**
+- [x] **Step 4: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green.
@@ -1414,12 +1414,12 @@ Expected: green.
 **Files:**
 - Verify only: `pyproject.toml`, every CLI subcommand surface
 
-- [ ] **Step 1: Re-resolve the script entrypoint**
+- [x] **Step 1: Re-resolve the script entrypoint**
 
 Run: `uv run slopmortem --version 2>/dev/null || uv run slopmortem --help | head -5`
 Expected: typer help banner appears, exit 0. Confirms `pyproject.toml [project.scripts] slopmortem = "slopmortem.cli:app"` still resolves through `cli/__init__.py`.
 
-- [ ] **Step 2: Diff `--help` for every subcommand**
+- [x] **Step 2: Diff `--help` for every subcommand**
 
 Run:
 
@@ -1432,7 +1432,7 @@ done
 
 Expected: all five diffs empty; "OK" printed five times. Any non-empty diff catches missing registrations or reordered listings.
 
-- [ ] **Step 3: Confirm subcommand list ordering**
+- [x] **Step 3: Confirm subcommand list ordering**
 
 Run: `uv run slopmortem --help | grep -E '^  (ingest|query|replay|embed-prefetch)'`
 Expected: order matches the pre-move baseline (typically `ingest`, `query`, `replay`, `embed-prefetch`).
@@ -1443,11 +1443,11 @@ Expected: order matches the pre-move baseline (typically `ingest`, `query`, `rep
 - Modify: `slopmortem/cli/__init__.py`
 - Delete (if empty): `slopmortem/cli/_app.py`
 
-- [ ] **Step 1: Confirm `_app.py` is empty after T3.2/T3.3**
+- [x] **Step 1: Confirm `_app.py` is empty after T3.2/T3.3**
 
 Read `slopmortem/cli/_app.py`. After T3.2 extracted the four subcommands and T3.3 moved shared helpers to `_common.py`, `_app.py` should contain only the `app = typer.Typer(...)` construction. If anything else remains, stop and resolve before continuing — moving `app` while leaving other helpers behind will break callers of those helpers.
 
-- [ ] **Step 2: Capture the original `typer.Typer(...)` arguments**
+- [x] **Step 2: Capture the original `typer.Typer(...)` arguments**
 
 Before any deletion, grep the construction site so we don't lose it:
 
@@ -1457,7 +1457,7 @@ grep -A3 "typer.Typer(" slopmortem/cli/_app.py | tee /tmp/typer_construction.txt
 
 Step 4 reuses this when constructing `app` in `cli/__init__.py`.
 
-- [ ] **Step 3: Rewrite subcommand imports of `app` BEFORE deleting `_app.py`**
+- [x] **Step 3: Rewrite subcommand imports of `app` BEFORE deleting `_app.py`**
 
 The four `_*_cmd.py` files currently each have `from slopmortem.cli._app import app` (planted by T3.2 step 1's pattern at the top of `_ingest_cmd.py`, etc.). After step 4 moves `app` into `cli/__init__.py`, those imports become dangling. Rewrite them to import via the package façade:
 
@@ -1473,7 +1473,7 @@ Verify with: `grep -rn "from slopmortem.cli" slopmortem/cli/_*_cmd.py` — every
 
 This works because at import time, `cli/__init__.py` defines `app` BEFORE doing the side-effect import of each `_*_cmd.py` module (step 4 ordering). So when `_ingest_cmd.py` runs `from slopmortem.cli import app`, `cli` is partially initialized but `app` is already bound — Python handles the partial-init lookup correctly here.
 
-- [ ] **Step 4: Update `cli/__init__.py`**
+- [x] **Step 4: Update `cli/__init__.py`**
 
 Edit `slopmortem/cli/__init__.py`:
 
@@ -1501,13 +1501,13 @@ The `noqa: E402` is correct here (top-level imports after a non-import statement
 
 Replace the `typer.Typer(no_args_is_help=True)` arguments with the actual construction captured in step 2.
 
-- [ ] **Step 5: Delete `_app.py` if empty**
+- [x] **Step 5: Delete `_app.py` if empty**
 
 Run: `wc -l slopmortem/cli/_app.py 2>/dev/null && cat slopmortem/cli/_app.py`
 If output is empty or only contains comments/whitespace: `git rm slopmortem/cli/_app.py`
 If non-empty: stop — step 1's check missed something. Resolve before deleting.
 
-- [ ] **Step 6: Run the full gate (including the `--help` byte-diff from T3.4)**
+- [x] **Step 6: Run the full gate (including the `--help` byte-diff from T3.4)**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green; `--help` outputs still byte-stable. If you see `ImportError: cannot import name 'app' from 'slopmortem.cli'`, step 3's sed missed a file — re-run the grep.
@@ -1517,7 +1517,7 @@ Expected: green; `--help` outputs still byte-stable. If you see `ImportError: ca
 **Files:**
 - Modify: `.importlinter`
 
-- [ ] **Step 1: Add the `cli-private` contract**
+- [x] **Step 1: Add the `cli-private` contract**
 
 Edit `.importlinter`. T1.6 deliberately did not include a placeholder (import-linter rejects empty `forbidden_modules`). Append a fresh contract:
 
@@ -1544,12 +1544,12 @@ forbidden_modules =
 
 Drop `slopmortem.cli._app` from `forbidden_modules` if step T3.5 deleted that file.
 
-- [ ] **Step 2: Run lint-imports**
+- [x] **Step 2: Run lint-imports**
 
 Run: `uv run lint-imports`
 Expected: contract passes. The `slopmortem/cli_progress.py` re-export pattern keeps eval recorders compliant — they import from `slopmortem.cli_progress` (top-level), not from `slopmortem.cli._*`.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green. PR 3 ready to merge.

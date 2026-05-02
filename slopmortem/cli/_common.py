@@ -1,37 +1,15 @@
-"""Top-level CLI: ``query``, ``replay``, and ``embed-prefetch`` subcommands.
+"""Shared helpers used by 2+ subcommand modules.
 
-``query`` is the production entry point for the synthesis pipeline. Loads
-:class:`Config`, starts Laminar tracing (gated on the endpoint guard in
-:mod:`slopmortem.tracing` plus an env-var API key), builds the real OpenRouter
-LLM client, the OpenAI embedding client, and the Qdrant corpus, then dispatches
-to :func:`slopmortem.pipeline.run_query`. Stage progress goes to stderr
-(TTY-gated); the rendered Markdown report goes to stdout.
-
-``replay`` iterates an evals dataset (JSONL, one InputContext per line). The
-missing-dataset path exits with code 2 so CI smoke tests can probe the wiring
-without a fixture corpus.
-
-``ingest`` lives in :mod:`slopmortem.cli._ingest_cmd`; it shares ``app`` and the
-``_maybe_init_tracing`` helper with this module via side-effect import in
-:mod:`slopmortem.cli`.
+Lives here so the subcommand files can import without forming circular
+dependencies through ``cli/__init__.py``. T4 / ``_internal/`` migration will
+move this under a private subdir; for now the leading underscore on the
+filename signals "package-private" and the import-linter contract enforces it.
 """
 
 from __future__ import annotations
 
-import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-# Silence gRPC C-Core's INFO log channel BEFORE the Laminar import below pulls
-# in grpcio. Without this, the OTLP exporter's pool prints
-# ``ev_poll_posix.cc:593 FD from fork parent still in poll list`` on every
-# poll-loop wake-up, which interleaves with the Rich progress redraws and turns
-# the terminal into a glog smear. ``ERROR`` keeps real failures visible while
-# killing the chatty INFO/WARNING traffic.
-os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
-os.environ.setdefault("GRPC_TRACE", "")
-os.environ.setdefault("GLOG_minloglevel", "2")
 
 import typer
 from lmnr import Laminar
@@ -53,24 +31,17 @@ if TYPE_CHECKING:
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import Report
 
-logger = logging.getLogger(__name__)
-
-app = typer.Typer(
-    add_completion=False,
-    help="slopmortem: query and ingest startup post-mortems.",
-)
-
-# Names re-exported for the sibling subcommand modules (``_ingest_cmd``,
-# ``_query_cmd``, ``_replay_cmd``). T3.3 will move these helpers to
-# ``slopmortem.cli._common``; until then ``__all__`` declares the cross-module
-# surface so basedpyright doesn't flag the in-module helpers as unused.
+# Underscore-prefixed but exported across the cli package: ``__all__`` tells
+# basedpyright these are intentional package-private exports, suppressing
+# ``reportPrivateUsage`` at the import sites in ``_*_cmd.py`` and
+# ``slopmortem.evals.runner``. The leading-underscore prefix still signals
+# "package-private" to humans and import-linter (T3.6).
 __all__ = [
     "_QUERY_PHASE_LABELS",
     "RichQueryProgress",
     "_build_deps",
     "_maybe_init_tracing",
     "_render_query_footer",
-    "app",
 ]
 
 
@@ -168,7 +139,3 @@ def _render_query_footer(console: Console, report: Report) -> None:
             expand=False,
         )
     )
-
-
-if __name__ == "__main__":
-    app()

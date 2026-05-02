@@ -17,12 +17,12 @@ import anyio
 import typer
 from lmnr import observe
 
-from slopmortem.cli._app import (
+from slopmortem.cli import app
+from slopmortem.cli._common import (
     RichQueryProgress,
     _build_deps,
     _maybe_init_tracing,
     _render_query_footer,
-    app,
 )
 from slopmortem.config import load_config
 from slopmortem.corpus import set_query_corpus
