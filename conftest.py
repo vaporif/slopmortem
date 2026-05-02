@@ -83,4 +83,5 @@ def vcr_config():
         "before_record_response": before_record_response,
         "record_mode": "once" if os.environ.get("RECORD") else "none",
         "match_on": ("method", "scheme", "host", "port", "path", "query", "body"),
+        "decode_compressed_response": True,
     }
