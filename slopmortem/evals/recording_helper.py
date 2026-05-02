@@ -351,11 +351,10 @@ class _AggregateProgressBridge:
         self._ticked = 0
 
     def start_phase(self, phase: QueryPhase, total: int) -> None:
-        """No-op; phase totals are pre-summed at the helper level."""
+        # Phase totals are pre-summed at the helper level.
         del phase, total
 
     def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
-        """Forward each inner advance to the shared ROWS bar."""
         del phase
         delta = min(n, self._ticks_per_row - self._ticked)
         if delta <= 0:
@@ -364,24 +363,22 @@ class _AggregateProgressBridge:
         self._sink.advance_phase(RecordPhase.ROWS, delta)
 
     def end_phase(self, phase: QueryPhase) -> None:
-        """No-op."""
         del phase
 
     def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
-        """No-op under parallel mode — inline detail would race across rows."""
+        # Inline detail would race across rows under parallel mode.
         del phase, status
 
     def log(self, message: str) -> None:
-        """Forward a one-off status line."""
         self._sink.log(message)
 
     def error(self, phase: QueryPhase, message: str) -> None:
-        """Forward an error; attribute it to ``ROWS`` since inner phases have no task."""
+        # Attribute to ROWS since inner phases have no task in parallel mode.
         del phase
         self._sink.error(RecordPhase.ROWS, message)
 
     def top_up(self) -> None:
-        """Advance any ticks the row didn't fire so the bar reaches its declared total."""
+        # Advance ticks the row didn't fire so the bar reaches its declared total.
         remaining = self._ticks_per_row - self._ticked
         if remaining > 0:
             self._sink.advance_phase(RecordPhase.ROWS, remaining)
