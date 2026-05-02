@@ -1,0 +1,98 @@
+{
+  "rows": {
+    "gridspring": {
+      "assertions": {},
+      "candidates_count": 0
+    },
+    "helixthread": {
+      "assertions": {
+        "knewton::edtech": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        }
+      },
+      "candidates_count": 1
+    },
+    "kakikaki": {
+      "assertions": {},
+      "candidates_count": 0
+    },
+    "kappa-cli": {
+      "assertions": {
+        "parse::devtools": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        },
+        "rethinkdb::devtools": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        }
+      },
+      "candidates_count": 2
+    },
+    "lastmile-iq": {
+      "assertions": {},
+      "candidates_count": 0
+    },
+    "ledgermint": {
+      "assertions": {},
+      "candidates_count": 0
+    },
+    "shardbright": {
+      "assertions": {
+        "38-studios::gaming": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        }
+      },
+      "candidates_count": 1
+    },
+    "smolpark": {
+      "assertions": {
+        "path::social_communication": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        },
+        "vine::social_communication": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        },
+        "yo::social_communication": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        }
+      },
+      "candidates_count": 3
+    },
+    "vitalcue": {
+      "assertions": {
+        "ubiome::biotech": {
+          "all_sources_in_allowed_domains": true,
+          "claims_grounded_in_body": true,
+          "lifespan_months_positive": true,
+          "where_diverged_nonempty": true
+        }
+      },
+      "candidates_count": 1
+    },
+    "yume-tutor": {
+      "assertions": {},
+      "candidates_count": 0
+    }
+  },
+  "version": 1
+}
