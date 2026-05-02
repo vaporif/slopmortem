@@ -1,7 +1,7 @@
 {
   "key": {
     "model": "anthropic/claude-haiku-4.5",
-    "prompt_hash": "fe532e4bb3609c9f",
+    "prompt_hash": "ff3a7897e27d7bf1",
     "template_sha": "0a05e16b1fed1ad4"
   },
   "request_debug": {
@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002274,
+    "cost_usd": 0.0023,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"devtools\", \"business_model\": \"b2b_saas\", \"customer_type\": \"developer\", \"geography\": \"global\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"preview environment management\", \"product_type\": \"CLI + hosted control plane\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"edtech\", \"business_model\": \"b2c_subscription\", \"customer_type\": \"consumer\", \"geography\": \"apac\", \"monetization\": \"tiered_freemium\", \"sub_sector\": \"AI tutoring for K-12\", \"product_type\": \"mobile app\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }
