@@ -374,13 +374,13 @@ Expected: green.
 **Files:**
 - Modify: `slopmortem/stages/__init__.py`
 
-- [ ] **Step 1: Enumerate outside callers**
+- [x] **Step 1: Enumerate outside callers**
 
 Run: `grep -rnE "^from slopmortem\.stages\." slopmortem/ tests/ | grep -v "^slopmortem/stages/"`
 
 `stages/__init__.py` is currently empty (only a module docstring + `from __future__ import annotations`) — there is nothing to "confirm" against. The grep output is the source of truth for what step 2 must export. Cross-check against the spec's expected list: `extract_facets`, `retrieve`, `llm_rerank`, `synthesize_all`, `consolidate_risks`, plus `synthesize` and `synthesize_prompt_kwargs` (used by `tests/stages/test_synthesize.py`, `tests/test_observe_redaction.py`, `tests/test_pipeline_e2e.py`). If the grep finds names not in this list, add them; if the grep is missing a name from this list, that name has no current outside caller and can be omitted.
 
-- [ ] **Step 2: Replace the empty init with explicit re-exports**
+- [x] **Step 2: Replace the empty init with explicit re-exports**
 
 Edit `slopmortem/stages/__init__.py`:
 
@@ -410,7 +410,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 3: Run typecheck and smoke**
+- [x] **Step 3: Run typecheck and smoke**
 
 Run: `just typecheck && just smoke`
 Expected: green.
