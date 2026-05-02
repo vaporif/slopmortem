@@ -303,16 +303,10 @@ async def _run_cassettes(
 
 
 async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, dict[str, object]]:
-    """Run every row through real production deps. May spend real money.
-
-    Behavior change vs. the old deterministic-only baseline:
-    ``claims_grounded_in_body`` now actually runs against the post-mortem
-    body. Previously it was vacuously True because ``_run_live`` passed no
-    corpus to the scorer.
-    """
+    """Run every row through real production deps. May spend real money."""
     # Lazy-imported so cassette mode doesn't drag CLI deps in. Both names are
-    # private; sanctioned reuse: the runner mirrors the CLI boot path exactly
-    # so live evals get the same prod wiring.
+    # private; the runner deliberately mirrors the CLI boot path so live evals
+    # get the same prod wiring.
     from slopmortem.cli import (  # noqa: PLC0415
         _build_deps,  # pyright: ignore[reportPrivateUsage]
     )

@@ -187,9 +187,8 @@ def ingest_cmd(  # noqa: PLR0913 - every flag mirrors the spec; user types kwarg
 async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
     """Re-run the slop classifier across quarantined rows and print the summary."""
     journal = await _build_journal(config, post_mortems_root)
-    # reclassify is a live operation that hits the slop judge for real. Build
-    # only the LLM (no embedder, no qdrant) and feed it into the Haiku
-    # classifier.
+    # reclassify hits the live slop judge, so we need the LLM but neither the
+    # embedder nor qdrant.
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
     openrouter_sdk = AsyncOpenAI(
         api_key=config.openrouter_api_key.get_secret_value(),
@@ -293,10 +292,8 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
     progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
         RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
-    # Catch and print any exception that escapes the orchestrator BEFORE the
-    # Rich live render tears down. Without this, Progress.__exit__ clears the
-    # screen and the traceback interleaves invisibly with bar redraws — the
-    # exact failure mode from the Wesabe / "collection doesn't exist" run.
+    # Print escaping exceptions before Rich tears down — Progress.__exit__
+    # clears the screen, so a traceback interleaved with bar redraws disappears.
     err_console = Console(stderr=True)
     try:
         with progress_ctx as bar:
@@ -317,15 +314,13 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
                 progress=bar,
             )
     except KeyboardInterrupt:
-        # Ctrl-C is a BaseException; without surfacing it the user just sees
-        # the prompt return with no signal that the run stopped.
+        # BaseException, so without an explicit handler the prompt returns
+        # silently with no sign the run was interrupted.
         err_console.rule("[bold yellow]ingest cancelled (Ctrl-C)", style="yellow")
         raise
     except BaseException:
-        # Catch BaseException (asyncio.CancelledError, SystemExit, ...) too.
-        # ``except Exception`` alone misses these and they exit silently when
-        # Rich's live render tears down. Print and re-raise — the caller still
-        # gets a non-zero exit, this is just for visibility.
+        # Covers CancelledError / SystemExit / etc that ``except Exception``
+        # misses. Re-raise so the caller still gets a non-zero exit.
         err_console.rule("[bold red]ingest failed", style="red")
         err_console.print_exception(show_locals=False)
         raise

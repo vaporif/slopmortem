@@ -207,9 +207,18 @@ def _join_to_candidates(
     return out
 
 
-def _current_trace_id() -> str | None:
-    """Return the current Laminar trace id, or ``None`` when tracing is off."""
-    if not Laminar.is_initialized():
+def _current_trace_id(*, enable_tracing: bool) -> str | None:
+    """Return the current Laminar trace id, or ``None`` when tracing is off.
+
+    Gated on the user-facing ``Config.enable_tracing`` flag rather than
+    ``Laminar.is_initialized()`` alone. The ``@observe`` decorator can still
+    create a span (and thus a non-INVALID OTel trace id) under
+    ``TracerWrapper.verify_initialized()`` even after ``Laminar.shutdown()``
+    flips ``Laminar.is_initialized()`` back to False — and that state can
+    persist across xdist workers in some setups, leaking a trace_id into
+    runs the user never asked to trace.
+    """
+    if not enable_tracing or not Laminar.is_initialized():
         return None
     tid = Laminar.get_trace_id()
     return str(tid) if tid is not None else None
@@ -396,7 +405,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             },
             cost_usd_total=budget.spent_usd,
             latency_ms_total=int((time.monotonic() - t0) * 1000),
-            trace_id=_current_trace_id(),
+            trace_id=_current_trace_id(enable_tracing=config.enable_tracing),
             budget_remaining_usd=budget.remaining,
             budget_exceeded=budget_exceeded,
             filtered_pre_synth=filtered_pre_synth,

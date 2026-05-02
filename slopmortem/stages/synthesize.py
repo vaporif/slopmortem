@@ -6,9 +6,7 @@ candidate's failure can't cancel the others.
 
 The OpenRouter client (``slopmortem/llm/openrouter.py``) drives the tool-call
 loop, wraps tool results in ``<untrusted_document>`` tags, and enforces the
-5-turn bound. This stage is one ``llm.complete(...)`` call. ``Laminar.init``
-wiring lands in Task 10 (plan line 713); the module-level ``_emit_event``
-hook is a no-op stub until that ships.
+5-turn bound. This stage is one ``llm.complete(...)`` call.
 """
 
 from __future__ import annotations

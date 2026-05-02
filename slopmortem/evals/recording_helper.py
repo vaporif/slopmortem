@@ -155,10 +155,8 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
     # Lazy imports so import-time cycles stay cheap.
     from slopmortem.corpus.tools_impl import _set_corpus  # noqa: PLC0415
 
-    # ``_row_id`` lives in the runner module; both modules import each other's
-    # public surface lazily to avoid an import cycle at process start. Hoisted
-    # to function scope (was per-loop) since the lookup is invariant across
-    # rows.
+    # Lazy import: the runner imports back into this module, so a top-level
+    # import would cycle at process start.
     from slopmortem.evals.runner import (  # noqa: PLC0415
         _row_id,  # pyright: ignore[reportPrivateUsage]
     )
@@ -285,10 +283,8 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
                         raise
                     else:
                         _atomic_swap(tmp_dir=tmp_dir, real_dir=real_dir)
-                        # Count files actually committed to disk for this row.
-                        # Recording wrappers write flat under `real_dir` (no
-                        # subdirs), so a non-recursive `glob` is sufficient
-                        # and cheaper than `rglob`.
+                        # Recording wrappers write flat under real_dir, so a
+                        # non-recursive glob counts every cassette this row wrote.
                         n_cassettes = len(list(real_dir.glob("*.json")))
                         cassettes_written += n_cassettes
                         rows_succeeded += 1

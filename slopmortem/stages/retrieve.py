@@ -23,15 +23,12 @@ if TYPE_CHECKING:
 type SparseEncoder = Callable[[str], dict[int, float]]
 
 
-# lmnr-python at this version exposes ``ignore_output`` (singular bool); the
-# plan referenced ``ignore_outputs``, which does not exist. ``ignore_output=True``
-# drops the auto-captured Candidate output and we re-attach a redacted
-# ``(canonical_id, score, name, facets, slop_score)`` projection via
-# ``Laminar.set_span_attributes``. ``ignore_inputs=["corpus"]`` is also needed
-# because auto-capture serializes the Corpus argument — test fakes embed their
-# candidate corpus inline; production stores would still serialize the client
-# handle, which isn't useful trace content. Body never crosses the trace
-# boundary.
+# ``ignore_output=True`` drops the auto-captured Candidate output; a redacted
+# ``(canonical_id, score, name, facets, slop_score)`` projection gets re-attached
+# below. ``ignore_inputs=["corpus"]`` keeps the corpus handle out of the trace
+# (test fakes inline their candidate set; production stores serialize the
+# client handle, neither of which is useful trace content). Body bytes never
+# cross the trace boundary.
 @observe(name="stage.retrieve", ignore_output=True, ignore_inputs=["corpus"])
 async def retrieve(  # noqa: PLR0913 — every dependency is required at the call site
     *,
