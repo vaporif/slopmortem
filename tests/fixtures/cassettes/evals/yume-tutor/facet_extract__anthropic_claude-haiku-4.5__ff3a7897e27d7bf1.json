@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.00231,
+    "cost_usd": 0.0023,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"edtech\", \"business_model\": \"b2c_subscription\", \"customer_type\": \"consumer\", \"geography\": \"apac\", \"monetization\": \"tiered_freemium\", \"sub_sector\": \"AI tutoring platform\", \"product_type\": \"mobile app\", \"price_point\": \"tiered freemium\", \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"edtech\", \"business_model\": \"b2c_subscription\", \"customer_type\": \"consumer\", \"geography\": \"apac\", \"monetization\": \"tiered_freemium\", \"sub_sector\": \"AI tutoring for K-12\", \"product_type\": \"mobile app\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }

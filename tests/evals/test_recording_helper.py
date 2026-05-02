@@ -6,6 +6,8 @@ import inspect
 import os
 from typing import TYPE_CHECKING
 
+import pytest
+
 from slopmortem.evals.recording_helper import (
     _atomic_swap,
     _QueryProgressBridge,
@@ -21,6 +23,9 @@ from slopmortem.pipeline import QueryPhase
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+_NO_INNER_TASKS_MSG = "bridge must not create inner-phase tasks"
 
 
 def test_sweep_removes_only_stale_recording_dirs(tmp_path: Path) -> None:
@@ -85,75 +90,61 @@ def test_record_cassettes_for_inputs_accepts_progress_kwarg() -> None:
     assert isinstance(NullRecordProgress(), RecordProgress)
 
 
-def test_query_progress_bridge_translates_phases() -> None:
-    """The bridge maps every ``QueryPhase`` to the matching ``RecordPhase``.
-
-    Drives the four pipeline events plus ``log`` / ``error`` / status
-    against a fake sink that records every call. Verifies the retrieve →
-    embed mapping explicitly so the spec's "drop or remap" trade-off is
-    pinned in code.
-    """
+def test_query_progress_bridge_collapses_to_rows_status() -> None:
+    """The bridge folds every inner phase event into ``ROWS``'s status suffix."""
 
     class _FakeSink:
         def __init__(self) -> None:
-            self.calls: list[tuple[object, ...]] = []
+            self.statuses: list[str | None] = []
+            self.errors: list[tuple[RecordPhase, str]] = []
+            self.logs: list[str] = []
 
         def start_phase(self, phase: RecordPhase, total: int | None) -> None:
-            self.calls.append(("start", phase, total))
+            del phase, total
+            pytest.fail(_NO_INNER_TASKS_MSG)
 
         def advance_phase(self, phase: RecordPhase, n: int = 1) -> None:
-            self.calls.append(("advance", phase, n))
+            del phase, n
+            pytest.fail(_NO_INNER_TASKS_MSG)
 
         def end_phase(self, phase: RecordPhase) -> None:
-            self.calls.append(("end", phase))
+            del phase
+            pytest.fail(_NO_INNER_TASKS_MSG)
 
         def set_phase_status(self, phase: RecordPhase, status: str | None) -> None:
-            self.calls.append(("status", phase, status))
+            assert phase == RecordPhase.ROWS
+            self.statuses.append(status)
 
         def log(self, message: str) -> None:
-            self.calls.append(("log", message))
+            self.logs.append(message)
 
         def error(self, phase: RecordPhase, message: str) -> None:
-            self.calls.append(("error", phase, message))
+            self.errors.append((phase, message))
 
         def cost_update(self, spent_usd: float, max_usd: float) -> None:
-            self.calls.append(("cost", spent_usd, max_usd))
+            del spent_usd, max_usd
 
     sink = _FakeSink()
     bridge = _QueryProgressBridge(sink)
 
     bridge.start_phase(QueryPhase.FACET_EXTRACT, total=1)
-    bridge.advance_phase(QueryPhase.FACET_EXTRACT)
-    bridge.end_phase(QueryPhase.FACET_EXTRACT)
-    bridge.start_phase(QueryPhase.RETRIEVE, total=2)
-    bridge.advance_phase(QueryPhase.RETRIEVE, n=2)
-    bridge.end_phase(QueryPhase.RETRIEVE)
-    bridge.start_phase(QueryPhase.RERANK, total=1)
-    bridge.set_phase_status(QueryPhase.RERANK, "running")
-    bridge.end_phase(QueryPhase.RERANK)
-    bridge.start_phase(QueryPhase.SYNTHESIZE, total=4)
-    bridge.error(QueryPhase.SYNTHESIZE, "boom")
-    bridge.advance_phase(QueryPhase.SYNTHESIZE, n=4)
-    bridge.end_phase(QueryPhase.SYNTHESIZE)
-    bridge.log("hi")
+    assert sink.statuses[-1] == "extracting facets"
 
-    expected = [
-        ("start", RecordPhase.FACET_EXTRACT, 1),
-        ("advance", RecordPhase.FACET_EXTRACT, 1),
-        ("end", RecordPhase.FACET_EXTRACT),
-        # ``QueryPhase.RETRIEVE`` is the only mapping the spec leaves a choice
-        # on; pinning it to ``RecordPhase.EMBED`` here matches the bridge's
-        # ``_QUERY_TO_RECORD_PHASE`` table and the rationale in the comment.
-        ("start", RecordPhase.EMBED, 2),
-        ("advance", RecordPhase.EMBED, 2),
-        ("end", RecordPhase.EMBED),
-        ("start", RecordPhase.RERANK, 1),
-        ("status", RecordPhase.RERANK, "running"),
-        ("end", RecordPhase.RERANK),
-        ("start", RecordPhase.SYNTHESIZE, 4),
-        ("error", RecordPhase.SYNTHESIZE, "boom"),
-        ("advance", RecordPhase.SYNTHESIZE, 4),
-        ("end", RecordPhase.SYNTHESIZE),
-        ("log", "hi"),
-    ]
-    assert sink.calls == expected
+    bridge.start_phase(QueryPhase.SYNTHESIZE, total=2)
+    assert sink.statuses[-1] == "synthesizing post-mortems 0/2"
+    bridge.set_phase_status(QueryPhase.SYNTHESIZE, "warming prompt cache")
+    assert sink.statuses[-1] == "synthesizing post-mortems 0/2 — warming prompt cache"
+    bridge.advance_phase(QueryPhase.SYNTHESIZE)
+    bridge.set_phase_status(QueryPhase.SYNTHESIZE, None)
+    assert sink.statuses[-1] == "synthesizing post-mortems 1/2"
+
+    bridge.error(QueryPhase.SYNTHESIZE, "boom")
+    assert sink.errors == [(RecordPhase.ROWS, "boom")]
+
+    bridge.log("hi")
+    assert sink.logs == ["hi"]
+
+    # end_phase must not flash an empty status between sub-steps.
+    statuses_before = list(sink.statuses)
+    bridge.end_phase(QueryPhase.SYNTHESIZE)
+    assert sink.statuses == statuses_before

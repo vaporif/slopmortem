@@ -1,11 +1,12 @@
 """Progress Protocol for the eval cassette recorder.
 
-Mirrors :class:`slopmortem.pipeline.QueryProgress`'s surface so the
-recorder's per-row inner phases (facet/rerank/synthesize) can flow into the
-same display the helper drives. Adds a single ``cost_update`` hook to surface
-the live spend ceiling — recording is the only path in the project that burns
-real OpenRouter money under a hard cap, so the bar mutates as spend accrues
-rather than waiting until the post-run footer.
+The recorder runs many rows under a hard $ cap, so the display only carries
+two phase tasks: ``ROWS`` (per-input outer loop) and ``COST`` (synthetic
+spend meter mutated via ``cost_update``). Inner ``run_query`` phases —
+facet/embed/rerank/synthesize — collapse onto the ``ROWS`` task as a
+transient status suffix via :class:`_QueryProgressBridge` in
+``recording_helper``; that keeps the screen stable across rows instead of
+showing four sub-bars that reset on every iteration.
 """
 
 from __future__ import annotations
@@ -17,24 +18,17 @@ from typing import Protocol, runtime_checkable
 class RecordPhase(StrEnum):
     """Phase keys driven by :func:`record_cassettes_for_inputs`.
 
-    The first five mirror what the recorder actually drives during a run:
-    ``ROWS`` is the per-input outer loop; ``FACET_EXTRACT`` / ``RERANK`` /
-    ``SYNTHESIZE`` come from the inner ``run_query`` via the bridge; ``EMBED``
-    is driven from the bridge's ``QueryPhase.RETRIEVE`` mapping (retrieve is
-    the only place the recorder touches the embedding wrapper).
+    ``ROWS`` is the per-input outer loop; the bridge appends a transient
+    status suffix (e.g. ``synthesizing post-mortems 1/2 — warming prompt
+    cache``) so the current sub-step is visible without dedicated tasks.
 
     ``COST`` is synthetic — never emitted as a pipeline event. It exists to
     give :class:`RichRecordProgress` a phase task to mutate via
     ``cost_update`` so the spend ceiling reads as a filling bar inside the
-    same Progress widget. A small abuse of the phase abstraction, accepted
-    to keep the entire surface inside one render frame.
+    same Progress widget.
     """
 
     ROWS = "rows"
-    FACET_EXTRACT = "facet_extract"
-    RERANK = "rerank"
-    SYNTHESIZE = "synthesize"
-    EMBED = "embed"
     COST = "cost"
 
 

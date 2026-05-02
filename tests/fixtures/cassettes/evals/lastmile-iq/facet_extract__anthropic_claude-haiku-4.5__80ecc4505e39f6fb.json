@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002344,
+    "cost_usd": 0.002339,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"logistics_supply_chain\", \"business_model\": \"b2b_saas\", \"customer_type\": \"smb\", \"geography\": \"us\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"route optimization and dispatching\", \"product_type\": \"SaaS platform\", \"price_point\": \"per-driver subscription with usage overages\", \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"logistics_supply_chain\", \"business_model\": \"b2b_saas\", \"customer_type\": \"smb\", \"geography\": \"us\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"route optimization and dispatch\", \"product_type\": \"SaaS platform\", \"price_point\": \"per-driver subscription plus usage overages\", \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }

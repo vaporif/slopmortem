@@ -22,10 +22,6 @@ if TYPE_CHECKING:
 
 _RECORD_PHASE_LABELS: dict[RecordPhase, str] = {
     RecordPhase.ROWS: "Rows",
-    RecordPhase.FACET_EXTRACT: "Extracting facets",
-    RecordPhase.RERANK: "Reranking candidates",
-    RecordPhase.SYNTHESIZE: "Synthesizing post-mortems",
-    RecordPhase.EMBED: "Embedding",
     RecordPhase.COST: "Spend",
 }
 

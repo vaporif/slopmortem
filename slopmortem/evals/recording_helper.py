@@ -298,52 +298,75 @@ class _ByModelLLM:
         )
 
 
-# ``RecordPhase`` doesn't have a direct counterpart for ``QueryPhase.RETRIEVE``;
-# retrieve drives the embedding wrapper, which lines up with the EMBED record
-# phase. Mapping retrieve→embed inside the bridge keeps both inner-stage
-# progress and the embed bar live without adding a separate hook off
-# ``RecordingEmbeddingClient``.
-_QUERY_TO_RECORD_PHASE: dict[QueryPhase, RecordPhase] = {
-    QueryPhase.FACET_EXTRACT: RecordPhase.FACET_EXTRACT,
-    QueryPhase.RETRIEVE: RecordPhase.EMBED,
-    QueryPhase.RERANK: RecordPhase.RERANK,
-    QueryPhase.SYNTHESIZE: RecordPhase.SYNTHESIZE,
+_QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
+    QueryPhase.FACET_EXTRACT: "extracting facets",
+    QueryPhase.RETRIEVE: "embedding",
+    QueryPhase.RERANK: "reranking candidates",
+    QueryPhase.SYNTHESIZE: "synthesizing post-mortems",
 }
 
 
 class _QueryProgressBridge:
-    """Forward inner ``QueryPhase`` events to a ``RecordProgress`` sink.
+    """Collapse inner ``QueryPhase`` events into a status suffix on ``ROWS``.
 
-    The recorder runs ``run_query`` once per row; the bridge translates each
-    inner phase to the matching :class:`RecordPhase` so all stages share one
-    Progress widget. ``start_phase`` resets the underlying task each row so
-    the bar restarts at zero rather than accumulating across rows.
+    Per-row sub-bars made the screen look like progress restarted on every
+    iteration. Folding the live phase + ``M/N`` + transient detail into a
+    single ``set_phase_status`` on :data:`RecordPhase.ROWS` keeps Rows and
+    Spend as the only persistent rows; the sub-step rides along inline.
     """
 
     def __init__(self, sink: RecordProgress) -> None:
-        """Bind the underlying sink."""
+        """Bind the sink that owns the ``ROWS`` task."""
         self._sink = sink
+        self._phase: QueryPhase | None = None
+        self._total = 0
+        self._completed = 0
+        self._detail: str | None = None
+
+    def _refresh(self) -> None:
+        if self._phase is None:
+            self._sink.set_phase_status(RecordPhase.ROWS, None)
+            return
+        parts: list[str] = [_QUERY_PHASE_LABELS[self._phase]]
+        if self._total > 1:
+            parts.append(f"{self._completed}/{self._total}")
+        text = " ".join(parts)
+        if self._detail:
+            text = f"{text} — {self._detail}"
+        self._sink.set_phase_status(RecordPhase.ROWS, text)
 
     def start_phase(self, phase: QueryPhase, total: int) -> None:
-        """Reset the matching record-phase bar to ``total``."""
-        self._sink.start_phase(_QUERY_TO_RECORD_PHASE[phase], total=total)
+        """Switch the suffix to *phase*; reset its M/N and detail."""
+        self._phase = phase
+        self._total = total
+        self._completed = 0
+        self._detail = None
+        self._refresh()
 
     def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
-        """Advance the matching record-phase bar by ``n``."""
-        self._sink.advance_phase(_QUERY_TO_RECORD_PHASE[phase], n=n)
+        """Advance the current phase's M/N counter."""
+        del phase
+        self._completed += n
+        self._refresh()
 
     def end_phase(self, phase: QueryPhase) -> None:
-        """End the matching record-phase bar."""
-        self._sink.end_phase(_QUERY_TO_RECORD_PHASE[phase])
+        """No-op; the next ``start_phase`` overwrites the suffix.
+
+        Clearing here would flash an empty status between sub-phases.
+        """
+        del phase
 
     def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
-        """Set transient status on the matching record-phase bar."""
-        self._sink.set_phase_status(_QUERY_TO_RECORD_PHASE[phase], status)
+        """Update the transient detail on the current phase suffix."""
+        del phase
+        self._detail = status
+        self._refresh()
 
     def log(self, message: str) -> None:
         """Forward a one-off status line."""
         self._sink.log(message)
 
     def error(self, phase: QueryPhase, message: str) -> None:
-        """Forward an error against the matching record phase."""
-        self._sink.error(_QUERY_TO_RECORD_PHASE[phase], message)
+        """Forward an error; attribute it to ``ROWS`` since inner phases have no task."""
+        del phase
+        self._sink.error(RecordPhase.ROWS, message)

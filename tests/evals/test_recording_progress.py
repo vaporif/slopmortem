@@ -40,13 +40,8 @@ def test_rich_record_progress_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
         progress.start_phase(RecordPhase.ROWS, total=3)
         progress.advance_phase(RecordPhase.ROWS)
         progress.cost_update(0.10, 2.00)
-        progress.start_phase(RecordPhase.FACET_EXTRACT, total=1)
-        progress.end_phase(RecordPhase.FACET_EXTRACT)
-        progress.start_phase(RecordPhase.EMBED, total=5)
-        progress.advance_phase(RecordPhase.EMBED, n=5)
-        progress.end_phase(RecordPhase.EMBED)
-        progress.set_phase_status(RecordPhase.SYNTHESIZE, "warming")
-        progress.error(RecordPhase.SYNTHESIZE, "kaboom")
+        progress.set_phase_status(RecordPhase.ROWS, "synthesizing post-mortems 1/2")
+        progress.error(RecordPhase.ROWS, "kaboom")
         progress.cost_update(0.50, 2.00)
         progress.end_phase(RecordPhase.ROWS)
 
@@ -93,8 +88,8 @@ def test_null_record_progress_is_pure_noop() -> None:
     assert null.advance_phase(RecordPhase.ROWS) is None
     assert null.advance_phase(RecordPhase.ROWS, n=2) is None
     assert null.end_phase(RecordPhase.ROWS) is None
-    assert null.set_phase_status(RecordPhase.FACET_EXTRACT, "x") is None
-    assert null.set_phase_status(RecordPhase.FACET_EXTRACT, None) is None
+    assert null.set_phase_status(RecordPhase.ROWS, "x") is None
+    assert null.set_phase_status(RecordPhase.ROWS, None) is None
     assert null.log("hello") is None
-    assert null.error(RecordPhase.RERANK, "bad") is None
+    assert null.error(RecordPhase.ROWS, "bad") is None
     assert null.cost_update(0.5, 2.0) is None

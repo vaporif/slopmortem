@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002264,
+    "cost_usd": 0.002279,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"biotech\", \"business_model\": \"b2b_saas\", \"customer_type\": \"smb\", \"geography\": \"other\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"laboratory information management\", \"product_type\": \"cloud platform\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"biotech\", \"business_model\": \"b2b_saas\", \"customer_type\": \"smb\", \"geography\": \"other\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"lab assay management\", \"product_type\": \"SaaS platform\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }
