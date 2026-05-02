@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
-import pytest
-
 from slopmortem.corpus.sources.curated import CuratedSource
 
 if TYPE_CHECKING:
+    import pytest
+
     from slopmortem.models import RawEntry
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "curated_test.yml"
@@ -54,7 +54,6 @@ async def _fake_safe_get_factory(
     return AsyncMock(side_effect=_fn)
 
 
-@pytest.mark.asyncio
 async def test_curated_yields_long_text_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     response_map = {
         "https://example.com/long-postmortem": _canned_response(
@@ -91,7 +90,6 @@ async def test_curated_yields_long_text_rows(monkeypatch: pytest.MonkeyPatch) ->
     assert "https://example.org/too-short-page" not in urls
 
 
-@pytest.mark.asyncio
 async def test_curated_entry_has_expected_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     url = "https://example.com/long-postmortem"
     response_map = {
@@ -129,7 +127,6 @@ async def test_curated_entry_has_expected_fields(monkeypatch: pytest.MonkeyPatch
     assert target.fetched_at.tzinfo.utcoffset(target.fetched_at) == UTC.utcoffset(target.fetched_at)
 
 
-@pytest.mark.asyncio
 async def test_curated_skips_robots_disallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rows whose URL is disallowed by robots.txt are skipped (no fetch)."""
     url = "https://example.com/long-postmortem"

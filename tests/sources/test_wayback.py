@@ -8,13 +8,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
-
-import pytest
 
 from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.models import RawEntry
+
+if TYPE_CHECKING:
+    import pytest
 
 
 class _FakeResp:
@@ -33,7 +34,6 @@ class _FakeResp:
         return self._json
 
 
-@pytest.mark.asyncio
 async def test_wayback_noop_when_raw_html_present(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = AsyncMock()
     monkeypatch.setattr("slopmortem.corpus.sources.wayback.safe_get", fake)
@@ -57,7 +57,6 @@ def _long_body(seed: str) -> str:
     return f"<html><body><p>{body}</p></body></html>"
 
 
-@pytest.mark.asyncio
 async def test_wayback_fetches_snapshot_when_html_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -111,7 +110,6 @@ async def test_wayback_fetches_snapshot_when_html_missing(
     assert "ACME ARCHIVED CONTENT" in out.markdown_text
 
 
-@pytest.mark.asyncio
 async def test_wayback_returns_entry_unchanged_when_no_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -6,8 +6,6 @@ import sqlite3
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
-import pytest
-
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.corpus.reclassify import reclassify_quarantined
 
@@ -15,7 +13,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-@pytest.mark.asyncio
 async def test_declassifies_doc_below_threshold(tmp_path: Path) -> None:
     """Quarantined doc that now scores below threshold moves to raw/ and row is dropped."""
     db = tmp_path / "journal.sqlite"
@@ -65,7 +62,6 @@ async def test_declassifies_doc_below_threshold(tmp_path: Path) -> None:
     assert raw_target.read_text(encoding="utf-8") == "legitimate post-mortem body"
 
 
-@pytest.mark.asyncio
 async def test_keeps_doc_above_threshold(tmp_path: Path) -> None:
     """Quarantined doc that still scores at-or-above threshold stays in quarantine."""
     db = tmp_path / "journal.sqlite"
@@ -107,7 +103,6 @@ async def test_keeps_doc_above_threshold(tmp_path: Path) -> None:
     assert qpath.exists()
 
 
-@pytest.mark.asyncio
 async def test_handles_missing_quarantine_file(tmp_path: Path) -> None:
     """A quarantine_journal row whose markdown file is missing increments errors and continues."""
     db = tmp_path / "journal.sqlite"

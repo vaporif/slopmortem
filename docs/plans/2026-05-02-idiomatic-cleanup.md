@@ -284,7 +284,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
 **Steps:**
 
-- [ ] **Step 1: Remove all `@pytest.mark.asyncio` decorator lines across the 8 files listed above.** Verify with:
+- [x] **Step 1: Remove all `@pytest.mark.asyncio` decorator lines across the 8 files listed above.** Verify with:
 
   ```
   grep -rn "@pytest.mark.asyncio" tests/
@@ -292,15 +292,15 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   Expected output: empty.
 
-- [ ] **Step 2: Verify `pytest` imports remain live in each file.**
+- [x] **Step 2: Verify `pytest` imports remain live in each file.**
 
   In each touched file, confirm `pytest` is still referenced (e.g. `pytest.MonkeyPatch` annotations, `pytest.raises`, `pytest.fixture`). If `@pytest.mark.asyncio` was the sole reference, prune the unused import. Spot-check by running `just lint` after the edits — ruff `F401` will flag any newly-unused `pytest` import.
 
-- [ ] **Step 3: Verify.**
+- [x] **Step 3: Verify.**
 
   Run the full test suite: `just test`. All previously-async tests must still execute as async (collection errors would surface immediately). Run `just lint`.
 
-- [ ] **Step 4: Commit.** Subject: `cleanup: drop redundant @pytest.mark.asyncio decorators`.
+- [x] **Step 4: Commit.** Subject: `cleanup: drop redundant @pytest.mark.asyncio decorators`.
 
 ---
 
