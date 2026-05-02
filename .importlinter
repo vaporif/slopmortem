@@ -103,3 +103,22 @@ source_modules =
     slopmortem.llm
 forbidden_modules =
     slopmortem.tracing.events
+
+[importlinter:contract:ingest-private]
+name = ingest._* is private — outside imports go through __init__
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    slopmortem.cli
+    slopmortem.pipeline
+    slopmortem.evals
+    slopmortem.stages
+    slopmortem.corpus
+    slopmortem.llm
+    slopmortem.tracing
+forbidden_modules =
+    slopmortem.ingest._fan_out
+    slopmortem.ingest._journal_writes
+    slopmortem.ingest._orchestrator
+    slopmortem.ingest._slop_gate
+    slopmortem.ingest._warm_cache

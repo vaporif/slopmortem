@@ -1178,7 +1178,7 @@ Expected: green. If a test breaks because of a missing name, add it to step 2's 
 **Files:**
 - Modify: `.importlinter`
 
-- [ ] **Step 1: Add the `ingest-private` contract**
+- [x] **Step 1: Add the `ingest-private` contract**
 
 Edit `.importlinter`. T1.6 deliberately did not include a placeholder (import-linter rejects empty `forbidden_modules`). Append a fresh contract:
 
@@ -1204,12 +1204,12 @@ forbidden_modules =
 
 Add additional `_*.py` modules if T2.2–T2.5 introduced extras (e.g. `_protocols.py`, `_gather.py` per the destination map in the spec).
 
-- [ ] **Step 2: Run lint-imports**
+- [x] **Step 2: Run lint-imports**
 
 Run: `uv run lint-imports`
 Expected: contract passes. If broken, an external file was importing into `ingest._*` — fix the import to go through `slopmortem.ingest` instead, or expose the symbol via T2.6's `__all__`.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green. PR 2 ready to merge.
