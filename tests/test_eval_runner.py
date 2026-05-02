@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slopmortem.evals import runner
+from slopmortem.evals.recording_helper import RecordResult
 from slopmortem.models import (
     InputContext,
     PerspectiveScore,
@@ -218,18 +219,25 @@ def test_runner_record_flag_invokes_helper(monkeypatch: pytest.MonkeyPatch, tmp_
 
     seen: dict[str, object] = {}
 
-    async def fake_helper(
+    async def fake_helper(  # noqa: PLR0913 — mirrors the helper's full kwarg surface
         *,
         inputs: list[InputContext],
         output_dir: Path,
         corpus_fixture_path: Path,
         config: Config,
         max_cost_usd: float,
-    ) -> None:
-        del output_dir, corpus_fixture_path, config
+        progress: object = None,
+    ) -> RecordResult:
+        del output_dir, corpus_fixture_path, config, progress
         seen["called"] = True
         seen["inputs"] = inputs
         seen["max_cost_usd"] = max_cost_usd
+        return RecordResult(
+            rows_total=len(inputs),
+            rows_succeeded=len(inputs),
+            cassettes_written=0,
+            total_cost_usd=0.0,
+        )
 
     monkeypatch.setattr(
         "slopmortem.evals.recording_helper.record_cassettes_for_inputs",

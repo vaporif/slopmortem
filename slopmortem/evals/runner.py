@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import hashlib
 import json
 import sys
@@ -70,6 +71,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import urlparse
 
 import anyio
+from rich.console import Console
 
 from slopmortem.budget import Budget
 from slopmortem.config import load_config
@@ -512,8 +514,14 @@ def _run_record(
     max_cost_usd: float,
 ) -> None:
     """Dispatch to the recording helper. Exits the process on completion or error."""
-    from slopmortem.config import load_config  # noqa: PLC0415
+    # Lazy: pulling these in eagerly would drag the recording wrappers and Rich
+    # widgets into every cassette-mode replay, which is the common path.
     from slopmortem.evals import recording_helper  # noqa: PLC0415
+    from slopmortem.evals.recording_progress import NullRecordProgress  # noqa: PLC0415
+    from slopmortem.evals.render import (  # noqa: PLC0415
+        RichRecordProgress,
+        render_record_footer,
+    )
 
     rows = _load_dataset(dataset_path)
     if scope is not None:
@@ -534,15 +542,34 @@ def _run_record(
             file=sys.stderr,
         )
         sys.exit(2)
-    asyncio.run(
-        recording_helper.record_cassettes_for_inputs(
-            inputs=rows,
-            output_dir=output_dir,
-            corpus_fixture_path=corpus_fixture_path,
-            config=cfg,
-            max_cost_usd=max_cost_usd,
-        )
+
+    progress_ctx: contextlib.AbstractContextManager[RichRecordProgress | None] = (
+        RichRecordProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
+    with progress_ctx as bar:
+        sink = bar if bar is not None else NullRecordProgress()
+        result = asyncio.run(
+            recording_helper.record_cassettes_for_inputs(
+                inputs=rows,
+                output_dir=output_dir,
+                corpus_fixture_path=corpus_fixture_path,
+                config=cfg,
+                max_cost_usd=max_cost_usd,
+                progress=sink,
+            )
+        )
+        # Footer goes to the bar's console when present so the panel renders
+        # under the live progress region rather than fighting it; the
+        # nullcontext branch falls back to a fresh stderr console.
+        footer_console = bar.console if bar is not None else Console(stderr=True)
+        render_record_footer(
+            footer_console,
+            total_cost_usd=result.total_cost_usd,
+            max_cost_usd=max_cost_usd,
+            rows_total=result.rows_total,
+            rows_succeeded=result.rows_succeeded,
+            cassettes_written=result.cassettes_written,
+        )
     sys.exit(0)
 
 
