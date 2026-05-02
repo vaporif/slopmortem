@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from slopmortem.corpus.store import Corpus
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import Candidate, InputContext, ScoredCandidate, SimilarityScores
-    from slopmortem.stages.retrieve import SparseEncoder
+    from slopmortem.stages import SparseEncoder
 
 
 logger = logging.getLogger(__name__)

@@ -43,20 +43,10 @@ def collapse_alias_components(
 ) -> list[Candidate]:
     """Collapse alias-connected candidates to one representative per component.
 
-    Args:
-        candidates: Parent-collapsed candidates in retrieval-score order
-            (highest first). Each candidate's ``score`` is the best chunk
-            score for its parent.
-        edges: Every :class:`AliasEdge` whose ``canonical_id`` OR
-            ``target_canonical_id`` appears in *candidates*. Edges referring
-            to canonicals not in *candidates* are no-ops.
-
-    Returns:
-        One :class:`Candidate` per connected component, in descending score
-        order. The representative is the highest-scoring candidate in its
-        component. The other canonicals in the component are stored on the
-        representative's ``alias_canonicals`` list (preserving any prior
-        contents).
+    *candidates* must arrive in descending-score order — the head of each
+    component becomes the representative; the other canonicals get appended
+    to its ``alias_canonicals`` list. Edges referencing canonicals outside
+    *candidates* are no-ops.
     """
     if not candidates:
         return []

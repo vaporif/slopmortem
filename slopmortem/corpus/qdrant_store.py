@@ -128,29 +128,13 @@ class QdrantCorpus:
     ) -> list[Candidate]:
         """Hybrid retrieve top-K candidates with FormulaQuery facet boost.
 
-        Inner :class:`Prefetch` with dense+sparse RRF fusion, outer
-        :class:`FormulaQuery` adding a per-facet boost (skipping ``"other"``)
-        on top of ``$score``, and a recency :class:`Filter` with three branches
-        (or one under ``--strict-deaths``).
-
-        Over-fetches chunks at ``k_retrieve * 4`` so the in-Python collapse
-        to parents has room. After collapse,
-        :func:`collapse_alias_components` dedupes alias-graph connected
-        components and the result truncates to ``k_retrieve``.
-
-        Args:
-            dense: Dense query vector.
-            sparse: Sparse query vector as ``{token_id: weight}``.
-            facets: Facets to soft-boost on; ``"other"`` values skipped.
-            cutoff_iso: ISO-8601 lower bound for the recency filter, or
-                ``None`` to disable filtering.
-            strict_deaths: When ``True``, recency requires a known
-                ``failure_date >= cutoff_iso`` (branch A only).
-            k_retrieve: Final number of parent candidates to return.
-
-        Returns:
-            Up to ``k_retrieve`` :class:`Candidate` objects in descending
-            score order, deduped by alias-graph component.
+        Inner :class:`Prefetch` does dense+sparse RRF fusion; outer
+        :class:`FormulaQuery` adds a per-facet boost on top of ``$score``
+        (skipping ``"other"`` values). Over-fetches chunks at ``k_retrieve * 4``
+        so the in-Python parent collapse + alias-component dedup have room
+        before truncating to ``k_retrieve``. ``strict_deaths=True`` narrows
+        the recency filter to "known failure_date >= cutoff_iso" (branch A
+        only) instead of the three-branch default.
         """
         from qdrant_client.models import (  # noqa: PLC0415 — keep top-level imports lean
             FieldCondition,
@@ -312,7 +296,6 @@ class QdrantCorpus:
         return out
 
     async def has_chunks(self, canonical_id: str) -> bool:
-        """Return whether at least one chunk point exists for *canonical_id*."""
         records, _ = await self._client.scroll(
             collection_name=self._collection,
             scroll_filter=Filter(
@@ -330,11 +313,10 @@ class QdrantCorpus:
         return bool(records)
 
     async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
-        """Delete all chunk points whose ``payload.canonical_id`` matches.
+        """Idempotent: deleting when no points exist does not raise.
 
-        Idempotent: deleting when no points exist does not raise. Raises on
-        transport/auth failures; the caller (``ingest._process_entry``) decides
-        whether to abort the entry or proceed.
+        Transport/auth failures propagate to the caller
+        (``ingest._process_entry`` decides whether to abort or proceed).
         """
         selector = FilterSelector(
             filter=Filter(
@@ -352,13 +334,8 @@ class QdrantCorpus:
         )
 
     async def upsert_chunk(self, point: Any) -> None:  # pyright: ignore[reportExplicitAny]
-        """Upsert a single chunk point into the collection (used by ingest).
-
-        Ingest hands in a :class:`slopmortem.ingest._Point` (a dataclass with
-        ``id``, ``vector={"dense": list[float], "sparse": dict[int, float]}``,
-        ``payload``). qdrant-client's ``PointsList`` is strict pydantic v2 and
-        rejects arbitrary dataclasses, so build a real ``PointStruct`` here.
-        """
+        # qdrant-client's PointsList is strict pydantic v2 and rejects arbitrary
+        # dataclasses, so build a real PointStruct from the ingest._Point.
         from qdrant_client.models import PointStruct, SparseVector  # noqa: PLC0415
 
         sparse = point.vector["sparse"]
@@ -380,18 +357,14 @@ class QdrantCorpus:
 
 
 def canonical_path_for(post_mortems_root: Path, canonical_id: str) -> Path:
-    """Return the validated on-disk path to the canonical doc for *canonical_id*."""
     text_id = hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:16]
     return safe_path(post_mortems_root, kind="canonical", text_id=text_id)
 
 
 def _build_recency_filter(*, cutoff_iso: str | None, strict_deaths: bool) -> Any:  # pyright: ignore[reportExplicitAny]
-    """Compose the three-branch recency :class:`Filter` (single-branch in strict mode).
-
-    Branches A/B/C use derived ``failure_date_unknown`` /
-    ``founding_date_unknown`` boolean payloads instead of ``IsNullCondition``
-    (qdrant#5148, documented slow under indexed payloads).
-    """
+    # Branches A/B/C use derived ``failure_date_unknown`` /
+    # ``founding_date_unknown`` boolean payloads instead of IsNullCondition
+    # (qdrant#5148, documented slow under indexed payloads).
     if cutoff_iso is None:
         return None
 
