@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
+from slopmortem.corpus import QdrantCorpus, ensure_collection
 from slopmortem.ingest import _Point
-from slopmortem.llm.openai_embeddings import EMBED_DIMS
+from slopmortem.llm import EMBED_DIMS
 
 if TYPE_CHECKING:
     from pathlib import Path
