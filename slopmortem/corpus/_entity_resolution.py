@@ -89,7 +89,11 @@ _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
 
 @dataclass(frozen=True, slots=True)
 class ResolveResult:
-    """For ``resolver_flipped``, ``canonical_id`` is the NEW id and intentionally not written here — the repair pass owns the rebind."""
+    """Outcome of a resolve attempt.
+
+    For ``resolver_flipped``, ``canonical_id`` is the NEW id and intentionally
+    not written here — the repair pass owns the rebind.
+    """
 
     canonical_id: str
     action: Literal["create", "merge", "resolver_flipped", "alias_blocked"]
@@ -108,7 +112,7 @@ def _load_platform_domains() -> frozenset[str]:
 
 
 def _load_corporate_hierarchy_overrides() -> dict[str, list[str]]:
-    """Map parent canonical → list of subsidiary canonicals; empty in v1."""
+    """Map parent canonical → list of subsidiary canonicals (empty in v1)."""
     with _CORPORATE_HIERARCHY_YAML.open("r", encoding="utf-8") as fh:
         data = cast("dict[str, Any]", yaml.safe_load(fh) or {})  # pyright: ignore[reportExplicitAny]
     overrides_obj: object = data.get("overrides") or []

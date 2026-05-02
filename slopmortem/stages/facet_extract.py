@@ -21,10 +21,8 @@ async def extract_facets(
     *,
     max_tokens: int | None = None,
 ) -> Facets:
-    """Extract a :class:`Facets` bundle from *text* via one strict-mode JSON call.
-
-    Malformed or out-of-taxonomy output raises Pydantic ``ValidationError``;
-    the per-entry ingest isolation absorbs this without aborting the run.
+    """Malformed or out-of-taxonomy output raises Pydantic ``ValidationError``;
+    per-entry ingest isolation absorbs this without aborting the run.
     """
     prompt = render_prompt("facet_extract", description=text)
     result = await llm.complete(

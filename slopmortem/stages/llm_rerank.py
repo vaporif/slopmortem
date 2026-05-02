@@ -1,4 +1,4 @@
-"""LLM rerank stage: one strict-mode JSON call returning :class:`LlmRerankResult`."""
+"""LLM rerank stage: one strict-mode JSON call → :class:`LlmRerankResult`."""
 
 from __future__ import annotations
 

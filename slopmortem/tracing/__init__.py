@@ -57,7 +57,6 @@ def mint_run_id() -> str:
 
 @functools.cache
 def git_sha() -> str | None:
-    # Memoized per process; returns None outside a git checkout.
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607 — git on PATH is fine.

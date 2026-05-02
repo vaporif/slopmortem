@@ -1,9 +1,8 @@
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
 """JSON-Schema helpers for tool definitions and OpenAI strict-mode response schemas.
 
-`jsonref` ships no stubs, so calls into it surface as `Unknown`. Assert the
-shape we know we produced (a dict from `model_json_schema()`) and silence
-the `reportUnknown*` family at the file boundary.
+``jsonref`` ships no stubs; reportUnknown* is silenced file-wide and the
+shape we produced (a dict from ``model_json_schema()``) is asserted at use.
 """
 
 from __future__ import annotations
