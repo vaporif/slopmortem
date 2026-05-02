@@ -290,17 +290,17 @@ Expected: green. `lint-imports` still passes (no contracts yet).
 **Files:**
 - Modify: `slopmortem/llm/__init__.py`
 
-- [ ] **Step 1: Enumerate outside callers of `slopmortem.llm.*`**
+- [x] **Step 1: Enumerate outside callers of `slopmortem.llm.*`**
 
 Run: `grep -rnE "^from slopmortem\.llm\." slopmortem/ tests/ | grep -v "^slopmortem/llm/"`
 
 The output shows which submodule symbols need to be re-exported. Take the snapshot.
 
-- [ ] **Step 2: Read the current init**
+- [x] **Step 2: Read the current init**
 
 Read `slopmortem/llm/__init__.py`. The current re-exports (verified): `EMBED_DIMS`, `OpenAIEmbeddingClient`, `FakeEmbeddingClient`, `FastEmbedEmbeddingClient`. Do not duplicate these.
 
-- [ ] **Step 3: Expand with the new re-exports**
+- [x] **Step 3: Expand with the new re-exports**
 
 Replace the contents with the explicit-as form, adding:
 - `OpenRouterClient` (from `openrouter`)
@@ -364,7 +364,7 @@ __all__ = [
 
 If step 1's grep shows additional symbols (e.g., from `tools.py` or other cassettes-module helpers), append them here.
 
-- [ ] **Step 4: Run typecheck and smoke**
+- [x] **Step 4: Run typecheck and smoke**
 
 Run: `just typecheck && just smoke`
 Expected: green.
