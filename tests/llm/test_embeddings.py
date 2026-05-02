@@ -9,9 +9,13 @@ import yaml
 
 from slopmortem.budget import Budget
 from slopmortem.config import Config
-from slopmortem.llm.embedding_client import EmbeddingClient
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.openai_embeddings import EMBED_DIMS, OPENAI_EMBED_MODELS, OpenAIEmbeddingClient
+from slopmortem.llm import (
+    EMBED_DIMS,
+    OPENAI_EMBED_MODELS,
+    EmbeddingClient,
+    FakeEmbeddingClient,
+    OpenAIEmbeddingClient,
+)
 
 _PRICES_PATH = Path(__file__).resolve().parents[2] / "slopmortem" / "llm" / "prices.yml"
 

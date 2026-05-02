@@ -96,18 +96,10 @@ _TIEBREAKER_PROMPT_NAME = "tier3_tiebreaker"
 
 @dataclass(frozen=True, slots=True)
 class ResolveResult:
-    """Outcome of a resolve_entity call.
+    """Outcome of a :func:`resolve_entity` call.
 
-    Attributes:
-        canonical_id: The chosen canonical id for *this* entry. For
-            ``resolver_flipped`` this is the NEW id, intentionally NOT
-            written (repair owns it).
-        action: One of ``create``, ``merge``, ``resolver_flipped``,
-            ``alias_blocked``.
-        prior_canonical_id: For ``resolver_flipped``, the previously bound
-            id. None otherwise.
-        span_events: Span event names the caller should emit (e.g.
-            ``RESOLVER_FLIP_DETECTED``).
+    For ``resolver_flipped``, ``canonical_id`` is the NEW id and intentionally
+    NOT written here — the repair pass owns the rebind.
     """
 
     canonical_id: str

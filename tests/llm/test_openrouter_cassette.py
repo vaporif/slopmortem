@@ -7,7 +7,7 @@ import pytest
 from openai import AsyncOpenAI
 
 from slopmortem.budget import Budget
-from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.llm import OpenRouterClient
 
 CASSETTE_FILE = (
     Path(__file__).parent

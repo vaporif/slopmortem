@@ -7,10 +7,9 @@ from datetime import date
 
 from conftest import llm_canned_key
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.llm import FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
-from slopmortem.stages.synthesize import synthesize, synthesize_all, synthesize_prompt_kwargs
+from slopmortem.stages import synthesize, synthesize_all, synthesize_prompt_kwargs
 
 _DEFAULT_MODEL = "test-synth-model"
 

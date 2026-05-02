@@ -7,7 +7,7 @@ import fastembed
 import pytest
 
 from slopmortem.budget import Budget
-from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
+from slopmortem.llm import FastEmbedEmbeddingClient
 
 
 def test_dim_matches_embed_dims_registry():

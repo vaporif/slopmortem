@@ -16,21 +16,20 @@ import pytest
 
 from conftest import llm_canned_key
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.llm import FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import (
     PerspectiveScore,
     SimilarityScores,
     Synthesis,
 )
+from slopmortem.stages import consolidate_risks
 from slopmortem.stages import consolidate_risks as cr_module
-from slopmortem.stages.consolidate_risks import consolidate_risks
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from slopmortem.llm.client import CompletionResult
+    from slopmortem.llm import CompletionResult
 
 
 _MODEL = "test-consolidate-model"

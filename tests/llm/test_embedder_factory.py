@@ -4,9 +4,7 @@ import pytest
 
 from slopmortem.budget import Budget
 from slopmortem.config import Config
-from slopmortem.llm.embedding_factory import make_embedder
-from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
-from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
+from slopmortem.llm import FastEmbedEmbeddingClient, OpenAIEmbeddingClient, make_embedder
 
 
 def test_factory_returns_fastembed_for_fastembed_provider() -> None:

@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from slopmortem.llm.cassettes import llm_cassette_key
-from slopmortem.llm.client import CompletionResult, LLMClient
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse, NoCannedResponseError
+from slopmortem.llm import (
+    CompletionResult,
+    FakeLLMClient,
+    FakeResponse,
+    LLMClient,
+    NoCannedResponseError,
+    llm_cassette_key,
+)
 
 
 def _key(*, prompt: str, template_sha: str, model: str) -> tuple[str, str, str]:

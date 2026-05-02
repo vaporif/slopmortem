@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from slopmortem.budget import Budget
-from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.llm import OpenRouterClient
 from slopmortem.tracing.events import SpanEvent
 
 

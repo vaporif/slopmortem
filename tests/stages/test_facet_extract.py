@@ -10,9 +10,8 @@ import pytest
 import yaml
 
 from conftest import llm_canned_key
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import render_prompt
-from slopmortem.stages.facet_extract import extract_facets
+from slopmortem.llm import FakeLLMClient, FakeResponse, render_prompt
+from slopmortem.stages import extract_facets
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

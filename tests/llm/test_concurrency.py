@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from slopmortem.llm.openrouter import gather_with_limit
+from slopmortem.llm import gather_with_limit
 
 
 async def test_capacity_limiter_caps_inflight():

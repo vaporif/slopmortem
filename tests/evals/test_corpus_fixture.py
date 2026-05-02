@@ -66,7 +66,7 @@ def collection_name() -> str:
 async def test_round_trip_preserves_query_results(
     client: AsyncQdrantClient, collection_name: str, tmp_path: Path
 ) -> None:
-    from slopmortem.corpus.qdrant_store import ensure_collection  # noqa: PLC0415
+    from slopmortem.corpus import ensure_collection  # noqa: PLC0415
 
     await ensure_collection(client, collection_name, dim=8)
     fixture_path = tmp_path / "out.jsonl"
