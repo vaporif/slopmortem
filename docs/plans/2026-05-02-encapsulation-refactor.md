@@ -112,12 +112,12 @@ root_package = slopmortem
 
 No contracts yet — they land in T1.6. `lint-imports` errors on a missing `root_package`, so this stub is required even before contracts exist.
 
-- [ ] **Step 3: Sync deps and verify the binary is on PATH**
+- [x] **Step 3: Sync deps and verify the binary is on PATH**
 
 Run: `uv sync && uv run lint-imports --help`
 Expected: help text printed, exit 0.
 
-- [ ] **Step 4: Verify lint-imports runs against the empty contract list**
+- [x] **Step 4: Verify lint-imports runs against the empty contract list**
 
 Run: `uv run lint-imports`
 Expected: `Skipped: 0 / Kept: 0 / Broken: 0` or equivalent "no contracts" success message, exit 0.
