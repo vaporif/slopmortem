@@ -27,16 +27,31 @@ but callers freely reach past them. Concrete leaks observable today via
   into an `_`-prefixed module inside an `_`-prefixed file convention.
 - `from slopmortem.llm.openrouter import OpenRouterClient` — `llm/__init__.py`
   only re-exports embedding clients, so the most-used class in the package
-  bypasses the façade entirely.
+  bypasses the façade entirely. Three external sites today: `cli.py`,
+  `evals/corpus_recorder.py`, `evals/recording_helper.py`.
+- `from slopmortem.llm.embedding_factory import make_embedder` — new factory
+  shared by `cli.py`, `evals/corpus_recorder.py`, and `evals/recording_helper.py`;
+  not in the `llm/__init__.py` `__all__`.
+- **Forbidden-direction violation already in tree.**
+  `slopmortem/llm/fake_embeddings.py:9` does
+  `from slopmortem.evals.cassettes import NoCannedEmbeddingError` — `evals/`
+  bleeding into `llm/` violates the one-way prod←evals rule documented in
+  `CLAUDE.md`. PR 1's importlinter contract (T1.6) will fail until this is
+  fixed; see new task T1.0 below.
 
 Two top-level files have grown past the size where one-job-per-file holds:
 
-- `slopmortem/cli.py` — 1109 LOC, all typer subcommands in one file.
-- `slopmortem/ingest.py` — 1148 LOC, 11 public top-level defs, holds the
-  warm-cache pattern, fan-out, journal write ordering, and slop-gate routing
-  in a single module. The load-bearing invariants documented in `CLAUDE.md`
-  ("mark_complete only after both writes succeed", "first entry alone, then
-  fan out") have no dedicated home.
+- `slopmortem/cli.py` — 853 LOC, four typer subcommands plus two CLI-internal
+  `RichPhaseProgress` subclasses in one file. (Down from 1109 LOC after the
+  cassettes branch extracted `slopmortem/cli_progress.py` as a 239-LOC shared
+  helper used by both `cli.py` and the eval recorders — see PR 3 notes for
+  the implication: `cli_progress.py` stays at the top level, it cannot live
+  under the future `cli/` package because `evals/` depends on it.)
+- `slopmortem/ingest.py` — 1149 LOC, holds the warm-cache pattern, fan-out,
+  journal write ordering, and slop-gate routing in a single module. The
+  load-bearing invariants documented in `CLAUDE.md` ("mark_complete only after
+  both writes succeed", "first entry alone, then fan out") have no dedicated
+  home.
 
 Without an enforcement layer, fixing this once doesn't stick — the next
 refactor pass quietly re-introduces deep imports and the façades drift back
@@ -105,13 +120,14 @@ callers second, lock the door third, rename last.
 
 | ID | Task | Files | Notes |
 |---|---|---|---|
-| T1.1 | Expand `corpus/__init__.py` `__all__` to include the modules currently bypassed. **Verify each first** with `grep -rnE "^from slopmortem\.corpus\." slopmortem/ tests/ \| grep -v "^slopmortem/corpus/"` and only add modules with at least one outside caller. Candidates: `entity_resolution`, `paths`, `extract`, `reclassify`, `store`, `summarize`, `alias_graph`. **Persist the verification result** as a comment block at the top of `corpus/__init__.py` (e.g. `# T1.1 verification 2026-05-01: store=internal-only, summarize=external (5 sites)`) — T1.7 reads this | `corpus/__init__.py` | Additive |
-| T1.2 | Expand `llm/__init__.py` to export `OpenRouterClient`, `client.CompletionResult`, `embedding_client.EmbeddingResult`, the relevant `tools` and `cassettes` symbols, and the fakes | `llm/__init__.py` | Additive |
-| T1.3 | Replace empty `stages/__init__.py` with re-exports of `extract_facets`, `retrieve`, `llm_rerank`, `synthesize_all`, `consolidate_risks` | `stages/__init__.py` | Additive |
+| T1.0 | **Relocate `NoCannedEmbeddingError`** out of `slopmortem/evals/cassettes.py` — either move it to `slopmortem/llm/fake_embeddings.py` next to its only prod-side caller, or to `slopmortem/errors.py`. Update the one prod import (`slopmortem/llm/fake_embeddings.py:9`) and the `evals/cassettes.py` callers. This precedes T1.6 because the importlinter contract will otherwise fail on a pre-existing violation | `slopmortem/llm/fake_embeddings.py`, `slopmortem/evals/cassettes.py`, optionally `slopmortem/errors.py` | Closes the prod←evals leak |
+| T1.1 | Expand `corpus/__init__.py` `__all__` to include the modules currently bypassed. **Verify each first** with `grep -rnE "^from slopmortem\.corpus\." slopmortem/ tests/ \| grep -v "^slopmortem/corpus/"` and only add modules with at least one outside caller. Candidates: `entity_resolution`, `paths`, `extract`, `reclassify`, `reconcile` (already exported, verify), `store`, `summarize`, `alias_graph`. **Plus a public façade for the `tools_impl` corpus-binding indirection**: introduce `set_query_corpus(corpus)` (and re-export `TAVILY_EXTRACT_URL` if still needed by `corpus/sources/tavily.py`) so `cli.py:68`, `evals/runner.py:313`, `evals/recording_helper.py:156` can drop the `from slopmortem.corpus.tools_impl import _set_corpus` deep-and-private import. **Persist the verification result** as a comment block at the top of `corpus/__init__.py` (e.g. `# T1.1 verification 2026-05-01: store=internal-only, summarize=external (5 sites)`) — T1.7 reads this | `corpus/__init__.py`, `corpus/tools_impl.py` (add public `set_query_corpus` wrapper) | Additive |
+| T1.2 | Expand `llm/__init__.py`. Already-exported (verify, do not duplicate): `EMBED_DIMS`, `OpenAIEmbeddingClient`, `FakeEmbeddingClient`, `FastEmbedEmbeddingClient`. **Add**: `OpenRouterClient`, `make_embedder` (from `embedding_factory`), `client.CompletionResult`, `embedding_client.EmbeddingResult`, `gather_with_limit` and `is_transient_http` (from `openrouter`, currently reached directly by tests / sibling modules), the relevant `tools` and `cassettes` symbols, and the remaining fakes (`FakeLLMClient`, `FakeResponse`) | `llm/__init__.py` | Additive |
+| T1.3 | Replace empty `stages/__init__.py` with re-exports of `extract_facets`, `retrieve`, `llm_rerank`, `synthesize_all`, `consolidate_risks`. **Also re-export** `synthesize` and `synthesize_prompt_kwargs` from `stages.synthesize` — currently imported directly by `tests/stages/test_synthesize.py:13`, `tests/test_observe_redaction.py:40`, `tests/test_pipeline_e2e.py:48`; without re-export the T1.5 sweep would have to rewrite those test imports instead | `stages/__init__.py` | Additive |
 | T1.4 | Expand `corpus/sources/__init__.py` to re-export the 5 adapter classes alongside `Source`, `Enricher` | `corpus/sources/__init__.py` | Additive |
 | T1.5 | Sweep all in-tree imports to use the façades: `from slopmortem.corpus.paths import safe_path` → `from slopmortem.corpus import safe_path`. Generate the file list with `grep -lrnE "(^\|[[:space:]])from slopmortem\.(corpus\|llm\|stages\|corpus\.sources)\." slopmortem/ tests/` (the indented form catches `TYPE_CHECKING:` blocks). The grep output is the CREATE/MODIFY boundary — do not touch files outside it | grep-derived list (~30 files in `slopmortem/` and `tests/`); brief includes the resolved list | Mechanical |
 | T1.6 | Author `.importlinter` contracts: `corpus`, `llm`, `stages`, `corpus.sources`, `tracing` are leaf packages; outside imports must hit `__init__.py` only. **Also add placeholder forbidden contracts for `ingest` and `cli`** at this stage — they cover only `from slopmortem.ingest.* import …` / `from slopmortem.cli.* import …` and are tightened in T2.7 / T3.6, but they close the enforcement gap that would otherwise persist through PR 2 and PR 3 | `.importlinter` | Enforces 1.5 |
-| T1.7 | Rename true internals with `_` prefix, one commit per rename for bisectable blame: `alias_graph`→`_alias_graph`, `embed_sparse`→`_embed_sparse`, `merge_text`→`_merge_text`, `schema`→`_schema`, `tools_impl`→`_tools_impl`. **Read T1.1's verification comment block at the top of `corpus/__init__.py` first**; skip `store` and `summarize` renames if that record shows external use | `corpus/*.py` + import call sites | One file at a time |
+| T1.7 | Rename true internals with `_` prefix, one commit per rename for bisectable blame. **Safe-now (no outside callers verified)**: `alias_graph`→`_alias_graph`, `merge_text`→`_merge_text`, `schema`→`_schema`. **Conditional on T1.1 verification comment**: `store`, `summarize` (skip if external use). **Deferred / unsafe as written** (do not include in this PR): `embed_sparse` has 3 outside callers (`ingest.py:975`, `evals/recording_helper.py:206`, `stages/retrieve.py:75`, all lazy `noqa: PLC0415` imports) — either expose `encode` via `corpus/__init__.py` and migrate the 3 callers in T1.5 first, or split out a public `corpus/sparse.py` shim before underscoring; `tools_impl` has 6+ outside callers across cli, evals, llm, sources, and tests, mixing public-looking names (`get_post_mortem`, `search_corpus`, `TAVILY_EXTRACT_URL`) with private (`_set_corpus`, `_tavily_extract`) — T1.1 introduces the `set_query_corpus` façade, but a full underscore rename requires either splitting the file or wrapping every public name. **Read T1.1's verification comment block at the top of `corpus/__init__.py` first** | `corpus/*.py` + import call sites | One file at a time |
 
 Checkpoint after each task: `just smoke && just lint`.
 
@@ -122,14 +138,37 @@ End state: façades are real, deep imports fail CI, big files still big.
 Highest-risk PR. Touches the warm-cache and journal-ordering invariants
 documented in `CLAUDE.md`. Cassette suite is the safety net.
 
+**Destination map for non-extracted top-level names** (not all of
+`ingest.py`'s public surface fits cleanly into the four feature files
+T2.2–T2.5; pin destinations explicitly to avoid every leftover landing in
+`_orchestrator.py` by default):
+
+- Protocols (`Corpus` `ingest.py:114`, `IngestProgress` `158`,
+  `SlopClassifier` `210`) → `ingest/_protocols.py`. Keeps `_orchestrator.py`
+  lean and gives the public types a stable home.
+- `IngestPhase` / `INGEST_PHASE_LABELS` / `IngestResult` / `NullProgress` →
+  `ingest/_orchestrator.py` (they describe the orchestrator's contract with
+  callers and are imported alongside `ingest()`).
+- `ProcessOutcome` (`ingest.py:675`) → `ingest/_journal_writes.py`
+  (it is the return type of the per-entry write sequence).
+- `_gather_entries` and `_enrich_pipeline` → `ingest/_gather.py` (a distinct
+  GATHER/CLASSIFY phase that runs upstream of fan-out and slop-gating; not
+  covered by T2.2–T2.5).
+- `_quarantine` (`ingest.py:405`) → `ingest/_slop_gate.py` (T2.5 already
+  owns the slop-gate routing; collocate the helper).
+- Test/dev fakes (`InMemoryCorpus` `228`, `FakeSlopClassifier` `250`,
+  `HaikuSlopClassifier` `265`) → stay in `_orchestrator.py` for now (they
+  are public surface that tests depend on, ~90 LOC, splitting them out is
+  optional polish for a later PR).
+
 | ID | Task | Files | Notes |
 |---|---|---|---|
 | T2.1 | `git mv slopmortem/ingest.py slopmortem/ingest/_orchestrator.py`. **Add an explicit `__all__` to `_orchestrator.py`** listing only names that current external callers import (derive via `grep -rnE "from slopmortem\.ingest" slopmortem/ tests/ \| grep -v "^slopmortem/ingest/"`). Then create `slopmortem/ingest/__init__.py` with `from slopmortem.ingest._orchestrator import *`. Without `__all__` the star-import would publicly expose `InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier`, and the `Corpus`/`SlopClassifier` Protocols — they are non-underscore today only because nothing prevented it | `slopmortem/ingest/_orchestrator.py`, `slopmortem/ingest/__init__.py` | Pure move. **Note:** `logging.getLogger(__name__)` inside `_orchestrator.py` will now resolve to `slopmortem.ingest._orchestrator` instead of `slopmortem.ingest`. Grep for log filters / span attribute keys that match the old literal name and update them, or assert in T2.1 that none exist |
 | T2.2 | Extract the warm-cache block (first entry runs alone, then fan out) into `ingest/_warm_cache.py`. Header comment: "Preserves CACHE_READ_RATIO_LOW invariant — see CLAUDE.md and `slopmortem/ingest/__init__.py` callers" | `ingest/_warm_cache.py`, `ingest/_orchestrator.py` | Verify `cache_read_ratio` span event still fires |
-| T2.3 | Extract per-entry pipeline (slop → facet → embed → upsert) into `ingest/_fan_out.py` | `ingest/_fan_out.py`, `ingest/_orchestrator.py` | |
-| T2.4 | Extract journal write ordering (qdrant → disk → mark_complete) into `ingest/_journal_writes.py`. Header comment documents the invariant. Add unit tests simulating crashes at **each** write boundary, not just `mark_complete`: (a) crash between `write_raw_atomic` and `write_canonical_atomic`, (b) crash between `write_canonical_atomic` and Qdrant upsert, (c) crash between Qdrant upsert and `mark_complete`. Assert no orphan `mark_complete` and no journal row stuck past `pending` without recoverable disk state | `ingest/_journal_writes.py`, `tests/ingest/test_journal_writes.py` | |
+| T2.3 | Extract the per-entry pipeline into `ingest/_fan_out.py`. Actual order is **facet → summarize → embed → upsert** — slop classification gates entries upstream of fan-out (it lives in the classify phase before any per-entry work) and belongs in `_slop_gate.py` (T2.5), not here. Today's seam: `_facet_summarize_fanout` (`ingest.py:637`) plus the `_embed_and_upsert` call inside `_process_entry` (`ingest.py:688`) | `ingest/_fan_out.py`, `ingest/_orchestrator.py` | |
+| T2.4 | Extract journal write ordering into `ingest/_journal_writes.py`. **Actual order**: `journal.upsert_pending` (`ingest.py:758`) → `write_raw_atomic` (763) → `write_canonical_atomic` (780) → `corpus.delete_chunks_for_canonical` (797) → `_embed_and_upsert` Qdrant upsert (827) → `journal.mark_complete` (852). Header comment documents the invariant. Add unit tests simulating crashes at **each** write boundary: (a) crash between `upsert_pending` and `write_raw_atomic`, (b) crash between `write_raw_atomic` and `write_canonical_atomic`, (c) crash between `write_canonical_atomic` and the Qdrant upsert, (d) crash between Qdrant upsert and `mark_complete`. Assert no orphan `mark_complete`, and that any journal row stuck past `pending` has recoverable disk state matching the canonical hash | `ingest/_journal_writes.py`, `tests/ingest/test_journal_writes.py` | |
 | T2.5 | Extract slop-gate quarantine routing into `ingest/_slop_gate.py`. **Add a unit test** asserting (a) entries with `slop_score > config.slop_threshold` route to `_quarantine` and produce no Qdrant point and no journal row, (b) `_PRE_VETTED_SOURCES` bypass still works. Cassettes do not cover this path because no LLM call is made on quarantined entries | `ingest/_slop_gate.py`, `ingest/_orchestrator.py`, `tests/ingest/test_slop_gate.py` | |
-| T2.6 | Trim `ingest/__init__.py` to an explicit `__all__` listing only the public surface. Derive the list with `grep -rhE "from slopmortem\.ingest import [^_]" slopmortem/ tests/ \| grep -v "^slopmortem/ingest/" \| sed -E 's/.*import //' \| tr ',' '\n' \| sort -u` (callers, not `_orchestrator` top-level defs) | `ingest/__init__.py` | |
+| T2.6 | Trim `ingest/__init__.py` to an explicit `__all__` listing only the public surface. Derive the list with `grep -rhE "from slopmortem\.ingest import [^_]" slopmortem/ tests/ \| grep -v "^slopmortem/ingest/" \| sed -E 's/.*import //' \| tr ',' '\n' \| sort -u` (callers, not `_orchestrator` top-level defs). **Exception:** the `[^_]` filter silently drops `_Point` (imported by `tests/corpus/test_qdrant_store.py:11`). Either re-route that test to import `_Point` from `slopmortem.corpus.qdrant_store` directly (preferred — `_Point` is a Qdrant payload struct, not an ingest concern) or add `_Point` to `__all__` as an explicit exception | `ingest/__init__.py` | |
 | T2.7 | Add `.importlinter` contract: `slopmortem.ingest._*` is private to the `ingest` package | `.importlinter` | |
 
 Checkpoint after each task: `just test && just smoke`. Behavior change in a
@@ -139,6 +178,26 @@ pure-move step means we stop and investigate.
 
 Lower risk than PR 2, but typer command registration is import-time, so
 sub-task ordering matters.
+
+`slopmortem/cli_progress.py` (extracted on the cassettes branch) **stays at
+the top level** — the eval recorders (`evals/corpus_recorder.py`,
+`evals/render.py`) import `RichPhaseProgress` from it, so moving it under
+`cli/_progress.py` would force evals to reach into the future `cli/_internal/`
+and reintroduce the leak we are closing. Subclass placement:
+
+- `RichIngestProgress` (`cli.py:701`) is single-consumer (only `ingest_cmd`
+  uses it) → move into `_ingest_cmd.py` in T3.2.
+- `RichQueryProgress` (`cli.py:739`) is **dual-consumer** — both `query_cmd`
+  (`cli.py:442`) and `replay_cmd` (`cli.py:800`) instantiate it, and both
+  share `_QUERY_PHASE_LABELS` and `_render_query_footer`. These three names
+  live in `cli/_common.py`, not in `_query_cmd.py`.
+
+Late/lazy imports inside `cli.py` helpers (`qdrant_client`, `MergeJournal`,
+`FakeSlopClassifier`, `HaikuSlopClassifier`, `ensure_collection`,
+`EMBED_DIMS` — `cli.py:571, 606, 626, 629, 642, 644, 645`) exist to keep
+`slopmortem --help` fast (avoid loading qdrant/onnx at import time). T3.2
+and T3.3 must preserve the lazy `noqa: PLC0415` pattern verbatim — do not
+hoist these to module-top imports in the extracted files.
 
 | ID | Task | Files | Notes |
 |---|---|---|---|
@@ -256,7 +315,8 @@ PR 0 (tooling prep)
   T0.3 (just smoke recipe)             predecessors: none
 
 PR 1 (façade hygiene) — gate: PR 0 merged
-  T1.1 (expand corpus/__init__)        predecessors: T0.2
+  T1.0 (relocate NoCannedEmbeddingError) predecessors: T0.2
+  T1.1 (expand corpus/__init__)        predecessors: T1.0
   T1.2 (expand llm/__init__)           predecessors: T1.1
   T1.3 (stages/__init__ exports)       predecessors: T1.2
   T1.4 (corpus/sources/__init__)       predecessors: T1.3
@@ -288,7 +348,7 @@ PR 4 (visual _internal/) — gate: PR 3 merged + reassess if still wanted
   T4.4 (update CLAUDE.md layout)       predecessors: T4.3
 ```
 
-Total: 27 tasks (PR 0: 3, PR 1: 7, PR 2: 7, PR 3: 6, PR 4: 4), all sequential per user preference.
+Total: 28 tasks (PR 0: 3, PR 1: 8, PR 2: 7, PR 3: 6, PR 4: 4), all sequential per user preference.
 
 ## Agent Assignments
 
@@ -297,6 +357,7 @@ Agent assignments (auto-selected — Python-only diff throughout):
   T0.1 — Add import-linter dep             → python-development:python-pro
   T0.2 — Wire lint into just + CI          → python-development:python-pro
   T0.3 — just smoke recipe                 → python-development:python-pro
+  T1.0 — Relocate NoCannedEmbeddingError   → python-development:python-pro
   T1.1 — Expand corpus/__init__            → python-development:python-pro
   T1.2 — Expand llm/__init__               → python-development:python-pro
   T1.3 — stages/__init__ exports           → python-development:python-pro
