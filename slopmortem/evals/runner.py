@@ -185,9 +185,7 @@ def _allowed_hosts_for_candidate(s: Synthesis) -> set[str]:
     """Compute the host allowlist for ``all_sources_in_allowed_domains``.
 
     Unions the fixed allowlist with the candidate's own ``Synthesis.sources``
-    (already populated from ``CandidatePayload.sources`` in
-    ``Synthesis.from_llm``). Rebuilds the set fresh per call so it can't leak
-    across candidates.
+    (populated from ``CandidatePayload.sources`` in ``Synthesis.from_llm``).
     """
     hosts: set[str] = set(_FIXED_HOST_ALLOWLIST)
     for url in s.sources:

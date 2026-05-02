@@ -210,12 +210,9 @@ def _join_to_candidates(
 def _current_trace_id(*, enable_tracing: bool) -> str | None:
     """Return the current Laminar trace id, or ``None`` when tracing is off.
 
-    Gated on the user-facing ``Config.enable_tracing`` flag rather than
-    ``Laminar.is_initialized()`` alone. The ``@observe`` decorator can still
-    create a span (and thus a non-INVALID OTel trace id) under
-    ``TracerWrapper.verify_initialized()`` even after ``Laminar.shutdown()``
-    flips ``Laminar.is_initialized()`` back to False — and that state can
-    persist across xdist workers in some setups, leaking a trace_id into
+    Gated on ``enable_tracing`` because ``Laminar.is_initialized()`` alone
+    isn't sufficient: ``@observe`` can still mint an OTel trace id via
+    ``TracerWrapper`` after ``Laminar.shutdown()``, leaking a trace_id into
     runs the user never asked to trace.
     """
     if not enable_tracing or not Laminar.is_initialized():
