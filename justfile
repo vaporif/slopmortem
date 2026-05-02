@@ -43,6 +43,17 @@ eval-record-corpus:
         --inputs tests/fixtures/corpus_fixture_inputs.yml \
         --out tests/fixtures/corpus_fixture.jsonl
 
+# Fast import-time + cassette smoke. Catches typer registration regressions
+# and LLM-pipeline drift without hitting any live API. Used by every
+# refactor checkpoint in docs/plans/2026-05-02-encapsulation-refactor.md.
+smoke:
+    uv run slopmortem --help
+    uv run slopmortem ingest --help
+    uv run slopmortem query --help
+    uv run slopmortem replay --help
+    uv run slopmortem embed-prefetch --help
+    just eval
+
 lint:
     uv run ruff check .
     uv run ruff format --check .

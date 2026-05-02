@@ -167,7 +167,7 @@ Expected: ruff check, format check, and lint-imports all pass, exit 0.
 **Files:**
 - Modify: `justfile`
 
-- [ ] **Step 1: Add the `smoke` recipe**
+- [x] **Step 1: Add the `smoke` recipe**
 
 Append to `justfile` (after the `eval-record-corpus` recipe is the natural spot):
 
@@ -184,12 +184,12 @@ smoke:
     just eval
 ```
 
-- [ ] **Step 2: Run the smoke recipe and capture output**
+- [x] **Step 2: Run the smoke recipe and capture output**
 
 Run: `just smoke`
 Expected: each `--help` prints typer's usage block, then `just eval` runs the cassette suite to completion with `Pass`/`Fail` baselines stable. Exit 0.
 
-- [ ] **Step 3: Verify the recipe is listed**
+- [x] **Step 3: Verify the recipe is listed**
 
 Run: `just --list | grep smoke`
 Expected: `    smoke   Fast import-time + cassette smoke...`
