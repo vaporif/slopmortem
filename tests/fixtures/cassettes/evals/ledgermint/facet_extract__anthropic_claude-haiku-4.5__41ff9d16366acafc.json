@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002308,
+    "cost_usd": 0.002328,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"fintech\", \"business_model\": \"b2b_saas\", \"customer_type\": \"mid_market\", \"geography\": \"us\", \"monetization\": \"usage_metered\", \"sub_sector\": \"accounting automation\", \"product_type\": \"web application\", \"price_point\": \"per-seat with transaction overages\", \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"fintech\", \"business_model\": \"b2b_saas\", \"customer_type\": \"mid_market\", \"geography\": \"us\", \"monetization\": \"tiered_freemium\", \"sub_sector\": \"accounting automation\", \"product_type\": \"SaaS platform\", \"price_point\": \"per-seat with transaction overages\", \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }

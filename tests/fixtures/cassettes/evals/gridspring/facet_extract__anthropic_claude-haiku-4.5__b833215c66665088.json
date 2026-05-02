@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002215,
+    "cost_usd": 0.002315,
     "stop_reason": "stop",
-    "text": "{\"sector\":\"climate_energy\",\"business_model\":\"hardware_with_service\",\"customer_type\":\"smb\",\"geography\":\"us\",\"monetization\":\"subscription_recurring\",\"sub_sector\":\"battery storage\",\"product_type\":\"grid-edge battery pack rental\",\"price_point\":\"monthly service contract\",\"founding_year\":null,\"failure_year\":null}"
+    "text": "{\"sector\": \"climate_energy\", \"business_model\": \"hardware_with_service\", \"customer_type\": \"smb\", \"geography\": \"us\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"energy storage\", \"product_type\": \"grid-edge battery packs\", \"price_point\": \"usage-based demand charge reduction\", \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }
