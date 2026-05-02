@@ -420,14 +420,14 @@ Expected: green.
 **Files:**
 - Modify: `slopmortem/corpus/sources/__init__.py`
 
-- [ ] **Step 1: List the 5 adapter classes**
+- [x] **Step 1: List the 5 adapter classes**
 
 `corpus/sources/__init__.py` currently only re-exports the protocol bases (`Enricher`, `Source` from `base`). The 5 adapter classes live in their respective sibling files but are not yet re-exported — step 2 adds them.
 
 Run: `grep -rnE "^class \w+(Source|Enricher)" slopmortem/corpus/sources/`
 Expected (per spec): `CrunchbaseCsvSource`, `CuratedSource`, `HNAlgoliaSource`, `TavilyEnricher`, `WaybackEnricher`. Confirm the count is 5 and capture the file each lives in.
 
-- [ ] **Step 2: Replace the init with explicit re-exports**
+- [x] **Step 2: Replace the init with explicit re-exports**
 
 Edit `slopmortem/corpus/sources/__init__.py`:
 
@@ -454,7 +454,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 3: Run typecheck and smoke**
+- [x] **Step 3: Run typecheck and smoke**
 
 Run: `just typecheck && just smoke`
 Expected: green.
