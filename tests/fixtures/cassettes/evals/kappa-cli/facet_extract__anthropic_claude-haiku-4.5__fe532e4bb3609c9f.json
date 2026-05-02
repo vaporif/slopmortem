@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002274,
+    "cost_usd": 0.002264,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"devtools\", \"business_model\": \"b2b_saas\", \"customer_type\": \"developer\", \"geography\": \"global\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"preview environment management\", \"product_type\": \"CLI + hosted control plane\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"devtools\", \"business_model\": \"b2b_saas\", \"customer_type\": \"developer\", \"geography\": \"global\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"preview environments\", \"product_type\": \"CLI + hosted platform\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }
