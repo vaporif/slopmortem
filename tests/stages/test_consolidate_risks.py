@@ -8,6 +8,7 @@ boundary.
 
 from __future__ import annotations
 
+import importlib
 import json
 from datetime import date
 from typing import TYPE_CHECKING
@@ -24,6 +25,9 @@ from slopmortem.models import (
 )
 from slopmortem.stages import consolidate_risks
 from slopmortem.tracing.events import SpanEvent
+
+# `import_module` instead of `import x as` — the façade re-export shadows the submodule.
+_cr_module = importlib.import_module("slopmortem.stages.consolidate_risks")
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -101,7 +105,7 @@ def _dedup_lessons(syn: Synthesis) -> list[str]:
 @pytest.fixture
 def captured_events(monkeypatch: pytest.MonkeyPatch) -> list[SpanEvent]:
     events: list[SpanEvent] = []
-    monkeypatch.setattr("slopmortem.stages.consolidate_risks._emit_event", events.append)
+    monkeypatch.setattr(_cr_module, "_emit_event", events.append)
     return events
 
 

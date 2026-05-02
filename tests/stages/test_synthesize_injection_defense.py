@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from datetime import date
 from pathlib import Path
@@ -14,6 +15,9 @@ from slopmortem.llm import FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
 from slopmortem.stages import synthesize, synthesize_prompt_kwargs
 from slopmortem.tracing.events import SpanEvent
+
+# `import_module` instead of `import x as` — the façade re-export shadows the submodule.
+_synth_module = importlib.import_module("slopmortem.stages.synthesize")
 
 _DEFAULT_MODEL = "test-synth-model"
 _FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "injection"
@@ -90,7 +94,7 @@ def _injection_synthesis_payload() -> str:
 def captured_events(monkeypatch: pytest.MonkeyPatch) -> list[SpanEvent]:
     """Replace the no-op ``_emit_event`` with a list-appending stub for one test."""
     events: list[SpanEvent] = []
-    monkeypatch.setattr("slopmortem.stages.synthesize._emit_event", events.append)
+    monkeypatch.setattr(_synth_module, "_emit_event", events.append)
     return events
 
 
