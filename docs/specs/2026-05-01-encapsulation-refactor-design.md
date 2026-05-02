@@ -130,6 +130,27 @@ Checkpoint: `just test && just lint && just typecheck && just smoke` green.
 Order matters. Expand façades first (additive, can't break callers), migrate
 callers second, lock the door third, rename last.
 
+**Re-export idiom (applies to T1.1, T1.2, T1.3, T1.4).** Use the explicit
+`from … import X as X` form so basedpyright's strict-mode
+`reportImplicitReexport` is satisfied without project-wide config gymnastics.
+Pattern:
+
+```python
+from slopmortem.corpus.merge import MergeJournal as MergeJournal
+from slopmortem.corpus.qdrant_store import QdrantCorpus as QdrantCorpus, ensure_collection as ensure_collection
+
+__all__ = [
+    "MergeJournal",
+    "QdrantCorpus",
+    "ensure_collection",
+]
+```
+
+The bare `from … import X` form is functionally identical at runtime but
+trips strict re-export diagnostics. Convert the existing bare imports in
+`corpus/__init__.py` and `corpus/sources/__init__.py` while you're there
+(no behavior change).
+
 | ID | Task | Files | Notes |
 |---|---|---|---|
 | T1.0 | **Verify the prod←evals leak is closed.** Already fixed by commit `f6557ac` (2026-05-02), which moved `NoCannedEmbeddingError` and the surrounding cassettes module to `slopmortem/llm/cassettes.py`. Re-run `grep -rnE "from slopmortem\.evals" slopmortem/` and assert no production module imports from `evals/`. If clean, no code change; T1.6's contract will pass on first run | `slopmortem/llm/fake_embeddings.py` (verify only), `slopmortem/evals/cassettes.py` (verify only) | Verification only — relocation already shipped |
