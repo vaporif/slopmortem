@@ -68,7 +68,8 @@ class ThickBarColumn(BarColumn):
 
     height = 1
 
-    def render(self, task: Task) -> _StackedBar | Text:  # type: ignore[override]
+    @override
+    def render(self, task: Task) -> _StackedBar | Text:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Render *task*'s bar stacked ``height`` times, or empty for single-shot phases."""
         if task.total is None or task.total <= 1:
             return Text("")

@@ -130,7 +130,7 @@ async def restore_jsonl_to_collection(
             )
             points.append(point)
             if len(points) >= _UPSERT_BATCH:
-                await client.upsert(collection_name=collection, points=points)
+                await client.upsert(collection_name=collection, points=points, wait=True)
                 points = []
     if points:
-        await client.upsert(collection_name=collection, points=points)
+        await client.upsert(collection_name=collection, points=points, wait=True)

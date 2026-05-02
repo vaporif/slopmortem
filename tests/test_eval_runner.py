@@ -265,6 +265,65 @@ def test_runner_record_flag_invokes_helper(monkeypatch: pytest.MonkeyPatch, tmp_
     assert seen["max_cost_usd"] == pytest.approx(1.5)
 
 
+def test_runner_record_scope_matches_sha1_row_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """--record --scope <sha1> matches anonymous rows via _row_id, not name."""
+    import hashlib  # noqa: PLC0415
+
+    description = "Anonymous pitch with no name."
+    sha1_id = hashlib.sha1(description.encode(), usedforsecurity=False).hexdigest()[:8]
+    seed = _write_seed(tmp_path, [{"name": "", "description": description}])
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}")
+
+    seen: dict[str, object] = {}
+
+    async def fake_helper(  # noqa: PLR0913
+        *,
+        inputs: list[InputContext],
+        output_dir: Path,
+        corpus_fixture_path: Path,
+        config: Config,
+        max_cost_usd: float,
+        progress: object = None,
+    ) -> RecordResult:
+        del output_dir, corpus_fixture_path, config, max_cost_usd, progress
+        seen["inputs"] = inputs
+        return RecordResult(
+            rows_total=len(inputs),
+            rows_succeeded=len(inputs),
+            cassettes_written=0,
+            total_cost_usd=0.0,
+        )
+
+    monkeypatch.setattr(
+        "slopmortem.evals.recording_helper.record_cassettes_for_inputs",
+        fake_helper,
+    )
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tests" / "fixtures" / "corpus_fixture.jsonl").write_text("")
+
+    with pytest.raises(SystemExit) as exc_info:
+        runner.main(
+            [
+                "--dataset",
+                str(seed),
+                "--baseline",
+                str(baseline),
+                "--record",
+                "--scope",
+                sha1_id,
+            ]
+        )
+    assert exc_info.value.code == 0
+    inputs = seen["inputs"]
+    assert isinstance(inputs, list)
+    assert len(inputs) == 1
+    assert inputs[0].description == description
+
+
 def test_runner_writes_baseline_when_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

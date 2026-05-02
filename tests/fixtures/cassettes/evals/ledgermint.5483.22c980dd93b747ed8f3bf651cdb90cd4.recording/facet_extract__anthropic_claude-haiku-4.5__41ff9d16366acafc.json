@@ -1,7 +1,7 @@
 {
   "key": {
     "model": "anthropic/claude-haiku-4.5",
-    "prompt_hash": "970c59b3cd56d034",
+    "prompt_hash": "41ff9d16366acafc",
     "template_sha": "0a05e16b1fed1ad4"
   },
   "request_debug": {
@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002279,
+    "cost_usd": 0.002328,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"social_communication\", \"business_model\": \"b2c_marketplace\", \"customer_type\": \"consumer\", \"geography\": \"apac\", \"monetization\": \"transaction_fee\", \"sub_sector\": \"beauty influencer marketplace\", \"product_type\": \"video consultation platform\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"fintech\", \"business_model\": \"b2b_saas\", \"customer_type\": \"mid_market\", \"geography\": \"us\", \"monetization\": \"tiered_freemium\", \"sub_sector\": \"accounting automation\", \"product_type\": \"SaaS platform\", \"price_point\": \"per-seat with transaction overages\", \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }

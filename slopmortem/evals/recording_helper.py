@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from anyio import to_thread
+from openai import AsyncOpenAI
 
+from slopmortem.budget import Budget
 from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant
 from slopmortem.evals.recording import (
     RecordingEmbeddingClient,
@@ -28,6 +30,8 @@ from slopmortem.evals.recording_progress import (
     RecordPhase,
     RecordProgress,
 )
+from slopmortem.llm.embedding_factory import make_embedder
+from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.pipeline import QueryPhase, run_query
 
 if TYPE_CHECKING:
@@ -131,7 +135,6 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913 — entry point exposes 
         feeds these straight into ``render_record_footer``.
     """
     # Lazy imports so import-time cycles stay cheap.
-    from slopmortem.cli import _build_deps  # noqa: PLC0415  # pyright: ignore[reportPrivateUsage]
     from slopmortem.corpus.tools_impl import _set_corpus  # noqa: PLC0415
 
     # ``_row_id`` lives in the runner module; both modules import each other's
@@ -163,9 +166,20 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913 — entry point exposes 
             qdrant_url=qdrant_url,
         ) as corpus:
             _set_corpus(corpus)
-            llm, embedder, _live_corpus, budget = _build_deps(cfg)
-            # We use the helper's ephemeral corpus; ignore _live_corpus.
-            del _live_corpus
+            # Build only the deps the recorder actually needs; the ephemeral
+            # corpus above replaces what `_build_deps` would have constructed,
+            # and going through it would leak an unused AsyncQdrantClient.
+            budget = Budget(cap_usd=cfg.max_cost_usd_per_query)
+            openrouter_sdk = AsyncOpenAI(
+                api_key=cfg.openrouter_api_key.get_secret_value(),
+                base_url=cfg.openrouter_base_url,
+            )
+            llm = OpenRouterClient(
+                sdk=openrouter_sdk,
+                budget=budget,
+                model=cfg.model_synthesize,
+            )
+            embedder = make_embedder(cfg, budget)
 
             for ctx in inputs:
                 # Share the directory-naming function with the replay path

@@ -61,7 +61,6 @@ baseline that also has ``candidates_count=0`` passes.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import contextlib
 import hashlib
 import json
@@ -523,11 +522,12 @@ def _run_record(
         render_record_footer,
     )
 
-    rows = _load_dataset(dataset_path)
+    all_rows = _load_dataset(dataset_path)
+    rows = all_rows
     if scope is not None:
-        rows = [r for r in rows if r.name == scope]
+        rows = [r for r in all_rows if _row_id(r) == scope]
         if not rows:
-            valid = [r.name for r in _load_dataset(dataset_path)]
+            valid = [_row_id(r) for r in all_rows]
             print(  # noqa: T201 — CLI surface
                 f"unknown scope {scope!r}; valid: {valid}",
                 file=sys.stderr,
@@ -548,8 +548,9 @@ def _run_record(
     )
     with progress_ctx as bar:
         sink = bar if bar is not None else NullRecordProgress()
-        result = asyncio.run(
-            recording_helper.record_cassettes_for_inputs(
+
+        async def _do_record() -> recording_helper.RecordResult:
+            return await recording_helper.record_cassettes_for_inputs(
                 inputs=rows,
                 output_dir=output_dir,
                 corpus_fixture_path=corpus_fixture_path,
@@ -557,7 +558,8 @@ def _run_record(
                 max_cost_usd=max_cost_usd,
                 progress=sink,
             )
-        )
+
+        result = anyio.run(_do_record)
         # Footer goes to the bar's console when present so the panel renders
         # under the live progress region rather than fighting it; the
         # nullcontext branch falls back to a fresh stderr console.

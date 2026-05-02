@@ -66,9 +66,9 @@ from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
 from slopmortem.corpus.sources.tavily import TavilyEnricher
 from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.corpus.tools_impl import _set_corpus
-from slopmortem.ingest import IngestPhase, IngestResult, ingest
+from slopmortem.ingest import INGEST_PHASE_LABELS, IngestPhase, IngestResult, ingest
+from slopmortem.llm.embedding_factory import make_embedder
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
-from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.models import InputContext
 from slopmortem.pipeline import QueryPhase, cutoff_iso, run_query
@@ -564,29 +564,6 @@ def _maybe_init_tracing(config: Config) -> None:
     Laminar.initialize(project_api_key=api_key, base_url=base_url)
 
 
-def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
-    """Raise ``ValueError`` on unknown providers so misconfig fails loud at startup."""
-    provider = config.embedding_provider
-    if provider == "fastembed":
-        return FastEmbedEmbeddingClient(
-            model=config.embed_model_id,
-            budget=budget,
-            cache_dir=config.embed_cache_dir,
-        )
-    if provider == "openai":
-        openai_sdk = AsyncOpenAI(
-            api_key=config.openai_api_key.get_secret_value(),
-        )
-        return OpenAIEmbeddingClient(
-            sdk=openai_sdk,
-            budget=budget,
-            model=config.embed_model_id,
-        )
-    valid = ("fastembed", "openai")
-    msg = f"unknown embedding_provider {provider!r}; valid choices: {valid}"
-    raise ValueError(msg)
-
-
 def _build_deps(
     config: Config,
 ) -> tuple[LLMClient, EmbeddingClient, Corpus, Budget]:
@@ -610,7 +587,7 @@ def _build_deps(
         model=config.model_synthesize,
     )
 
-    embedder = _make_embedder(config, budget)
+    embedder = make_embedder(config, budget)
 
     qdrant_client = AsyncQdrantClient(host=config.qdrant_host, port=config.qdrant_port)
     corpus = QdrantCorpus(
@@ -713,7 +690,7 @@ async def _build_ingest_deps(
         model=config.model_facet,  # ingest uses the cheap model
     )
 
-    embedder = _make_embedder(config, budget)
+    embedder = make_embedder(config, budget)
 
     corpus = await _build_ingest_corpus(config, post_mortems_root)
     journal = await _build_journal(config, post_mortems_root)
@@ -726,23 +703,12 @@ async def _build_ingest_deps(
     return llm, embedder, corpus, budget, journal, classifier
 
 
-# Phase labels keyed on the IngestPhase enum so any phase added in
-# slopmortem.ingest fails type-check here until it gets a label.
-_INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
-    IngestPhase.GATHER: "Gathering entries from sources",
-    IngestPhase.CLASSIFY: "Classifying / slop-filtering",
-    IngestPhase.CACHE_WARM: "Warming prompt cache",
-    IngestPhase.FAN_OUT: "Facets + summarize fan-out",
-    IngestPhase.WRITE: "Entity-resolve / chunk / qdrant",
-}
-
-
 class RichIngestProgress(RichPhaseProgress[IngestPhase]):
     """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl."""
 
     def __init__(self) -> None:
         """Build with ingest phase labels."""
-        super().__init__(_INGEST_PHASE_LABELS)
+        super().__init__(INGEST_PHASE_LABELS)
 
 
 def _render_ingest_result(console: Console, result: IngestResult, budget: Budget) -> None:
@@ -872,7 +838,7 @@ def embed_prefetch_cmd() -> None:
 async def _embed_prefetch() -> None:
     config = load_config()
     budget = Budget(cap_usd=0.0)
-    embedder = _make_embedder(config, budget)
+    embedder = make_embedder(config, budget)
     if not isinstance(embedder, FastEmbedEmbeddingClient):
         typer.echo(
             f"slopmortem: provider {config.embedding_provider!r} has no local cache to prefetch",

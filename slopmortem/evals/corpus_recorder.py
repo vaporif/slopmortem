@@ -17,7 +17,6 @@ gate exists to prevent accidental spend.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import contextlib
 import os
 import sys
@@ -26,6 +25,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+import anyio
 import yaml
 from openai import AsyncOpenAI
 from qdrant_client import AsyncQdrantClient
@@ -39,30 +39,17 @@ from slopmortem.config import load_config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
 from slopmortem.corpus.sources.curated import CuratedSource
-from slopmortem.ingest import HaikuSlopClassifier, IngestPhase, ingest
-from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
-from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient
+from slopmortem.ingest import INGEST_PHASE_LABELS, HaikuSlopClassifier, IngestPhase, ingest
+from slopmortem.llm.embedding_factory import make_embedder
+from slopmortem.llm.openai_embeddings import EMBED_DIMS
 from slopmortem.llm.openrouter import OpenRouterClient
 
 if TYPE_CHECKING:
     from slopmortem.corpus.sources.base import Enricher
     from slopmortem.ingest import Corpus as IngestCorpus
     from slopmortem.ingest import IngestResult
-    from slopmortem.llm.embedding_client import EmbeddingClient
 
 _DEFAULT_MAX_COST_USD = 1.5
-
-# Local label map mirrors slopmortem.cli._INGEST_PHASE_LABELS. Duplicated rather
-# than promoted to cli_progress.py so the generic widget stays decoupled from
-# slopmortem.ingest's phase enum; the IngestPhase key fails type-check at both
-# sites if a phase is added without a label.
-_INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
-    IngestPhase.GATHER: "Gathering entries from sources",
-    IngestPhase.CLASSIFY: "Classifying / slop-filtering",
-    IngestPhase.CACHE_WARM: "Warming prompt cache",
-    IngestPhase.FAN_OUT: "Facets + summarize fan-out",
-    IngestPhase.WRITE: "Entity-resolve / chunk / qdrant",
-}
 
 
 class _RichIngestProgress(RichPhaseProgress[IngestPhase]):
@@ -70,7 +57,7 @@ class _RichIngestProgress(RichPhaseProgress[IngestPhase]):
 
     def __init__(self) -> None:
         """Build with ingest phase labels."""
-        super().__init__(_INGEST_PHASE_LABELS)
+        super().__init__(INGEST_PHASE_LABELS)
 
 
 def _make_progress_ctx() -> contextlib.AbstractContextManager[_RichIngestProgress | None]:
@@ -206,26 +193,7 @@ async def _record(
             model=config.model_facet,
         )
 
-        embedder: EmbeddingClient
-        if config.embedding_provider == "fastembed":
-            embedder = FastEmbedEmbeddingClient(
-                model=config.embed_model_id,
-                budget=budget,
-                cache_dir=config.embed_cache_dir,
-            )
-        elif config.embedding_provider == "openai":
-            openai_sdk = AsyncOpenAI(api_key=config.openai_api_key.get_secret_value())
-            embedder = OpenAIEmbeddingClient(
-                sdk=openai_sdk,
-                budget=budget,
-                model=config.embed_model_id,
-            )
-        else:
-            valid = ("fastembed", "openai")
-            msg = (
-                f"unknown embedding_provider {config.embedding_provider!r}; valid choices: {valid}"
-            )
-            raise ValueError(msg)
+        embedder = make_embedder(config, budget)
 
         classifier = HaikuSlopClassifier(llm=llm, model=config.model_summarize)
 
@@ -329,14 +297,15 @@ def main(argv: list[str] | None = None) -> None:
         f"http://{config.qdrant_host}:{config.qdrant_port}"
     )
 
-    asyncio.run(
-        _record(
+    async def _do_record() -> None:
+        await _record(
             inputs_path=inputs_path,
             out_path=out_path,
             max_cost_usd=max_cost_usd,
             qdrant_url=qdrant_url,
         )
-    )
+
+    anyio.run(_do_record)
 
 
 if __name__ == "__main__":

@@ -142,6 +142,18 @@ class IngestPhase(StrEnum):
     WRITE = "write"
 
 
+# Phase label map keyed on IngestPhase so any phase added above fails type-check
+# at every consumer until a label is provided. Lives next to the enum so the CLI
+# and the corpus recorder don't need to keep duplicate copies in sync.
+INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
+    IngestPhase.GATHER: "Gathering entries from sources",
+    IngestPhase.CLASSIFY: "Classifying / slop-filtering",
+    IngestPhase.CACHE_WARM: "Warming prompt cache",
+    IngestPhase.FAN_OUT: "Facets + summarize fan-out",
+    IngestPhase.WRITE: "Entity-resolve / chunk / qdrant",
+}
+
+
 @runtime_checkable
 class IngestProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem ingest``.
