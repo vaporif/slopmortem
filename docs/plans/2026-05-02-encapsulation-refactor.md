@@ -626,23 +626,11 @@ source_modules =
 forbidden_modules =
     slopmortem.tracing.events
 
-[importlinter:contract:ingest-private-placeholder]
-name = ingest._* is private (placeholder; tightened in T2.7)
-type = forbidden
-source_modules =
-    slopmortem.cli
-    slopmortem.pipeline
-    slopmortem.evals
-forbidden_modules =
-    # filled in by T2.7 once the package exists. Leave commented for now.
-
-[importlinter:contract:cli-private-placeholder]
-name = cli._* is private (placeholder; tightened in T3.6)
-type = forbidden
-source_modules =
-    slopmortem.evals
-forbidden_modules =
-    # filled in by T3.6 once the package exists. Leave commented for now.
+# NOTE: `ingest-private` and `cli-private` contracts are NOT defined here.
+# They are added by T2.7 and T3.6 respectively, once the underlying `_*.py`
+# files actually exist. import-linter rejects `forbidden` contracts with an
+# empty `forbidden_modules` list, so a real placeholder is impossible — leave
+# the contracts out entirely until T2.7 / T3.6 land them with concrete entries.
 ```
 
 Confirm the source-module list in each contract excludes the package itself (a contract with `corpus` listed in `source_modules` against `corpus.foo` in `forbidden_modules` would fire on internal imports — that is the whole point of leaf packages).
@@ -650,7 +638,7 @@ Confirm the source-module list in each contract excludes the package itself (a c
 - [ ] **Step 2: Run lint-imports**
 
 Run: `uv run lint-imports`
-Expected: 5 contracts (corpus-leaf, llm-leaf, stages-leaf, sources-leaf, tracing-leaf) all kept. The two placeholder contracts pass trivially since their forbidden lists are empty.
+Expected: 5 contracts (corpus-leaf, llm-leaf, stages-leaf, sources-leaf, tracing-leaf) all kept. There are no placeholder contracts; `ingest-private` and `cli-private` arrive in T2.7 and T3.6.
 
 If a contract is broken, the offending file slipped past T1.5 — go back, fix the import, and re-run.
 
@@ -782,13 +770,13 @@ mkdir -p slopmortem/ingest
 git mv slopmortem/ingest.py slopmortem/ingest/_orchestrator.py
 ```
 
-- [ ] **Step 5: Add `__all__` to `_orchestrator.py`**
+- [ ] **Step 5+6: Add `__all__` to `_orchestrator.py` AND create `__init__.py` in the SAME commit**
 
-Edit the top of `slopmortem/ingest/_orchestrator.py` (after the module docstring and imports) to add an explicit `__all__` listing only the names from `/tmp/ingest_surface_before.txt`. Strip any `slopmortem.ingest.` prefix; keep just the bare symbol name. Sort alphabetically. Without this, the next step's star-import would publicly re-export `InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier`, and the protocols.
+These two edits MUST land in one commit. If `__init__.py` lands first with `from … import *` but no `__all__` on `_orchestrator.py`, the wildcard re-export leaks `InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier`, and the test protocols to the public surface — a CLAUDE.md "fakes over mocks" violation that survives in git history.
 
-- [ ] **Step 6: Create `__init__.py` that re-exports the orchestrator's public surface**
+5a. Edit the top of `slopmortem/ingest/_orchestrator.py` (after the module docstring and imports) to add an explicit `__all__` listing only the names from `/tmp/ingest_surface_before.txt`. Strip any `slopmortem.ingest.` prefix; keep just the bare symbol name. Sort alphabetically.
 
-Write `slopmortem/ingest/__init__.py`:
+5b. Write `slopmortem/ingest/__init__.py`:
 
 ```python
 """Ingest pipeline: gather → slop classify → fan-out → embed → upsert."""
@@ -798,7 +786,11 @@ from __future__ import annotations
 from slopmortem.ingest._orchestrator import *  # noqa: F401,F403  -- guided by _orchestrator.__all__
 ```
 
-The `noqa` is required because ruff disallows `import *` by default; here it is intentional and bounded by the explicit `__all__` from step 5.
+The `noqa` is required because ruff disallows `import *` by default; here it is intentional and bounded by the explicit `__all__` from 5a.
+
+5c. Stage both files together and commit as one unit: `git add slopmortem/ingest/_orchestrator.py slopmortem/ingest/__init__.py && git commit -m "ingest: package skeleton with bounded wildcard"`.
+
+Do not run `git commit` between 5a and 5b. T2.6 will replace this wildcard with explicit re-exports later — until then, the `__all__` is the only thing keeping fakes out of the public surface.
 
 - [ ] **Step 7: Verify the smoke/eval baseline holds**
 
@@ -975,7 +967,14 @@ Replace the `raise NotImplementedError` placeholders with concrete arrange/act/a
 - assert the journal table row's state column AND that no journal row reads `complete` for that entry
 - assert disk state matches the expected canonical hash if the canonical file was written
 
-Use `InMemoryCorpus` (already in `_orchestrator.py`) as the base, subclassing it to inject crashes.
+Use `InMemoryCorpus` (already in `_orchestrator.py`) as the corpus-side base, subclassing it to inject crashes.
+
+**Journal fake — explicit choice required.** No `InMemoryJournal` / `FakeMergeJournal` exists today; `MergeJournal` (`slopmortem/corpus/merge.py:100`) is concrete SQLite-backed. Pick ONE of these approaches and stick to it across all four tests:
+
+- **(Preferred) Real SQLite-in-`tmp_path`.** Construct a real `MergeJournal` against `tmp_path / "journal.sqlite"`. Pros: no new fake to maintain; tests exercise the real schema and migration; matches `pytest-xdist` parallel-safety since `tmp_path` is per-test. Cons: one more I/O call per test (negligible for 4 tests).
+- **(Fallback) Subclass `MergeJournal`.** Only choose this if a step needs to inject a crash *inside* a journal call (e.g. crash between `upsert_pending` writing and returning). Override the specific method, raise `_CrashAt`, then call `super().<method>()` selectively. Document why a subclass was needed in a one-line comment.
+
+Do NOT introduce a brand-new `InMemoryJournal` class for this task — it would need to mirror the full `MergeJournal` API (15+ methods) and drift from it on schema changes. The two journal helpers in this test file (corpus subclass + crash-injection wrapper, if needed) belong in this file, not in `slopmortem/`.
 
 - [ ] **Step 3: Run tests; expect them to fail with NotImplementedError or with assertion errors against the current code**
 
@@ -1164,9 +1163,9 @@ Expected: green. If a test breaks because of a missing name, add it to step 2's 
 **Files:**
 - Modify: `.importlinter`
 
-- [ ] **Step 1: Tighten the `ingest-private-placeholder` contract**
+- [ ] **Step 1: Add the `ingest-private` contract**
 
-Edit `.importlinter`. Replace the `ingest-private-placeholder` contract with the live version:
+Edit `.importlinter`. T1.6 deliberately did not include a placeholder (import-linter rejects empty `forbidden_modules`). Append a fresh contract:
 
 ```ini
 [importlinter:contract:ingest-private]
@@ -1474,9 +1473,9 @@ Expected: green; `--help` outputs still byte-stable.
 **Files:**
 - Modify: `.importlinter`
 
-- [ ] **Step 1: Tighten the `cli-private-placeholder` contract**
+- [ ] **Step 1: Add the `cli-private` contract**
 
-Edit `.importlinter`. Replace the placeholder with:
+Edit `.importlinter`. T1.6 deliberately did not include a placeholder (import-linter rejects empty `forbidden_modules`). Append a fresh contract:
 
 ```ini
 [importlinter:contract:cli-private]
