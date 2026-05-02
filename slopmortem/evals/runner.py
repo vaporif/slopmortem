@@ -10,7 +10,7 @@ Modes:
         plus an ephemeral Qdrant collection seeded from
         tests/fixtures/corpus_fixture.jsonl. Requires a running Qdrant
         instance on localhost:6333. This is what `just eval` and CI run.
-    --live: real production deps via slopmortem.cli._build_deps. Operator-
+    --live: real production deps via slopmortem.cli._app._build_deps. Operator-
         invoked, out of CI scope. Costs real money.
     --record: re-record cassettes against the live API. Calls
         record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
@@ -303,7 +303,11 @@ async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, d
     # Lazy-imported so cassette mode doesn't drag CLI deps in. Both names are
     # private; the runner deliberately mirrors the CLI boot path so live evals
     # get the same prod wiring.
-    from slopmortem.cli import (  # noqa: PLC0415
+    # TODO(deps-extraction): _build_deps should live in a shared module  # noqa: TD003
+    # (e.g. slopmortem/deps.py) so evals can consume it without reaching into
+    # slopmortem.cli internals. Until then, T3.6's importlinter contract needs
+    # an ignore_imports exception for slopmortem.evals.runner -> slopmortem.cli._app.
+    from slopmortem.cli._app import (  # noqa: PLC0415
         _build_deps,  # pyright: ignore[reportPrivateUsage]
     )
     from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
@@ -454,7 +458,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--live",
         action="store_true",
         help=(
-            "Use real production deps via slopmortem.cli._build_deps. "
+            "Use real production deps via slopmortem.cli._app._build_deps. "
             "Requires env keys + Qdrant; will spend real money. CI does not run this."
         ),
     )

@@ -26,8 +26,8 @@ async def _fake_corpus(*_a: object, **_k: object) -> MagicMock:
 
 def _patch_narrow_deps(monkeypatch: pytest.MonkeyPatch) -> None:
     """Bypass the journal + corpus builders so the reconcile path needs no env vars."""
-    monkeypatch.setattr("slopmortem.cli._build_journal", _fake_journal)
-    monkeypatch.setattr("slopmortem.cli._build_ingest_corpus", _fake_corpus)
+    monkeypatch.setattr("slopmortem.cli._app._build_journal", _fake_journal)
+    monkeypatch.setattr("slopmortem.cli._app._build_ingest_corpus", _fake_corpus)
 
 
 def test_cli_reconcile_dispatches_with_repair_true(
@@ -36,7 +36,7 @@ def test_cli_reconcile_dispatches_with_repair_true(
     """``--reconcile`` calls ``reconcile()`` with ``repair=True`` and exits 0."""
     fake_report = ReconcileReport(rows=[], applied=[])
     fake_reconcile = AsyncMock(return_value=fake_report)
-    monkeypatch.setattr("slopmortem.cli.reconcile", fake_reconcile)
+    monkeypatch.setattr("slopmortem.cli._app.reconcile", fake_reconcile)
     _patch_narrow_deps(monkeypatch)
 
     runner = CliRunner()
@@ -75,7 +75,7 @@ def test_cli_reconcile_prints_drift_findings(
         ],
         applied=["a:canonical/abc.md", "e:canonical/abc.md.tmp"],
     )
-    monkeypatch.setattr("slopmortem.cli.reconcile", AsyncMock(return_value=fake_report))
+    monkeypatch.setattr("slopmortem.cli._app.reconcile", AsyncMock(return_value=fake_report))
     _patch_narrow_deps(monkeypatch)
 
     runner = CliRunner()
