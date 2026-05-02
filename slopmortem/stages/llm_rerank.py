@@ -16,12 +16,8 @@ if TYPE_CHECKING:
     from slopmortem.models import Candidate, Facets
 
 
-# ``ignore_inputs=["candidates"]`` matches the top-level parameter name only
-# (lmnr-python's filter is ``k in ignore_inputs`` against
-# ``inspect.signature(func).parameters.keys()``). Dropping the Candidate list
-# keeps payload.body out of span attributes; a redacted ``(canonical_id, name)``
-# projection is re-attached via Laminar.set_span_attributes. Output
-# (LlmRerankResult) carries no body and stays auto-captured.
+# Drop ``candidates`` from span attrs to keep ``payload.body`` out; a
+# redacted ``(canonical_id, name)`` projection is re-attached below.
 @observe(name="stage.llm_rerank", ignore_inputs=["candidates"])
 async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the call site
     candidates: list[Candidate],
@@ -35,11 +31,9 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
 ) -> LlmRerankResult:
     """Rerank ``candidates`` against ``pitch`` via one structured-output LLM call.
 
-    The LLM sees each candidate's ``summary`` (not ``body``) plus the pitch
-    and extracted facets. Strict-mode JSON schema constrains shape but not
-    length, so the parsed ``ranked`` array gets re-validated against
-    ``min(N_synthesize, len(candidates))`` — mismatch raises
-    :class:`RerankLengthError`.
+    Strict-mode schema constrains shape but not length, so the parsed array
+    is re-validated against ``min(N_synthesize, len(candidates))`` — mismatch
+    raises :class:`RerankLengthError`.
     """
     Laminar.set_span_attributes(
         {
