@@ -20,7 +20,7 @@ import anyio
 from slopmortem.budget import BudgetExceededError
 from slopmortem.concurrency import gather_resilient
 from slopmortem.llm.client import CompletionResult
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine, Iterable

@@ -34,8 +34,7 @@ from slopmortem.stages import (
     retrieve,
     synthesize_all,
 )
-from slopmortem.tracing import git_sha, mint_run_id
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent, git_sha, mint_run_id
 
 if TYPE_CHECKING:
     from slopmortem.budget import Budget

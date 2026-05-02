@@ -522,11 +522,11 @@ Expected: every `--help` works, eval baseline holds.
 - Modify: `.importlinter`
 - Modify: `pyproject.toml` (pin `import-linter` in `[dependency-groups] dev` if not already pinned)
 
-- [ ] **Step 0: Pin `import-linter` in dev deps**
+- [x] **Step 0: Pin `import-linter` in dev deps**
 
 If `import-linter` is not already in `pyproject.toml` `[dependency-groups] dev`, add it now (e.g. `import-linter>=2.0,<3.0`). The contracts below assume modern import-linter behavior (≥2.0 — namespace forbidden_modules and contract validation). Run `uv sync` to lock the version. Without a pin, downstream behavior (especially T4.3's `_internal` prefix-matching) is undefined.
 
-- [ ] **Step 1: Replace the stub `.importlinter` with leaf-package contracts**
+- [x] **Step 1: Replace the stub `.importlinter` with leaf-package contracts**
 
 Edit `.importlinter`:
 
@@ -635,14 +635,14 @@ forbidden_modules =
 
 Confirm the source-module list in each contract excludes the package itself (a contract with `corpus` listed in `source_modules` against `corpus.foo` in `forbidden_modules` would fire on internal imports — that is the whole point of leaf packages).
 
-- [ ] **Step 2: Run lint-imports**
+- [x] **Step 2: Run lint-imports**
 
 Run: `uv run lint-imports`
 Expected: 5 contracts (corpus-leaf, llm-leaf, stages-leaf, sources-leaf, tracing-leaf) all kept. There are no placeholder contracts; `ingest-private` and `cli-private` arrive in T2.7 and T3.6.
 
 If a contract is broken, the offending file slipped past T1.5 — go back, fix the import, and re-run.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just lint && just typecheck && just smoke`
 Expected: green.

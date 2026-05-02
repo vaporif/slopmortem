@@ -23,7 +23,7 @@ from slopmortem.llm import (
     to_strict_response_schema,
 )
 from slopmortem.models import LLMSynthesis, Synthesis
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -26,7 +26,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from slopmortem.corpus.alias_graph import collapse_alias_components
+from slopmortem.corpus._alias_graph import collapse_alias_components
 from slopmortem.corpus.disk import read_canonical
 from slopmortem.corpus.paths import safe_path
 from slopmortem.models import Candidate, CandidatePayload

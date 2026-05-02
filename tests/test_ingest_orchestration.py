@@ -23,7 +23,7 @@ from slopmortem.ingest import (
 )
 from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import RawEntry
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

@@ -14,6 +14,8 @@ from urllib.parse import urlparse
 
 from uuid_extensions import uuid7str
 
+from slopmortem.tracing.events import SpanEvent as SpanEvent
+
 
 class TracingGuardError(RuntimeError):
     pass

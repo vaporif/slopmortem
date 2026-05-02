@@ -50,7 +50,7 @@ from slopmortem._time import utcnow_iso
 from slopmortem.corpus._db import connect
 from slopmortem.llm import prompt_template_sha, render_prompt
 from slopmortem.models import MergeState
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
     from slopmortem.corpus.merge import MergeJournal

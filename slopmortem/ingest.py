@@ -69,8 +69,7 @@ from slopmortem.models import (
     CandidatePayload,
     Facets,
 )
-from slopmortem.tracing import git_sha, mint_run_id
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent, git_sha, mint_run_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence

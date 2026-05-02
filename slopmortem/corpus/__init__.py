@@ -1,7 +1,7 @@
 # T1.1 verification (date 2026-05-02): submodule audit results
 #   store        = TYPE_CHECKING-only (3 sites: pipeline.py, cli.py, stages/retrieve.py)
 #   summarize    = external (1 site: tests/corpus/test_summarize.py)
-#   alias_graph  = internal-only (only sibling import in qdrant_store.py)
+#   _alias_graph = internal-only, renamed to _alias_graph in T1.7
 #   embed_sparse = external (lazy/runtime sites: ingest.py, evals/recording_helper.py,
 #                  stages/retrieve.py + test monkeypatches in test_observe_redaction.py
 #                  and test_pipeline_e2e.py — none top-level `from … import`)

@@ -12,7 +12,7 @@ from slopmortem.corpus import MergeJournal, resolve_entity
 from slopmortem.corpus.entity_resolution import ResolveResult
 from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import MergeState, RawEntry
-from slopmortem.tracing.events import SpanEvent
+from slopmortem.tracing import SpanEvent
 
 
 def _tier3_canned(
