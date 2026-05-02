@@ -404,7 +404,7 @@ git commit -m "rebuild corpus fixture for seed coverage"
 
 Do NOT modify any other file. This is a coverage smoke test that fails loudly the next time someone bumps the fixture without thinking about whether it still matches the seed.
 
-- [ ] **Step 1: Write the coverage test**
+- [x] **Step 1: Write the coverage test**
 
 Create `tests/evals/test_corpus_fixture_coverage.py`:
 
@@ -481,7 +481,7 @@ def test_every_inferred_sector_has_a_corpus_entry() -> None:
     )
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run:
 ```bash
@@ -492,7 +492,7 @@ Expected: both tests PASS.
 
 If `test_every_inferred_sector_has_a_corpus_entry` fails with `missing = ['vitalcue']` (or similar), that sector's chosen Wikipedia article got slop-quarantined or entity-merged during ingest. Return to Task 2, pick a different startup for that sector, then re-run Task 3.
 
-- [ ] **Step 3: Smoke-check `just eval` reaches synthesize**
+- [x] **Step 3: Smoke-check `just eval` reaches synthesize**
 
 Run:
 ```bash
@@ -523,7 +523,7 @@ main()
 
 If every row still drops 100% of its rerank output (e.g., every `min_similarity dropped` line shows `dropped=N/N`), the new fixture didn't actually overlap with the seed in a way the rerank model recognises. Return to Task 2 and try different (more obviously similar) startups.
 
-- [ ] **Step 4: Lint + typecheck**
+- [x] **Step 4: Lint + typecheck**
 
 Run: `just typecheck && just lint`
 Expected: PASS.
