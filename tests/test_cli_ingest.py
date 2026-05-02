@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from slopmortem.budget import Budget
 from slopmortem.cli import app
+from slopmortem.cli._ingest_cmd import _default_curated_yaml
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -34,8 +35,6 @@ async def _fake_deps(*_args: object, **_kwargs: object) -> tuple[Any, ...]:
 
 def test_default_curated_yaml_resolves_to_existing_file() -> None:
     """``Path(__file__)``-anchored helper must survive moves between subpackages."""
-    from slopmortem.cli._ingest_cmd import _default_curated_yaml
-
     path = _default_curated_yaml()
     assert path.is_file(), f"curated YAML missing at {path}"
 
