@@ -16,8 +16,8 @@ from __future__ import annotations
 import ast
 import inspect
 
-from slopmortem.corpus import tools_impl
-from slopmortem.corpus.tools_impl import get_post_mortem, search_corpus
+from slopmortem.corpus import _tools_impl
+from slopmortem.corpus._tools_impl import get_post_mortem, search_corpus
 from slopmortem.llm import to_openai_input_schema
 
 BANNED_MODULES = frozenset({"subprocess"})
@@ -68,7 +68,7 @@ def _check_attribute(node: ast.Attribute) -> list[str]:
 
 def test_no_subprocess_imports_in_tools():
     """AST-based: defeats `import subprocess as sp` and similar aliasing tricks."""
-    tree = ast.parse(inspect.getsource(tools_impl))
+    tree = ast.parse(inspect.getsource(_tools_impl))
     violations: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

@@ -27,8 +27,8 @@ from qdrant_client.models import (
 )
 
 from slopmortem.corpus._alias_graph import collapse_alias_components
-from slopmortem.corpus.disk import read_canonical
-from slopmortem.corpus.paths import safe_path
+from slopmortem.corpus._disk import read_canonical
+from slopmortem.corpus._paths import safe_path
 from slopmortem.models import Candidate, CandidatePayload
 
 logger = logging.getLogger(__name__)

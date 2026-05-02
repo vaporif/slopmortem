@@ -82,10 +82,10 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
 
     Tavily inclusion depends on config, so it can't be a constant.
     """
-    # Lazy import to break the cycle with corpus.tools_impl, which imports
+    # Lazy import to break the cycle with corpus._tools_impl, which imports
     # ToolSpec from models via this module's transitive deps.
-    from slopmortem.corpus import tools_impl  # noqa: PLC0415 - break import cycle
-    from slopmortem.corpus.tools_impl import (  # noqa: PLC0415 - break import cycle
+    from slopmortem.corpus import _tools_impl  # noqa: PLC0415 - break import cycle
+    from slopmortem.corpus._tools_impl import (  # noqa: PLC0415 - break import cycle
         get_post_mortem,
         search_corpus,
         tavily_extract,
@@ -105,7 +105,7 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
                 return f"tavily call budget exceeded ({cap} per synthesis); refusing"
             used += 1
             # Runtime attr lookup so tests can monkeypatch the impl.
-            return await tools_impl._tavily_search(q, limit)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+            return await _tools_impl.tavily_search_async(q, limit)
 
         async def _bounded_extract(*, url: str) -> str:
             nonlocal used
@@ -113,7 +113,7 @@ def synthesis_tools(config: Config) -> list[ToolSpec]:
                 return f"tavily call budget exceeded ({cap} per synthesis); refusing"
             used += 1
             # Runtime attr lookup so tests can monkeypatch the impl.
-            return await tools_impl._tavily_extract(url)  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+            return await _tools_impl.tavily_extract_async(url)
 
         tools.extend(
             [

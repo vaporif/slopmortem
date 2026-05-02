@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import frontmatter
 from anyio import to_thread
 
-from slopmortem.corpus.paths import safe_path
+from slopmortem.corpus._paths import safe_path
 
 if TYPE_CHECKING:
     from pathlib import Path

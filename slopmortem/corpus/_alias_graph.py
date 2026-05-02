@@ -2,7 +2,7 @@
 
 Retrieve emits parent-collapsed candidates (one per ``canonical_id``), but an
 M&A, rebrand, or pivot can leave two canonicals for what's really one
-lifecycle. The ``aliases`` SQLite table (see :mod:`slopmortem.corpus.merge`)
+lifecycle. The ``aliases`` SQLite table (see :mod:`slopmortem.corpus._merge`)
 records those lineage edges. This helper groups candidates into connected
 components and returns the top-scoring representative per component, with the
 other canonicals stashed on its ``alias_canonicals`` list.

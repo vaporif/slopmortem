@@ -1,4 +1,4 @@
-"""``--reconcile`` dispatches to ``slopmortem.corpus.reconcile.reconcile`` and prints the report."""
+"""``--reconcile`` dispatches to ``corpus._reconcile.reconcile`` and prints the report."""
 
 from __future__ import annotations
 

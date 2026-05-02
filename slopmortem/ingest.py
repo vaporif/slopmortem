@@ -18,7 +18,7 @@ Pipeline:
    ``cache_read / (cache_read + cache_creation) < 0.80`` emit
    :attr:`SpanEvent.CACHE_READ_RATIO_LOW`.
 7. Resolve canonical id via
-   :func:`slopmortem.corpus.entity_resolution.resolve_entity`. The
+   :func:`slopmortem.corpus._entity_resolution.resolve_entity`. The
    ``resolver_flipped`` and ``alias_blocked`` actions short-circuit.
 8. ``upsert_pending`` row, atomic raw write, deterministic merge of all raw
    sections for this canonical_id, atomic canonical write, chunk + embed,
@@ -919,7 +919,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     # Default sparse encoder: BM25 via fastembed. Tests stub it with a
     # dict-returning lambda so the ONNX model never loads under pytest.
     if sparse_encoder is None:
-        from slopmortem.corpus.embed_sparse import encode as _encode_sparse  # noqa: PLC0415
+        from slopmortem.corpus._embed_sparse import encode as _encode_sparse  # noqa: PLC0415
 
         sparse_encoder = _encode_sparse
 

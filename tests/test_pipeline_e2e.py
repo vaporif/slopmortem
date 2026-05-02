@@ -364,7 +364,7 @@ async def test_full_pipeline_with_fake_clients(monkeypatch: pytest.MonkeyPatch) 
     budget = Budget(cap_usd=2.0)
 
     # Override retrieve's default sparse encoder to avoid loading fastembed.
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     progress = _RecordingQueryProgress()
     report = await run_query(
@@ -458,7 +458,7 @@ async def test_run_query_forwards_sparse_encoder(monkeypatch: pytest.MonkeyPatch
         msg = "default sparse encoder must not be invoked"
         raise AssertionError(msg)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _boom)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _boom)
 
     _ = await run_query(
         ctx,
@@ -537,7 +537,7 @@ async def test_run_query_marks_budget_exceeded_on_llm_overspend(
         budget=budget,
     )
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     report = await run_query(
         ctx,
@@ -571,7 +571,7 @@ async def test_run_query_records_budget_exceeded(monkeypatch: pytest.MonkeyPatch
     # Cap at 0.0 so any LLM call's cost reservation exceeds the budget.
     budget = Budget(cap_usd=0.0)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     # Force extract_facets to raise BudgetExceededError immediately, so the
     # except branch in ``run_query`` runs without needing the embedding
@@ -643,7 +643,7 @@ async def test_ctrl_c_cancels_in_flight(monkeypatch: pytest.MonkeyPatch) -> None
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     task = asyncio.create_task(
         run_query(
@@ -802,7 +802,7 @@ async def test_run_query_zero_passes_threshold(monkeypatch: pytest.MonkeyPatch) 
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     report = await run_query(
         ctx,
@@ -966,7 +966,7 @@ async def test_post_synth_filter_records_drop_on_pipeline_meta(
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     report = await run_query(
         ctx,
@@ -1032,7 +1032,7 @@ async def test_pipeline_logs_drops_at_info(
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     with caplog.at_level(logging.INFO, logger="slopmortem.pipeline"):
         _ = await run_query(

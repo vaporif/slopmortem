@@ -53,7 +53,7 @@ from slopmortem.models import MergeState
 from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
-    from slopmortem.corpus.merge import MergeJournal
+    from slopmortem.corpus._merge import MergeJournal
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import AliasEdge, RawEntry
 

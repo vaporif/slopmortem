@@ -5,9 +5,13 @@ root_package = slopmortem
 name = corpus is a leaf package — outside imports go through __init__
 type = forbidden
 allow_indirect_imports = True
-# Cycle break: llm.tools wraps corpus.tools_impl._tavily_* with budget tracking.
+# Cycle break: llm.tools wraps corpus._tools_impl._tavily_* with budget tracking.
+# Lazy imports of _embed_sparse defer the ~150MB fastembed ONNX load past startup.
 ignore_imports =
-    slopmortem.llm.tools -> slopmortem.corpus.tools_impl
+    slopmortem.llm.tools -> slopmortem.corpus._tools_impl
+    slopmortem.ingest -> slopmortem.corpus._embed_sparse
+    slopmortem.evals.recording_helper -> slopmortem.corpus._embed_sparse
+    slopmortem.stages.retrieve -> slopmortem.corpus._embed_sparse
 source_modules =
     slopmortem.cli
     slopmortem.ingest
@@ -17,16 +21,21 @@ source_modules =
     slopmortem.tracing
     slopmortem.llm
 forbidden_modules =
-    slopmortem.corpus.chunk
-    slopmortem.corpus.disk
-    slopmortem.corpus.entity_resolution
-    slopmortem.corpus.extract
-    slopmortem.corpus.merge
-    slopmortem.corpus.merge_text
-    slopmortem.corpus.paths
-    slopmortem.corpus.qdrant_store
-    slopmortem.corpus.reclassify
-    slopmortem.corpus.tools_impl
+    slopmortem.corpus._chunk
+    slopmortem.corpus._disk
+    slopmortem.corpus._embed_sparse
+    slopmortem.corpus._entity_resolution
+    slopmortem.corpus._extract
+    slopmortem.corpus._merge
+    slopmortem.corpus._merge_text
+    slopmortem.corpus._paths
+    slopmortem.corpus._qdrant_store
+    slopmortem.corpus._reclassify
+    slopmortem.corpus._reconcile
+    slopmortem.corpus._schema
+    slopmortem.corpus._store
+    slopmortem.corpus._summarize
+    slopmortem.corpus._tools_impl
 
 [importlinter:contract:llm-leaf]
 name = llm is a leaf package — outside imports go through __init__

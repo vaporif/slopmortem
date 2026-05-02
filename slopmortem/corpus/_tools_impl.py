@@ -174,7 +174,7 @@ def _tavily_api_key() -> str:
     return key
 
 
-async def _tavily_search(q: str, limit: int = 5) -> str:
+async def tavily_search_async(q: str, limit: int = 5) -> str:
     r"""Search the live web via Tavily and return a text summary for the LLM.
 
     Reads ``TAVILY_API_KEY`` from the environment at call time. Returns a
@@ -199,7 +199,7 @@ async def _tavily_search(q: str, limit: int = 5) -> str:
     return "\n".join(lines) if lines else "(no results)"
 
 
-async def _tavily_extract(url: str) -> str:
+async def tavily_extract_async(url: str) -> str:
     """Fetch and extract the readable text of a single URL via Tavily.
 
     Reads ``TAVILY_API_KEY`` from the environment at call time. Returns
@@ -247,12 +247,12 @@ tavily_search = ToolSpec(
     name="tavily_search",
     description="Search the live web via Tavily for evidence to support synthesis.",
     args_model=TavilySearchArgs,
-    fn=_tavily_search,
+    fn=tavily_search_async,
 )
 
 tavily_extract = ToolSpec(
     name="tavily_extract",
     description="Fetch and extract the readable content of a single URL via Tavily.",
     args_model=TavilyExtractArgs,
-    fn=_tavily_extract,
+    fn=tavily_extract_async,
 )

@@ -293,7 +293,7 @@ async def test_no_corpus_body_in_laminar_spans(monkeypatch: pytest.MonkeyPatch) 
     fake_corpus = _FakeCorpus(candidates=candidates)
     budget = Budget(cap_usd=2.0)
 
-    monkeypatch.setattr("slopmortem.corpus.embed_sparse.encode", _no_op_sparse_encoder)
+    monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
     # Initialize Laminar against an unreachable loopback endpoint, then swap the
     # active span processor on the underlying TracerProvider with one backed by

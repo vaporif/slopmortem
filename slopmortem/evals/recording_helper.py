@@ -186,7 +186,7 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             )
             embedder = make_embedder(cfg, budget)
 
-            from slopmortem.corpus.embed_sparse import (  # noqa: PLC0415
+            from slopmortem.corpus._embed_sparse import (  # noqa: PLC0415
                 encode as live_sparse,
             )
 

@@ -2,7 +2,7 @@
 
 Thin orchestrator. The hybrid-retrieval contract (FormulaQuery + RRF +
 recency-branch filter + collapse-to-parents + alias-graph dedup) lives in
-:meth:`slopmortem.corpus.qdrant_store.QdrantCorpus.query`. This stage embeds
+:meth:`slopmortem.corpus._qdrant_store.QdrantCorpus.query`. This stage embeds
 the user's description (dense via :class:`EmbeddingClient`, sparse via
 ``embed_sparse.encode``) and forwards every other knob unchanged.
 """
@@ -49,7 +49,7 @@ async def retrieve(  # noqa: PLR0913 — every dependency is required at the cal
     no-op stub to dodge the ~150 MB ONNX download.
     """
     if sparse_encoder is None:
-        from slopmortem.corpus.embed_sparse import encode as _default_encode  # noqa: PLC0415
+        from slopmortem.corpus._embed_sparse import encode as _default_encode  # noqa: PLC0415
 
         sparse_encoder = _default_encode
 
