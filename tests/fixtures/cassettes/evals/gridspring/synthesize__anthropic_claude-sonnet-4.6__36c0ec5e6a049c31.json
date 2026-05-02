@@ -1,7 +1,7 @@
 {
   "key": {
     "model": "anthropic/claude-sonnet-4.6",
-    "prompt_hash": "ed59b9793b8ddb20",
+    "prompt_hash": "36c0ec5e6a049c31",
     "template_sha": "5d6cef413150ca6a"
   },
   "request_debug": {
@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.005679,
+    "cost_usd": 0.004983,
     "stop_reason": "stop",
-    "text": "{\"ranked\": []}"
+    "text": "{\"ranked\":[]}"
   },
   "schema_version": "1.0"
 }
