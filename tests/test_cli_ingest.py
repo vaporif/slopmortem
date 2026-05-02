@@ -37,9 +37,9 @@ def test_ingest_dry_run_dispatches_to_orchestrator(
 ) -> None:
     """--dry-run path: wiring is assembled and ingest() is called with dry_run=True."""
     fake_ingest = AsyncMock(return_value=MagicMock(dry_run=True, processed=0))
-    monkeypatch.setattr("slopmortem.cli._app.ingest", fake_ingest)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd.ingest", fake_ingest)
     # Block real Qdrant / OpenRouter / OpenAI / sqlite construction.
-    monkeypatch.setattr("slopmortem.cli._app._build_ingest_deps", _fake_deps)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd._build_ingest_deps", _fake_deps)
     runner = CliRunner()
     result = runner.invoke(app, ["ingest", "--dry-run", "--post-mortems-root", str(tmp_path)])
     assert result.exit_code == 0, result.output
@@ -62,8 +62,8 @@ def test_ingest_tavily_enrich_appends_enricher(
         captured["enrichers"] = kwargs["enrichers"]
         return MagicMock(dry_run=True, processed=0)
 
-    monkeypatch.setattr("slopmortem.cli._app.ingest", fake_ingest)
-    monkeypatch.setattr("slopmortem.cli._app._build_ingest_deps", _fake_deps)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd.ingest", fake_ingest)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd._build_ingest_deps", _fake_deps)
     runner = CliRunner()
     result = runner.invoke(
         app,
@@ -86,8 +86,8 @@ def test_ingest_with_crunchbase_csv_appends_source(
         captured["sources"] = kwargs["sources"]
         return MagicMock(dry_run=True, processed=0)
 
-    monkeypatch.setattr("slopmortem.cli._app.ingest", fake_ingest)
-    monkeypatch.setattr("slopmortem.cli._app._build_ingest_deps", _fake_deps)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd.ingest", fake_ingest)
+    monkeypatch.setattr("slopmortem.cli._ingest_cmd._build_ingest_deps", _fake_deps)
     csv = tmp_path / "cb.csv"
     csv.write_text("name,description\n", encoding="utf-8")
 
