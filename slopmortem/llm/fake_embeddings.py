@@ -30,7 +30,7 @@ class FakeEmbeddingClient:
     raises :class:`NoCannedEmbeddingError`.
     """
 
-    def __init__(
+    def __init__(  # noqa: D107
         self,
         *,
         model: str,
@@ -38,7 +38,6 @@ class FakeEmbeddingClient:
         canned: Mapping[tuple[str, str], list[float]] | None = None,
         calls: list[_EmbedCall] | None = None,
     ) -> None:
-        """Bind the model dim and a per-call cost; ``calls`` is a record of invocations."""
         if model not in EMBED_DIMS:
             msg = f"unknown embed model {model!r}; add it to EMBED_DIMS"
             raise ValueError(msg)

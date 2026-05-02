@@ -1,5 +1,5 @@
 # Test fixture for curated source. Mixes long-text rows and short rows.
-# Real curation lives in `slopmortem/corpus/sources/curated/post_mortems_v0.yml` (Task 4b populates).
+# Real curation lives in `slopmortem/corpus/sources/curated/post_mortems_v0.yml`.
 - url: https://example.com/long-postmortem
   startup_name: "ExampleCorp"
   sector: "fintech"

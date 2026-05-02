@@ -1,4 +1,4 @@
-# Tier-1 collapse blocklist. CODEOWNERS-protected (per spec line 260).
+# Tier-1 collapse blocklist. CODEOWNERS-protected.
 #
 # Hosts in this list collapse multiple unrelated startup post-mortems onto a
 # single registrable_domain (e.g. every founder pulse post on linkedin.com
@@ -12,7 +12,7 @@
 # Note: tldextract returns the registrable domain, so `username.medium.com`
 # collapses to `medium.com` and is correctly demoted. Custom-domain Substacks
 # (`blog.foo.com` -> Substack hosting) are NOT detected by domain alone and
-# rely on the tier-2/3 tiebreaker (see spec line 263).
+# rely on the tier-2/3 tiebreaker.
 version: "1"
 domains:
   - medium.com

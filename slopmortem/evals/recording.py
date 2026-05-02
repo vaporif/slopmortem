@@ -181,14 +181,13 @@ class RecordingEmbeddingClient:
 class RecordingSparseEncoder:
     """Wrap a sparse-encoder callable; write one cassette per `__call__`."""
 
-    def __init__(
+    def __init__(  # noqa: D107
         self,
         *,
         inner: Callable[[str], dict[int, float]],
         out_dir: Path,
         model: str = "Qdrant/bm25",
     ) -> None:
-        """Bind ``inner``, the output directory, and the model name used in the cassette key."""
         self._inner = inner
         self._out_dir = out_dir
         self._model = model

@@ -56,8 +56,7 @@ class DuplicateCassetteError(Exception):
 class RecordingBudgetExceededError(Exception):
     """Raised when `RecordingLLMClient`'s accumulated cost would exceed `max_cost_usd`."""
 
-    def __init__(self, *, spent: float, limit: float) -> None:
-        """Capture the spent and limit values for callers that want to inspect them."""
+    def __init__(self, *, spent: float, limit: float) -> None:  # noqa: D107
         super().__init__(f"recording cost ceiling exceeded: spent={spent:.4f} limit={limit:.4f}")
         self.spent = spent
         self.limit = limit

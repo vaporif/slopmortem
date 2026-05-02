@@ -292,10 +292,9 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
                         bridge.top_up()
 
             results = await gather_resilient(*(_record_row(ctx) for ctx in inputs))
-            # gather_resilient runs every row to completion; surface the
-            # first exception so partial-failure runs still error out (parity
-            # with the prior fail-fast loop). Successful rows have already
-            # atomic-swapped their cassette dirs and stay on disk.
+            # Surface the first exception so partial-failure runs still error
+            # out. Successful rows have already atomic-swapped their cassette
+            # dirs and stay on disk.
             for r in results:
                 if isinstance(r, BaseException):
                     raise r
@@ -312,7 +311,6 @@ class _ByModelLLM:
     """LLM router: dispatch each ``complete()`` to the wrapper for the matching model."""
 
     def __init__(self, by_model: dict[str, RecordingLLMClient]) -> None:
-        """Bind the per-model dispatch table."""
         self._by_model = by_model
 
     async def complete(  # noqa: PLR0913 — mirrors LLMClient.complete signature
@@ -365,7 +363,6 @@ class _AggregateProgressBridge:
     """
 
     def __init__(self, sink: RecordProgress, ticks_per_row: int) -> None:
-        """Bind the shared sink and the per-row tick budget."""
         self._sink = sink
         self._ticks_per_row = ticks_per_row
         self._ticked = 0

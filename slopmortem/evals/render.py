@@ -29,8 +29,7 @@ _RECORD_PHASE_LABELS: dict[RecordPhase, str] = {
 class RichRecordProgress(RichPhaseProgress[RecordPhase]):
     """Rich-backed :class:`RecordProgress` impl shared by ``runner._run_record``."""
 
-    def __init__(self) -> None:
-        """Build with the recorder's phase labels."""
+    def __init__(self) -> None:  # noqa: D107
         super().__init__(_RECORD_PHASE_LABELS)
 
 

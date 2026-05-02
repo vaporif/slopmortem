@@ -56,7 +56,6 @@ class _RichIngestProgress(RichPhaseProgress[IngestPhase]):
     """Recorder-local Rich-backed ingest progress; mirrors cli.RichIngestProgress."""
 
     def __init__(self) -> None:
-        """Build with ingest phase labels."""
         super().__init__(INGEST_PHASE_LABELS)
 
 
