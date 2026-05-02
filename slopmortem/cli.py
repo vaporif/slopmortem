@@ -330,9 +330,9 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
         err_console.print_exception(show_locals=False)
         raise
     if bar is not None:
-        _render_ingest_result(bar.console, result)
+        _render_ingest_result(bar.console, result, budget)
     else:
-        typer.echo(f"slopmortem ingest result: {result}")
+        typer.echo(f"slopmortem ingest result: {result} cost=${budget.spent_usd:.4f}")
 
 
 def _default_curated_yaml() -> Path:
@@ -745,7 +745,7 @@ class RichIngestProgress(RichPhaseProgress[IngestPhase]):
         super().__init__(_INGEST_PHASE_LABELS)
 
 
-def _render_ingest_result(console: Console, result: IngestResult) -> None:
+def _render_ingest_result(console: Console, result: IngestResult, budget: Budget) -> None:
     """Print ``IngestResult`` as a two-column Rich table on *console*."""
     rows: list[tuple[str, str]] = [
         ("seen", str(result.seen)),
@@ -757,6 +757,7 @@ def _render_ingest_result(console: Console, result: IngestResult) -> None:
         ("source_failures", str(result.source_failures)),
         ("cache_warmed", str(result.cache_warmed)),
         ("dry_run", str(result.dry_run)),
+        ("cost_usd", f"${budget.spent_usd:.4f}"),
     ]
     table = Table(title="Ingest result", show_header=False, expand=False)
     table.add_column("Field", style="bold cyan", no_wrap=True)

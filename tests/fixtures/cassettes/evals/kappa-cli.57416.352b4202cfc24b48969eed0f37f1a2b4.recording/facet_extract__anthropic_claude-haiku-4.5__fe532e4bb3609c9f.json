@@ -1,7 +1,7 @@
 {
   "key": {
     "model": "anthropic/claude-haiku-4.5",
-    "prompt_hash": "970c59b3cd56d034",
+    "prompt_hash": "fe532e4bb3609c9f",
     "template_sha": "0a05e16b1fed1ad4"
   },
   "request_debug": {
@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002279,
+    "cost_usd": 0.002274,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"social_communication\", \"business_model\": \"b2c_marketplace\", \"customer_type\": \"consumer\", \"geography\": \"apac\", \"monetization\": \"transaction_fee\", \"sub_sector\": \"beauty influencer marketplace\", \"product_type\": \"video consultation platform\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"devtools\", \"business_model\": \"b2b_saas\", \"customer_type\": \"developer\", \"geography\": \"global\", \"monetization\": \"subscription_recurring\", \"sub_sector\": \"preview environment management\", \"product_type\": \"CLI and hosted control plane\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }
