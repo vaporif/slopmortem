@@ -29,8 +29,12 @@ from typing import TYPE_CHECKING, cast
 import yaml
 from openai import AsyncOpenAI
 from qdrant_client import AsyncQdrantClient
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 from slopmortem.budget import Budget
+from slopmortem.cli import RichIngestProgress
 from slopmortem.config import load_config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
@@ -43,9 +47,43 @@ from slopmortem.llm.openrouter import OpenRouterClient
 if TYPE_CHECKING:
     from slopmortem.corpus.sources.base import Enricher
     from slopmortem.ingest import Corpus as IngestCorpus
+    from slopmortem.ingest import IngestResult
     from slopmortem.llm.embedding_client import EmbeddingClient
 
 _DEFAULT_MAX_COST_USD = 1.5
+
+
+def _render_recorder_summary(
+    console: Console, *, out_path: Path, size_bytes: int, result: IngestResult
+) -> None:
+    """Render a panel summarizing the corpus dump and the underlying ingest run.
+
+    Mirrors the shape of ``slopmortem.cli._render_ingest_result`` plus the
+    out-path / byte-size pair that's specific to the corpus recorder. Built
+    locally rather than imported because the recorder needs the dump-side
+    fields, and ``_render_ingest_result`` is private + tied to its own panel
+    title.
+    """
+    table = Table(show_header=False, expand=False, box=None)
+    table.add_column("Field", style="bold cyan", no_wrap=True)
+    table.add_column("Value", style="white")
+    table.add_row("output", str(out_path))
+    table.add_row("bytes", f"{size_bytes:,}")
+    table.add_row("seen", str(result.seen))
+    table.add_row("processed", str(result.processed))
+    table.add_row("quarantined", str(result.quarantined))
+    table.add_row("skipped", str(result.skipped))
+    table.add_row("errors", str(result.errors))
+    table.add_row("source_failures", str(result.source_failures))
+    console.print(
+        Panel(
+            table,
+            title="[bold cyan]corpus dump[/bold cyan]",
+            title_align="left",
+            border_style="cyan",
+            expand=False,
+        )
+    )
 
 
 def _translate_seed_yaml(src: Path, dst: Path) -> None:
@@ -181,18 +219,26 @@ async def _record(
             sources = [CuratedSource(yaml_path=translated_yaml)]
             enrichers: list[Enricher] = []
 
-            _ = await ingest(
-                sources=sources,
-                enrichers=enrichers,
-                journal=journal,
-                corpus=corpus,
-                llm=llm,
-                embed_client=embedder,
-                budget=budget,
-                slop_classifier=classifier,
-                config=config,
-                post_mortems_root=post_mortems_root,
+            # TTY-gated mirror of slopmortem.cli's pattern: a piped invocation
+            # (CI, redirect-to-file) skips the Live render so log capture stays
+            # readable.
+            progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
+                RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
             )
+            with progress_ctx as bar:
+                result = await ingest(
+                    sources=sources,
+                    enrichers=enrichers,
+                    journal=journal,
+                    corpus=corpus,
+                    llm=llm,
+                    embed_client=embedder,
+                    budget=budget,
+                    slop_classifier=classifier,
+                    config=config,
+                    post_mortems_root=post_mortems_root,
+                    progress=bar,
+                )
 
             # Append, not replace: with_suffix(".recording") would clobber .jsonl.
             out_tmp = out_path.with_suffix(out_path.suffix + ".recording")
@@ -200,7 +246,13 @@ async def _record(
             await dump_collection_to_jsonl(qclient, collection_name, out_tmp)
             os.replace(out_tmp, out_path)  # noqa: PTH105 — atomic POSIX rename
             size_bytes = out_path.stat().st_size  # noqa: ASYNC240 — last line before exit
-            print(f"wrote {out_path} ({size_bytes} bytes)")  # noqa: T201 — CLI surface
+            summary_console = bar.console if bar is not None else Console(stderr=True)
+            _render_recorder_summary(
+                summary_console,
+                out_path=out_path,
+                size_bytes=size_bytes,
+                result=result,
+            )
         finally:
             # Suppress: the collection may not exist (ensure_collection failed
             # before creating it), and a delete failure must not mask whatever
