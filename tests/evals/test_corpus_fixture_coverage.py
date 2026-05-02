@@ -1,9 +1,9 @@
 """Coverage check: every seed-dataset sector must have at least one matching corpus entry.
 
-Lightweight invariant — runs in milliseconds, no Qdrant, no LLM. Exists to
-flag the next time someone bumps the corpus fixture without realising the
-seed dataset still expects matching sectors. If this test fails, either
-expand the inputs YAML and re-record, or update the seed.
+Runs in milliseconds, no Qdrant, no LLM. Catches the case where someone
+bumps the corpus fixture without noticing the seed dataset still expects
+matching sectors. If this test fails, either expand the inputs YAML and
+re-record, or update the seed.
 """
 
 from __future__ import annotations
