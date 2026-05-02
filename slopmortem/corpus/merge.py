@@ -337,7 +337,6 @@ class MergeJournal:
             return [_row_to_dict(r) for r in cur.fetchall()]
 
     async def fetch_all(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        """Return every merge_journal row. Used by reconcile."""
         return await to_thread.run_sync(self._fetch_all_sync)
 
     def _fetch_all_sync(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
@@ -443,5 +442,4 @@ class MergeJournal:
 
 
 def aliases_iterable(edges: Iterable[AliasEdge]) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-    """Render a list of :class:`AliasEdge` to plain dicts (for journaling, etc.)."""
     return [e.model_dump() for e in edges]
