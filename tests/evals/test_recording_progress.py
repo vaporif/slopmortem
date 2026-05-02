@@ -1,0 +1,60 @@
+"""Tests for the recorder's Rich progress widget and the no-op fallback.
+
+Two checks:
+
+1. ``RichRecordProgress`` smoke: every public method runs against a forced-
+   terminal in-memory console without raising.
+2. ``NullRecordProgress`` is a no-op: every method returns ``None`` and
+   triggers no observable side effect.
+"""
+
+from __future__ import annotations
+
+from io import StringIO
+from typing import TYPE_CHECKING
+
+from rich.console import Console
+
+from slopmortem import cli_progress
+from slopmortem.evals.recording_progress import NullRecordProgress, RecordPhase
+from slopmortem.evals.render import RichRecordProgress
+
+if TYPE_CHECKING:
+    import pytest
+
+
+def test_rich_record_progress_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drive every public method against a forced-terminal in-memory console."""
+    captured = StringIO()
+
+    def _make_console(**_kwargs: object) -> Console:
+        return Console(file=captured, force_terminal=True, width=120)
+
+    # Pin the Rich console used by the inherited widget so output stays off
+    # the test runner's stderr.
+    monkeypatch.setattr(cli_progress, "Console", _make_console)
+
+    with RichRecordProgress() as progress:
+        progress.start_phase(RecordPhase.ROWS, total=3)
+        progress.advance_phase(RecordPhase.ROWS)
+        progress.set_phase_status(RecordPhase.ROWS, "synthesizing post-mortems 1/2")
+        progress.error(RecordPhase.ROWS, "kaboom")
+        progress.end_phase(RecordPhase.ROWS)
+
+    output = captured.getvalue()
+    # Label appears in the rendered description; presence is enough to confirm
+    # the widget produced output rather than silently no-op'ing.
+    assert "Rows" in output
+
+
+def test_null_record_progress_is_pure_noop() -> None:
+    """Every method returns ``None`` and produces no observable state change."""
+    null = NullRecordProgress()
+    assert null.start_phase(RecordPhase.ROWS, total=3) is None
+    assert null.advance_phase(RecordPhase.ROWS) is None
+    assert null.advance_phase(RecordPhase.ROWS, n=2) is None
+    assert null.end_phase(RecordPhase.ROWS) is None
+    assert null.set_phase_status(RecordPhase.ROWS, "x") is None
+    assert null.set_phase_status(RecordPhase.ROWS, None) is None
+    assert null.log("hello") is None
+    assert null.error(RecordPhase.ROWS, "bad") is None

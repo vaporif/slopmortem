@@ -142,6 +142,18 @@ class IngestPhase(StrEnum):
     WRITE = "write"
 
 
+# Phase label map keyed on IngestPhase so any phase added above fails type-check
+# at every consumer until a label is provided. Lives next to the enum so the CLI
+# and the corpus recorder don't need to keep duplicate copies in sync.
+INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
+    IngestPhase.GATHER: "Gathering entries from sources",
+    IngestPhase.CLASSIFY: "Classifying / slop-filtering",
+    IngestPhase.CACHE_WARM: "Warming prompt cache",
+    IngestPhase.FAN_OUT: "Facets + summarize fan-out",
+    IngestPhase.WRITE: "Entity-resolve / chunk / qdrant",
+}
+
+
 @runtime_checkable
 class IngestProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem ingest``.
@@ -201,9 +213,6 @@ class SlopClassifier(Protocol):
     async def score(self, text: str) -> float:
         """Return the slop score in ``[0, 1]`` for *text*."""
         ...
-
-
-# Test doubles. Production stays in qdrant_store and the classifier impl below.
 
 
 @dataclass
@@ -481,8 +490,8 @@ async def _facet_call(
     model: str | None,
     max_tokens: int | None = None,
 ) -> Facets:
-    # Delegates to the dedicated stage; strict-mode validation propagates as
-    # ``ValidationError`` to the per-entry isolator at line ~840.
+    # ValidationError from strict-mode parsing propagates up to the per-entry
+    # isolator in ``ingest()`` so one bad doc doesn't kill the run.
     from slopmortem.stages.facet_extract import extract_facets  # noqa: PLC0415
 
     return await extract_facets(text, llm, model, max_tokens=max_tokens)
@@ -631,7 +640,7 @@ async def _facet_summarize_fanout(
     llm: LLMClient,
     config: Config,
     progress: IngestProgress | None = None,
-) -> list[_FanoutResult | BaseException]:
+) -> list[_FanoutResult | Exception]:
     """Run facet+summarize concurrently under ``ingest_concurrency`` capacity.
 
     Returns one :class:`_FanoutResult` per entry in order, or the exception
@@ -918,17 +927,16 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     result = IngestResult(dry_run=dry_run)
     progress = progress or NullProgress()
 
-    # Drain result.span_events into Laminar. Closure so every early-return path
-    # can call it; the list itself stays around for tests and the CLI renderer.
+    # Closure so every early-return path can drain the events; the list itself
+    # stays in result for tests and the CLI renderer.
     def _emit_collected_events() -> None:
         if not Laminar.is_initialized():
             return
         for name in result.span_events:
             Laminar.event(name=name)
 
-    # Without this, swallowed per-entry exceptions are invisible in Laminar:
-    # the parent span returns OK, the INGEST_ENTRY_FAILED event carries no
-    # payload, and error context only lives in stderr logs.
+    # Without per-entry attributes, swallowed exceptions only show up in stderr
+    # — the parent span returns OK and INGEST_ENTRY_FAILED carries no payload.
     def _record_error(entry_label: str, exc: BaseException) -> None:
         if not Laminar.is_initialized():
             return
@@ -1000,12 +1008,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             progress.advance_phase(IngestPhase.CLASSIFY)
             continue
 
-        # Slop classify. Quarantine routes never reach LLM/embed/qdrant.
-        # Pre-vetted sources skip the LLM judge: ``curated`` is human-reviewed
-        # YAML and ``crunchbase_csv`` rows are pre-filtered to ``status=closed``.
-        # Running the dead-company classifier on a Wayback'd live-era homepage
-        # would systematically mis-quarantine these — the body is marketing
-        # copy, not a death narrative.
+        # See ``_PRE_VETTED_SOURCES`` for why curated/crunchbase skip the judge.
         if entry.source in _PRE_VETTED_SOURCES:
             slop_score = 0.0
         else:
@@ -1063,8 +1066,6 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
     progress.end_phase(IngestPhase.FAN_OUT)
 
-    # Read-ratio probe on the first N fan-out responses; emit a span event if
-    # the cache isn't being read.
     probe = [r for r in fanout if isinstance(r, _FanoutResult)][:_CACHE_READ_RATIO_PROBE_N]
     if probe:
         total_read = sum(r.cache_read for r in probe)

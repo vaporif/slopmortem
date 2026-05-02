@@ -1,10 +1,9 @@
 """Consolidate-risks stage: LLM-driven applicability filter and paraphrase merge.
 
-Replaces the deterministic Jaccard cluster pass. One Sonnet call sees the
-pitch plus every per-candidate lesson and returns up to 10 risks that
-genuinely apply to the pitch — each with a canonical summary, the comparables
-that raised it, an `applies_because` line quoting a concrete pitch element,
-and a severity bucket.
+One Sonnet call sees the pitch plus every per-candidate lesson and returns up
+to 10 risks that genuinely apply to the pitch — each with a canonical summary,
+the comparables that raised it, an `applies_because` line quoting a concrete
+pitch element, and a severity bucket.
 """
 
 from __future__ import annotations

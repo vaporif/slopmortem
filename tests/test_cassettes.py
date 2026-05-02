@@ -15,7 +15,6 @@ from slopmortem.evals.cassettes import (
     DuplicateCassetteError,
     EmbeddingCassette,
     LlmCassette,
-    NoCannedEmbeddingError,
     SparseCassette,
     _slugify_model,
     load_embedding_cassettes,
@@ -25,6 +24,7 @@ from slopmortem.evals.cassettes import (
     write_sparse_cassette,
 )
 from slopmortem.llm.cassettes import (
+    NoCannedEmbeddingError,
     embed_cassette_key,
     llm_cassette_key,
     template_sha,

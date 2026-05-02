@@ -1,6 +1,5 @@
-# Test fixture for curated source. Mixes long-text rows, short rows, and
-# rows whose host is in the platform-domain blocklist. Real curation lives in
-# `slopmortem/corpus/sources/curated/post_mortems_v0.yml` (Task 4b populates).
+# Test fixture for curated source. Mixes long-text rows and short rows.
+# Real curation lives in `slopmortem/corpus/sources/curated/post_mortems_v0.yml`.
 - url: https://example.com/long-postmortem
   startup_name: "ExampleCorp"
   sector: "fintech"
@@ -9,18 +8,6 @@
   content_sha256_at_review: "PLACEHOLDER"
 - url: https://example.org/too-short-page
   startup_name: "ShortCo"
-  sector: "fintech"
-  submitted_by: "vaporif@gmail.com"
-  reviewed_by: "vaporif@gmail.com"
-  content_sha256_at_review: "PLACEHOLDER"
-- url: https://medium.com/@user/blocked-platform-post
-  startup_name: "MediumCo"
-  sector: "fintech"
-  submitted_by: "vaporif@gmail.com"
-  reviewed_by: "vaporif@gmail.com"
-  content_sha256_at_review: "PLACEHOLDER"
-- url: https://username.substack.com/p/blocked-platform-post
-  startup_name: "SubstackCo"
   sector: "fintech"
   submitted_by: "vaporif@gmail.com"
   reviewed_by: "vaporif@gmail.com"

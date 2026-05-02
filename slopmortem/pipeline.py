@@ -173,8 +173,9 @@ def _select_top_n(
 ) -> tuple[list[Candidate], int]:
     """Apply min-similarity, join to candidates, cap at N. Returns (top_n, dropped_count).
 
-    The reranker always returns exactly ``n_synthesize`` rows, so any
-    shortfall here is the min_similarity filter dropping rows.
+    The reranker returns up to ``n_synthesize`` rows — fewer when retrieve
+    under-fills. ``dropped_count`` conflates that under-fill with min-sim
+    drops.
     """
     survivors = _filter_by_min_similarity(ranked, threshold)
     _log_min_similarity_drop(
@@ -206,9 +207,15 @@ def _join_to_candidates(
     return out
 
 
-def _current_trace_id() -> str | None:
-    """Return the current Laminar trace id, or ``None`` when tracing is off."""
-    if not Laminar.is_initialized():
+def _current_trace_id(*, enable_tracing: bool) -> str | None:
+    """Return the current Laminar trace id, or ``None`` when tracing is off.
+
+    Gated on ``enable_tracing`` because ``Laminar.is_initialized()`` alone
+    isn't sufficient: ``@observe`` can still mint an OTel trace id via
+    ``TracerWrapper`` after ``Laminar.shutdown()``, leaking a trace_id into
+    runs the user never asked to trace.
+    """
+    if not enable_tracing or not Laminar.is_initialized():
         return None
     tid = Laminar.get_trace_id()
     return str(tid) if tid is not None else None
@@ -395,7 +402,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             },
             cost_usd_total=budget.spent_usd,
             latency_ms_total=int((time.monotonic() - t0) * 1000),
-            trace_id=_current_trace_id(),
+            trace_id=_current_trace_id(enable_tracing=config.enable_tracing),
             budget_remaining_usd=budget.remaining,
             budget_exceeded=budget_exceeded,
             filtered_pre_synth=filtered_pre_synth,

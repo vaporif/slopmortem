@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+import anyio
 from qdrant_client.models import (
     Distance,
     FieldCondition,
@@ -74,6 +75,23 @@ async def ensure_collection(client: AsyncQdrantClient, name: str, *, dim: int) -
             )
         },
     )
+
+
+async def _gather_alias_edges(
+    candidates: list[Candidate],
+    fetch: Callable[[str], Awaitable[list[AliasEdge]]],
+) -> list[AliasEdge]:
+    """Fan out per-candidate alias-edge fetches; one failure aborts the rest."""
+    edge_lists: list[list[AliasEdge]] = [[] for _ in candidates]
+
+    async def _collect(idx: int, cid: str) -> None:
+        edge_lists[idx] = await fetch(cid)
+
+    async with anyio.create_task_group() as tg:
+        for i, c in enumerate(candidates):
+            tg.start_soon(_collect, i, c.canonical_id)
+
+    return [e for sub in edge_lists for e in sub]
 
 
 class QdrantCorpus:
@@ -167,7 +185,6 @@ class QdrantCorpus:
             SumExpression,
         )
 
-        # Inner prefetch: dense and sparse, fused by RRF.
         inner = Prefetch(
             prefetch=[
                 Prefetch(query=dense, using="dense", limit=k_retrieve * 2),
@@ -184,9 +201,8 @@ class QdrantCorpus:
             limit=k_retrieve * 2,
         )
 
-        # Build the facet-boost FilterCondition. Skip "other" deliberately.
-        # Free-form fields (sub_sector, product_type, ...) and year integers
-        # stay out of the soft-boost set. Only closed taxonomy fields participate.
+        # Only closed-taxonomy facets participate in the boost; "other" and
+        # free-form fields (sub_sector, product_type, year ints) stay out.
         boost_must: list[Any] = []  # pyright: ignore[reportExplicitAny]
         for fname in ("sector", "business_model", "customer_type", "geography", "monetization"):
             val = getattr(facets, fname)
@@ -194,10 +210,9 @@ class QdrantCorpus:
                 continue
             boost_must.append(FieldCondition(key=f"facets.{fname}", match=MatchValue(value=val)))
 
-        # Outer formula: $score + boost * Filter(must=boost_must). When
-        # boost_must is empty the Filter matches every doc (a 1.0
-        # contribution on every candidate). Drop the Mult term in
-        # that case so "no facet boost in play" stays neutral.
+        # An empty Filter matches every doc (1.0 on every candidate), so drop
+        # the Mult term entirely when no facets boost — keeps "no boost in play"
+        # neutral instead of uniformly inflating every score.
         formula_terms: list[Any] = ["$score"]  # pyright: ignore[reportExplicitAny]
         if boost_must:
             formula_terms.append(MultExpression(mult=[self._facet_boost, Filter(must=boost_must)]))
@@ -224,11 +239,20 @@ class QdrantCorpus:
             with_vectors=False,
         )
 
-        # Collapse chunk hits to parents: best-score per canonical_id.
-        # ``query_points`` returns ``QueryResponse`` whose ``.points`` is a
-        # list of ``ScoredPoint``.
+        # Tie-break by (canonical_id, chunk_idx) — Qdrant's RRF+FormulaQuery
+        # doesn't promise stable order across runs, and that non-determinism
+        # otherwise leaks into the rerank prompt hash and into which chunk's
+        # payload wins per parent.
+        points = sorted(
+            resp.points,
+            key=lambda h: (
+                -float(h.score),
+                str((h.payload or {}).get("canonical_id", "")),
+                int((h.payload or {}).get("chunk_idx", 0)),
+            ),
+        )
         best: dict[str, tuple[float, dict[str, Any]]] = {}  # pyright: ignore[reportExplicitAny]
-        for hit in resp.points:
+        for hit in points:
             payload = dict(hit.payload or {})
             cid = str(payload.get("canonical_id", ""))
             if not cid:
@@ -237,12 +261,10 @@ class QdrantCorpus:
             if cid not in best or score > best[cid][0]:
                 best[cid] = (score, payload)
 
-        # Build Candidates in descending score order. Bad payloads are
-        # per-doc isolated (logged and dropped) so one malformed point can't
-        # fail the whole query.
-        # TODO(perf): cache pydantic-validated payloads if hot (#26).
-        # Keyed on (canonical_id, chunk_idx); payloads are immutable
-        # post-ingest so the cache is safe. Skip until measurements justify it.
+        # Per-doc isolation: a malformed payload can't fail the whole query.
+        # TODO(perf): cache pydantic-validated payloads if hot (#26). Keyed on
+        # (canonical_id, chunk_idx); payloads are immutable post-ingest so the
+        # cache is safe. Skip until measurements justify it.
         ordered = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)
         candidates: list[Candidate] = []
         for cid, (score, payload) in ordered:
@@ -253,19 +275,11 @@ class QdrantCorpus:
                 continue
             candidates.append(Candidate(canonical_id=cid, score=score, payload=cp))
 
-        # Alias-graph dedup. The fetcher is per-canonical_id; gather every
-        # edge referencing any retrieved canonical.
-        # Known limitation: only fetches edges for canonicals in the top-K.
-        # Alias chains longer than 1 hop where a mid-chain node was pruned
+        # Known limitation: only fetches edges for canonicals in the top-K, so
+        # alias chains longer than one hop where a mid-chain node was pruned
         # upstream stay un-collapsed. See README "Known limitations".
-        # A transitive-closure pass would fix it if this shows up in practice.
         if self._fetch_aliases is not None and candidates:
-            import asyncio  # noqa: PLC0415 — local to keep top-level imports lean
-
-            edge_lists = await asyncio.gather(
-                *(self._fetch_aliases(c.canonical_id) for c in candidates)
-            )
-            edges: list[AliasEdge] = [e for sub in edge_lists for e in sub]
+            edges = await _gather_alias_edges(candidates, self._fetch_aliases)
             candidates = collapse_alias_components(candidates, edges)
 
         return candidates[:k_retrieve]

@@ -8,7 +8,7 @@ LLM client, the OpenAI embedding client, and the Qdrant corpus, then dispatches
 to :func:`slopmortem.pipeline.run_query`. Stage progress goes to stderr
 (TTY-gated); the rendered Markdown report goes to stdout.
 
-``replay`` iterates an evals dataset (format + content shipped in Task 11). The
+``replay`` iterates an evals dataset (JSONL, one InputContext per line). The
 missing-dataset path exits with code 2 so CI smoke tests can probe the wiring
 without a fixture corpus.
 
@@ -33,9 +33,8 @@ import os
 import re
 import sys
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self, cast, override
+from typing import TYPE_CHECKING, Annotated, cast
 
 # Silence gRPC C-Core's INFO log channel BEFORE the Laminar import below pulls
 # in grpcio. Without this, the OTLP exporter's pool prints
@@ -51,25 +50,12 @@ import anyio  # must follow the GRPC env-var setup above
 import typer
 from lmnr import Laminar, observe
 from openai import AsyncOpenAI
-from rich.console import Console, ConsoleOptions, RenderResult
-from rich.measure import Measurement
+from rich.console import Console
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    Task,
-    TaskID,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
-from rich.segment import Segment
 from rich.table import Table
-from rich.text import Text
 
 from slopmortem.budget import Budget
+from slopmortem.cli_progress import RichPhaseProgress
 from slopmortem.config import load_config
 from slopmortem.corpus.qdrant_store import QdrantCorpus
 from slopmortem.corpus.reclassify import reclassify_quarantined
@@ -80,9 +66,9 @@ from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
 from slopmortem.corpus.sources.tavily import TavilyEnricher
 from slopmortem.corpus.sources.wayback import WaybackEnricher
 from slopmortem.corpus.tools_impl import _set_corpus
-from slopmortem.ingest import IngestPhase, IngestResult, ingest
+from slopmortem.ingest import INGEST_PHASE_LABELS, IngestPhase, IngestResult, ingest
+from slopmortem.llm.embedding_factory import make_embedder
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
-from slopmortem.llm.openai_embeddings import OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
 from slopmortem.models import InputContext
 from slopmortem.pipeline import QueryPhase, cutoff_iso, run_query
@@ -92,10 +78,6 @@ from slopmortem.stages.retrieve import retrieve
 from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
-    from types import TracebackType
-
-    from rich.progress_bar import ProgressBar
-
     from slopmortem.config import Config
     from slopmortem.corpus.merge import MergeJournal
     from slopmortem.corpus.sources.base import Enricher, Source
@@ -205,9 +187,8 @@ def ingest_cmd(  # noqa: PLR0913 - every flag mirrors the spec; user types kwarg
 async def _run_reclassify(config: Config, post_mortems_root: Path) -> None:
     """Re-run the slop classifier across quarantined rows and print the summary."""
     journal = await _build_journal(config, post_mortems_root)
-    # reclassify is a live operation that hits the slop judge for real. Build
-    # only the LLM (no embedder, no qdrant) and feed it into the Haiku
-    # classifier.
+    # reclassify hits the live slop judge, so we need the LLM but neither the
+    # embedder nor qdrant.
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)
     openrouter_sdk = AsyncOpenAI(
         api_key=config.openrouter_api_key.get_secret_value(),
@@ -311,10 +292,8 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
     progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
         RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
-    # Catch and print any exception that escapes the orchestrator BEFORE the
-    # Rich live render tears down. Without this, Progress.__exit__ clears the
-    # screen and the traceback interleaves invisibly with bar redraws — the
-    # exact failure mode from the Wesabe / "collection doesn't exist" run.
+    # Print escaping exceptions before Rich tears down — Progress.__exit__
+    # clears the screen, so a traceback interleaved with bar redraws disappears.
     err_console = Console(stderr=True)
     try:
         with progress_ctx as bar:
@@ -335,22 +314,20 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
                 progress=bar,
             )
     except KeyboardInterrupt:
-        # Ctrl-C is a BaseException; without surfacing it the user just sees
-        # the prompt return with no signal that the run stopped.
+        # BaseException, so without an explicit handler the prompt returns
+        # silently with no sign the run was interrupted.
         err_console.rule("[bold yellow]ingest cancelled (Ctrl-C)", style="yellow")
         raise
     except BaseException:
-        # Catch BaseException (asyncio.CancelledError, SystemExit, ...) too.
-        # ``except Exception`` alone misses these and they exit silently when
-        # Rich's live render tears down. Print and re-raise — the caller still
-        # gets a non-zero exit, this is just for visibility.
+        # Covers CancelledError / SystemExit / etc that ``except Exception``
+        # misses. Re-raise so the caller still gets a non-zero exit.
         err_console.rule("[bold red]ingest failed", style="red")
         err_console.print_exception(show_locals=False)
         raise
     if bar is not None:
-        _render_ingest_result(bar.console, result)
+        _render_ingest_result(bar.console, result, budget)
     else:
-        typer.echo(f"slopmortem ingest result: {result}")
+        typer.echo(f"slopmortem ingest result: {result} cost=${budget.spent_usd:.4f}")
 
 
 def _default_curated_yaml() -> Path:
@@ -574,35 +551,12 @@ def _maybe_init_tracing(config: Config) -> None:
         return
     api_key = config.lmnr_project_api_key.get_secret_value()
     if not api_key:
-        print(  # noqa: T201 - CLI surface; intentional stderr write
+        typer.echo(
             "slopmortem: LMNR_PROJECT_API_KEY missing; tracing disabled",
-            file=sys.stderr,
+            err=True,
         )
         return
     Laminar.initialize(project_api_key=api_key, base_url=base_url)
-
-
-def _make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
-    """Raise ``ValueError`` on unknown providers so misconfig fails loud at startup."""
-    provider = config.embedding_provider
-    if provider == "fastembed":
-        return FastEmbedEmbeddingClient(
-            model=config.embed_model_id,
-            budget=budget,
-            cache_dir=config.embed_cache_dir,
-        )
-    if provider == "openai":
-        openai_sdk = AsyncOpenAI(
-            api_key=config.openai_api_key.get_secret_value(),
-        )
-        return OpenAIEmbeddingClient(
-            sdk=openai_sdk,
-            budget=budget,
-            model=config.embed_model_id,
-        )
-    valid = ("fastembed", "openai")
-    msg = f"unknown embedding_provider {provider!r}; valid choices: {valid}"
-    raise ValueError(msg)
 
 
 def _build_deps(
@@ -628,7 +582,7 @@ def _build_deps(
         model=config.model_synthesize,
     )
 
-    embedder = _make_embedder(config, budget)
+    embedder = make_embedder(config, budget)
 
     qdrant_client = AsyncQdrantClient(host=config.qdrant_host, port=config.qdrant_port)
     corpus = QdrantCorpus(
@@ -731,7 +685,7 @@ async def _build_ingest_deps(
         model=config.model_facet,  # ingest uses the cheap model
     )
 
-    embedder = _make_embedder(config, budget)
+    embedder = make_embedder(config, budget)
 
     corpus = await _build_ingest_corpus(config, post_mortems_root)
     journal = await _build_journal(config, post_mortems_root)
@@ -744,212 +698,14 @@ async def _build_ingest_deps(
     return llm, embedder, corpus, budget, journal, classifier
 
 
-# Phase labels keyed on the IngestPhase enum so any phase added in
-# slopmortem.ingest fails type-check here until it gets a label.
-_INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
-    IngestPhase.GATHER: "Gathering entries from sources",
-    IngestPhase.CLASSIFY: "Classifying / slop-filtering",
-    IngestPhase.CACHE_WARM: "Warming prompt cache",
-    IngestPhase.FAN_OUT: "Facets + summarize fan-out",
-    IngestPhase.WRITE: "Entity-resolve / chunk / qdrant",
-}
-
-
-class _StackedBar:
-    """Render *bar* ``height`` times on consecutive rows.
-
-    Rich's :class:`ProgressBar` yields segments without a trailing newline, so
-    a ``Group`` of N bars renders inline. Drop explicit ``Segment.line``
-    between copies to stack them vertically.
-    """
-
-    def __init__(self, bar: ProgressBar, height: int) -> None:
-        self._bar = bar
-        self._height = height
-
-    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
-        for i in range(self._height):
-            yield from self._bar.__rich_console__(console, options)
-            if i < self._height - 1:
-                yield Segment.line()
-
-    def __rich_measure__(self, console: Console, options: ConsoleOptions) -> Measurement:
-        return Measurement.get(console, options, self._bar)
-
-
-class _ThickBarColumn(BarColumn):
-    """:class:`BarColumn` whose bar spans ``height`` terminal rows.
-
-    Rich bars are one row tall. The :class:`_StackedBar` wrapper repeats the
-    bar so it reads as a chunkier marker without changing layout — adjacent
-    columns auto-pad to the tallest cell in the row.
-    """
-
-    height = 1
-
-    def render(self, task: Task) -> _StackedBar | Text:  # type: ignore[override]
-        if task.total is None or task.total <= 1:
-            return Text("")
-        return _StackedBar(super().render(task), self.height)
-
-
-class _OptionalMofNCompleteColumn(MofNCompleteColumn):
-    """:class:`MofNCompleteColumn` that hides for single-shot phases.
-
-    Tasks with ``total <= 1`` carry no useful count — the bar's pulse-then-fill
-    already conveys done vs not-done. Returning empty text drops the cell and
-    avoids ``0/1 → 1/1`` noise.
-    """
-
-    @override
-    def render(self, task: Task) -> Text:
-        if task.total is None or task.total <= 1:
-            return Text("")
-        return super().render(task)
-
-
-class _RichPhaseProgress[PhaseT: StrEnum]:
-    """Rich-backed phase progress shared by ingest and query pipelines.
-
-    One :class:`rich.progress.Progress` with a task per phase. Tasks are
-    created lazily so unreached phases don't render empty bars, and a red
-    error-count badge gets appended to the description on per-phase failures.
-    """
-
-    def __init__(
-        self,
-        labels: dict[PhaseT, str],
-    ) -> None:
-        """Build the underlying ``Progress`` and console; tasks are added lazily."""
-        self._labels = labels
-        self._console = Console(stderr=True)
-        self._progress = Progress(
-            SpinnerColumn(),
-            TextColumn("{task.description}", justify="left"),
-            _ThickBarColumn(
-                bar_width=40,
-                style="grey50",
-                complete_style="cyan",
-                finished_style="green",
-                pulse_style="cyan",
-            ),
-            _OptionalMofNCompleteColumn(),
-            TextColumn("[dim]•"),
-            TimeElapsedColumn(),
-            TextColumn("[dim]eta"),
-            TimeRemainingColumn(),
-            console=self._console,
-            transient=False,
-        )
-        self._tasks: dict[PhaseT, TaskID] = {}
-        self._phase_errors: dict[PhaseT, int] = {}
-        self._phase_status: dict[PhaseT, str] = {}
-
-    def __enter__(self) -> Self:
-        """Start the live render."""
-        self._progress.__enter__()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Tear down the live render."""
-        self._progress.__exit__(exc_type, exc_val, exc_tb)
-
-    @property
-    def console(self) -> Console:
-        """Underlying Rich console; the CLI uses it for post-run output."""
-        return self._console
-
-    def _label(self, phase: PhaseT) -> str:
-        styled = f"[bold cyan]{self._labels[phase]}[/bold cyan]"
-        status = self._phase_status.get(phase)
-        if status:
-            styled = f"{styled} [dim]({status})[/dim]"
-        n = self._phase_errors.get(phase, 0)
-        if not n:
-            return styled
-        noun = "error" if n == 1 else "errors"
-        return f"{styled} [bold red]({n} {noun})[/bold red]"
-
-    def start_phase(self, phase: PhaseT, total: int | None) -> None:
-        """Create or reset the bar for *phase* with the expected ``total``.
-
-        Phases with no granular progress (``total`` is ``None`` or ``<= 1``)
-        pulse instead of flashing 0→1. ``end_phase`` snaps them to filled on
-        completion.
-        """
-        bar_total = total if total and total > 1 else None
-        if phase in self._tasks:
-            self._progress.reset(self._tasks[phase], total=bar_total)
-            self._progress.update(self._tasks[phase], description=self._label(phase))
-            return
-        self._tasks[phase] = self._progress.add_task(self._label(phase), total=bar_total)
-
-    def advance_phase(self, phase: PhaseT, n: int = 1) -> None:
-        """Move *phase*'s bar forward by ``n`` (no-op for unknown phases)."""
-        tid = self._tasks.get(phase)
-        if tid is not None:
-            self._progress.advance(tid, n)
-
-    def end_phase(self, phase: PhaseT) -> None:
-        """Complete *phase*'s bar and stop its spinner.
-
-        For indeterminate phases (``total is None``), freeze the bar at
-        ``total = max(completed, 1)``. Otherwise fill to ``total``.
-        """
-        tid = self._tasks.get(phase)
-        if tid is None:
-            return
-        task = self._progress.tasks[tid]
-        if task.total is None:
-            completed = max(task.completed, 1)
-            self._progress.update(
-                tid,
-                total=completed,
-                completed=completed,
-                description=self._label(phase),
-            )
-            return
-        self._progress.update(
-            tid, completed=task.total or task.completed, description=self._label(phase)
-        )
-
-    def set_phase_status(self, phase: PhaseT, status: str | None) -> None:
-        """Set or clear a transient dim suffix on *phase*'s description."""
-        if status:
-            self._phase_status[phase] = status
-        else:
-            self._phase_status.pop(phase, None)
-        tid = self._tasks.get(phase)
-        if tid is not None:
-            self._progress.update(tid, description=self._label(phase))
-
-    def log(self, message: str) -> None:
-        """Write a one-off neutral status line above the progress display."""
-        self._console.log(message)
-
-    def error(self, phase: PhaseT, message: str) -> None:
-        """Bump the error count for *phase* and log a red line above the bars."""
-        self._phase_errors[phase] = self._phase_errors.get(phase, 0) + 1
-        tid = self._tasks.get(phase)
-        if tid is not None:
-            self._progress.update(tid, description=self._label(phase))
-        self._console.log(f"[bold red]ERROR[/bold red] [{phase.value}] {message}")
-
-
-class RichIngestProgress(_RichPhaseProgress[IngestPhase]):
+class RichIngestProgress(RichPhaseProgress[IngestPhase]):
     """Rich-backed :class:`slopmortem.ingest.IngestProgress` impl."""
 
-    def __init__(self) -> None:
-        """Build with ingest phase labels."""
-        super().__init__(_INGEST_PHASE_LABELS)
+    def __init__(self) -> None:  # noqa: D107
+        super().__init__(INGEST_PHASE_LABELS)
 
 
-def _render_ingest_result(console: Console, result: IngestResult) -> None:
+def _render_ingest_result(console: Console, result: IngestResult, budget: Budget) -> None:
     """Print ``IngestResult`` as a two-column Rich table on *console*."""
     rows: list[tuple[str, str]] = [
         ("seen", str(result.seen)),
@@ -961,6 +717,7 @@ def _render_ingest_result(console: Console, result: IngestResult) -> None:
         ("source_failures", str(result.source_failures)),
         ("cache_warmed", str(result.cache_warmed)),
         ("dry_run", str(result.dry_run)),
+        ("cost_usd", f"${budget.spent_usd:.4f}"),
     ]
     table = Table(title="Ingest result", show_header=False, expand=False)
     table.add_column("Field", style="bold cyan", no_wrap=True)
@@ -978,11 +735,10 @@ _QUERY_PHASE_LABELS: dict[QueryPhase, str] = {
 }
 
 
-class RichQueryProgress(_RichPhaseProgress[QueryPhase]):
+class RichQueryProgress(RichPhaseProgress[QueryPhase]):
     """Rich-backed :class:`slopmortem.pipeline.QueryProgress` impl."""
 
-    def __init__(self) -> None:
-        """Build with query phase labels."""
+    def __init__(self) -> None:  # noqa: D107
         super().__init__(_QUERY_PHASE_LABELS)
 
 
@@ -1022,7 +778,7 @@ def replay_cmd(
 
     Each line parses into an :class:`InputContext`; ``run_query`` runs with the
     same dependency wiring as ``query``; the rendered :class:`Report` for each
-    row goes to stdout. Dataset format ships with Task 11.
+    row goes to stdout. Dataset format: JSONL, one InputContext per line.
     """
     anyio.run(_replay, dataset)
 
@@ -1031,7 +787,7 @@ def replay_cmd(
 async def _replay(dataset: str) -> None:
     path = Path("tests/evals/datasets") / f"{dataset}.jsonl"
     if not path.exists():
-        typer.echo(f"no dataset at {path}; ship Task 11", err=True)
+        typer.echo(f"no dataset at {path}; run 'just eval-record' to generate it", err=True)
         raise typer.Exit(code=2)
 
     config = load_config()
@@ -1075,7 +831,7 @@ def embed_prefetch_cmd() -> None:
 async def _embed_prefetch() -> None:
     config = load_config()
     budget = Budget(cap_usd=0.0)
-    embedder = _make_embedder(config, budget)
+    embedder = make_embedder(config, budget)
     if not isinstance(embedder, FastEmbedEmbeddingClient):
         typer.echo(
             f"slopmortem: provider {config.embedding_provider!r} has no local cache to prefetch",

@@ -11,12 +11,23 @@ behaviour, so the rest of the code only has to import this helper.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
 
-async def gather_resilient[T](*aws: Awaitable[T]) -> list[T | BaseException]:
-    """Run *aws* concurrently; per-task exceptions are returned, never raised."""
-    return await asyncio.gather(*aws, return_exceptions=True)
+async def gather_resilient[T](*aws: Awaitable[T]) -> list[T | Exception]:
+    """Run *aws* concurrently; per-task ``Exception``s are returned, never raised.
+
+    ``BaseException`` subclasses that aren't ``Exception`` (``KeyboardInterrupt``,
+    ``SystemExit``, ``asyncio.CancelledError``, and the cassette-miss errors
+    in ``slopmortem.llm.fake`` / ``slopmortem.llm.cassettes``) are re-raised
+    so they aren't silently absorbed as a dropped candidate. Operational
+    failures stay isolated; programmer / test-fixture errors stay loud.
+    """
+    results = await asyncio.gather(*aws, return_exceptions=True)
+    for r in results:
+        if isinstance(r, BaseException) and not isinstance(r, Exception):
+            raise r
+    return cast("list[T | Exception]", results)

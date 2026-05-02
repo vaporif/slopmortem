@@ -19,9 +19,19 @@ from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from slopmortem.llm.cassettes import (
+    NoCannedEmbeddingError as NoCannedEmbeddingError,  # noqa: PLC0414 - explicit re-export for back-compat
+)
+from slopmortem.llm.cassettes import embed_cassette_key
+from slopmortem.llm.fake import FakeLLMClient, FakeResponse
+from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
+
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from pathlib import Path
+
+    from slopmortem.config import Config
+    from slopmortem.llm.fake import CompletionResult
 
 
 _SCHEMA_MAJOR = 1
@@ -43,15 +53,10 @@ class DuplicateCassetteError(Exception):
     """Raised when two cassette files in the same scope dir resolve to the same key."""
 
 
-class NoCannedEmbeddingError(KeyError):
-    """Raised when an embedding cassette miss occurs under strict (canned-not-None) lookup."""
-
-
 class RecordingBudgetExceededError(Exception):
     """Raised when `RecordingLLMClient`'s accumulated cost would exceed `max_cost_usd`."""
 
-    def __init__(self, *, spent: float, limit: float) -> None:
-        """Capture the spent and limit values for callers that want to inspect them."""
+    def __init__(self, *, spent: float, limit: float) -> None:  # noqa: D107
         super().__init__(f"recording cost ceiling exceeded: spent={spent:.4f} limit={limit:.4f}")
         self.spent = spent
         self.limit = limit
@@ -370,3 +375,39 @@ def load_embedding_cassettes(
             msg = f"embed cassette {path} response has neither vector nor (indices, values)"
             raise CassetteFormatError(msg)
     return dense, sparse
+
+
+def load_row_fakes(
+    scope_dir: Path,
+    cfg: Config,
+) -> tuple[FakeLLMClient, FakeEmbeddingClient, Callable[[str], dict[int, float]]]:
+    """Load cassettes from *scope_dir* and build the LLM/embed/sparse fakes for one row.
+
+    Returns ``(fake_llm, fake_embed, sparse_encoder)`` ready to pass into
+    ``pipeline.run_query``. The sparse encoder closure raises
+    ``NoCannedEmbeddingError`` on miss; the LLM/dense fakes raise their own
+    miss errors at call time.
+    """
+    llm_canned: dict[tuple[str, str, str], FakeResponse | CompletionResult] = {
+        k: FakeResponse(
+            text=v.text,
+            stop_reason=v.stop_reason,
+            cost_usd=v.cost_usd,
+            cache_read_tokens=v.cache_read_tokens,
+            cache_creation_tokens=v.cache_creation_tokens,
+        )
+        for k, v in load_llm_cassettes(scope_dir).items()
+    }
+    dense_canned, sparse_canned = load_embedding_cassettes(scope_dir)
+    fake_llm = FakeLLMClient(canned=llm_canned, default_model=cfg.model_synthesize)
+    fake_embed = FakeEmbeddingClient(model=cfg.embed_model_id, canned=dense_canned)
+
+    def cassette_sparse(text: str) -> dict[int, float]:
+        key = embed_cassette_key(text=text, model="Qdrant/bm25")
+        if key not in sparse_canned:
+            msg = f"no sparse cassette for {key!r}"
+            raise NoCannedEmbeddingError(msg)
+        idx, vals = sparse_canned[key]
+        return dict(zip(idx, vals, strict=True))
+
+    return fake_llm, fake_embed, cassette_sparse

@@ -32,10 +32,16 @@ _PREVIEW_CHARS_PROMPT = 500
 _PREVIEW_CHARS_TEXT = 200
 
 
+def _tool_name(t: object) -> str:
+    """Best-effort string name for a tool object; falls back to `str(t)`."""
+    name = getattr(t, "name", None)
+    return str(name) if name is not None else str(t)  # pyright: ignore[reportAny]
+
+
 class RecordingLLMClient:
     """Wrap a real `LLMClient`; write one LLM cassette per `complete()` call."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — wrapper exposes every recording knob explicitly
         self,
         *,
         inner: LLMClient,
@@ -43,14 +49,21 @@ class RecordingLLMClient:
         stage: str,
         model: str,
         max_cost_usd: float | None = None,
+        on_cost: Callable[[float], None] | None = None,
     ) -> None:
-        """Bind ``inner`` and the output directory; ``max_cost_usd`` aborts before inner."""
+        """Bind ``inner`` and the output directory; ``max_cost_usd`` aborts before inner.
+
+        ``on_cost``, when set, fires after every successful inner call with the
+        per-call USD delta. The recorder helper aggregates these into a running
+        total it pushes to its progress sink.
+        """
         self._inner = inner
         self._out_dir = out_dir
         self._stage = stage
         self._model = model
         self._max_cost_usd = max_cost_usd
         self._spent_usd = 0.0
+        self._on_cost = on_cost
 
     async def complete(  # noqa: PLR0913 — mirrors LLMClient.complete public signature
         self,
@@ -94,10 +107,7 @@ class RecordingLLMClient:
                 template_sha=template_sha,
                 model=eff_model,
             )
-        tool_names: list[str] = []
-        for t in tools or []:  # pyright: ignore[reportAny]
-            name_attr: object = getattr(t, "name", None)  # pyright: ignore[reportAny]
-            tool_names.append(str(name_attr) if name_attr is not None else str(t))  # pyright: ignore[reportAny]
+        tool_names: list[str] = [_tool_name(t) for t in tools or []]  # pyright: ignore[reportAny]
         cas = LlmCassette(
             template_sha=template_sha,
             model=eff_model,
@@ -114,16 +124,33 @@ class RecordingLLMClient:
         )
         write_llm_cassette(cas, self._out_dir, stage=self._stage)
         self._spent_usd += result.cost_usd
+        # Hook fires after the internal counter so an on_cost handler that
+        # reads back into the wrapper sees a consistent view.
+        if self._on_cost is not None:
+            self._on_cost(result.cost_usd)
         return result
 
 
 class RecordingEmbeddingClient:
     """Wrap a real `EmbeddingClient`; write one cassette per text per `embed()`."""
 
-    def __init__(self, *, inner: EmbeddingClient, out_dir: Path) -> None:
-        """Bind ``inner`` and the output directory."""
+    def __init__(
+        self,
+        *,
+        inner: EmbeddingClient,
+        out_dir: Path,
+        on_cost: Callable[[float], None] | None = None,
+    ) -> None:
+        """Bind ``inner`` and the output directory.
+
+        ``on_cost``, when set, fires after every successful inner call with
+        the per-call USD delta from :class:`EmbeddingResult`. Under the
+        default ``embedding_provider="fastembed"`` this is always ``0.0`` —
+        the meter only moves under the OpenAI provider.
+        """
         self._inner = inner
         self._out_dir = out_dir
+        self._on_cost = on_cost
 
     @property
     def model(self) -> str:
@@ -146,20 +173,21 @@ class RecordingEmbeddingClient:
                 text_preview=text[:_PREVIEW_CHARS_TEXT],
             )
             write_embedding_cassette(cas, self._out_dir)
+        if self._on_cost is not None:
+            self._on_cost(result.cost_usd)
         return result
 
 
 class RecordingSparseEncoder:
     """Wrap a sparse-encoder callable; write one cassette per `__call__`."""
 
-    def __init__(
+    def __init__(  # noqa: D107
         self,
         *,
         inner: Callable[[str], dict[int, float]],
         out_dir: Path,
         model: str = "Qdrant/bm25",
     ) -> None:
-        """Bind ``inner``, the output directory, and the model name used in the cassette key."""
         self._inner = inner
         self._out_dir = out_dir
         self._model = model

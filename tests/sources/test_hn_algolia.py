@@ -53,7 +53,6 @@ class _FakeResp:
         return self._payload
 
 
-@pytest.mark.asyncio
 async def test_paginates_until_nbpages_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
     """A single page (nbPages=1) yields exactly the hits and no further calls."""
     payload = {
@@ -97,7 +96,6 @@ async def test_paginates_until_nbpages_exhausted(monkeypatch: pytest.MonkeyPatch
     assert fake.call_count == 1
 
 
-@pytest.mark.asyncio
 async def test_paginates_multiple_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     page0 = {"nbPages": 2, "hits": [{"objectID": "1", "title": "a", "story_text": "x"}]}
     page1 = {"nbPages": 2, "hits": [{"objectID": "2", "title": "b", "story_text": "y"}]}

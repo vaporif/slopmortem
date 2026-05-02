@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import httpx
-import pytest
 
 from slopmortem.corpus.sources.tavily import TavilyEnricher
 from slopmortem.models import RawEntry
@@ -23,7 +22,6 @@ def _entry(*, raw_html: str | None = None, url: str | None = "https://example.co
     )
 
 
-@pytest.mark.asyncio
 async def test_skips_when_raw_html_already_populated(monkeypatch):
     """If raw_html is non-empty, the enricher returns the entry unchanged."""
     mock_post = AsyncMock()
@@ -36,7 +34,6 @@ async def test_skips_when_raw_html_already_populated(monkeypatch):
     mock_post.assert_not_called()
 
 
-@pytest.mark.asyncio
 async def test_skips_when_url_missing(monkeypatch):
     """If url is None, the enricher returns the entry unchanged."""
     mock_post = AsyncMock()
@@ -49,7 +46,6 @@ async def test_skips_when_url_missing(monkeypatch):
     mock_post.assert_not_called()
 
 
-@pytest.mark.asyncio
 async def test_populates_raw_html_and_markdown_on_success(monkeypatch):
     """On a 200 with ``results[0].raw_content``, both ``raw_html`` and ``markdown_text`` fill."""
     # Body needs to clear ``extract.LENGTH_FLOOR`` (500 chars) for trafilatura
@@ -87,7 +83,6 @@ async def test_populates_raw_html_and_markdown_on_success(monkeypatch):
     assert result.markdown_text  # extract_clean filled this
 
 
-@pytest.mark.asyncio
 async def test_returns_entry_unchanged_on_http_error(monkeypatch):
     """A non-200 from Tavily is logged and the entry passes through unchanged."""
     fake_resp = httpx.Response(429, json={"detail": "rate limited"})
@@ -102,7 +97,6 @@ async def test_returns_entry_unchanged_on_http_error(monkeypatch):
     assert result.raw_html is None
 
 
-@pytest.mark.asyncio
 async def test_returns_entry_unchanged_when_api_key_missing(monkeypatch):
     """Missing ``TAVILY_API_KEY``: enricher logs and returns the entry unchanged (no raise)."""
     mock_post = AsyncMock()

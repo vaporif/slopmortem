@@ -6,8 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from slopmortem.evals.cassettes import NoCannedEmbeddingError
-from slopmortem.llm.cassettes import embed_cassette_key
+from slopmortem.llm.cassettes import NoCannedEmbeddingError, embed_cassette_key
 from slopmortem.llm.embedding_client import EmbeddingResult
 from slopmortem.llm.openai_embeddings import EMBED_DIMS
 
@@ -31,7 +30,7 @@ class FakeEmbeddingClient:
     raises :class:`NoCannedEmbeddingError`.
     """
 
-    def __init__(
+    def __init__(  # noqa: D107
         self,
         *,
         model: str,
@@ -39,7 +38,6 @@ class FakeEmbeddingClient:
         canned: Mapping[tuple[str, str], list[float]] | None = None,
         calls: list[_EmbedCall] | None = None,
     ) -> None:
-        """Bind the model dim and a per-call cost; ``calls`` is a record of invocations."""
         if model not in EMBED_DIMS:
             msg = f"unknown embed model {model!r}; add it to EMBED_DIMS"
             raise ValueError(msg)

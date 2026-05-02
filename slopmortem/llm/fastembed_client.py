@@ -68,10 +68,17 @@ class FastEmbedEmbeddingClient:
 
         cache_dir = str(self._cache_dir) if self._cache_dir is not None else None
         try:
+            # lazy_load=False: fastembed's lazy ONNX load is not thread-safe — the
+            # gate in _embed_documents/_token_count is `hasattr(self, "model")`,
+            # but `load_onnx_model` sets `self.model` before `self.tokenizer`, so
+            # a concurrent token_count can see model-set/tokenizer-unset and
+            # crash with `AttributeError: ... has no attribute 'tokenizer'`. The
+            # wrapper's `_ensure_loaded` lock serializes construction; do the
+            # heavy load eagerly here so concurrent embed/token_count never race.
             return TextEmbedding(
                 model_name=self.model,
                 cache_dir=cache_dir,
-                lazy_load=True,
+                lazy_load=False,
             )
         except Exception as exc:
             msg = (

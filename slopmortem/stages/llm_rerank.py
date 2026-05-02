@@ -38,10 +38,10 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
 
     Sonnet (or whichever model the caller picks) gets every candidate's
     ``summary`` (NOT ``body``) plus the user pitch and extracted facets, then
-    returns a :class:`LlmRerankResult` whose ``ranked`` array length must
-    equal :attr:`Config.N_synthesize`. Strict-mode JSON schema constrains
-    shape but not length, so this stage re-validates post-parse and raises
-    :class:`RerankLengthError` on mismatch.
+    returns a :class:`LlmRerankResult` whose ``ranked`` length is
+    ``min(Config.N_synthesize, len(candidates))``. Strict-mode JSON schema
+    constrains shape but not length, so this stage re-validates post-parse
+    and raises :class:`RerankLengthError` on mismatch.
 
     Args:
         candidates: Up to ``Config.K_retrieve`` candidates from retrieve.
@@ -59,7 +59,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
 
     Returns:
         Parsed :class:`LlmRerankResult` with ``ranked`` length equal to
-        ``Config.N_synthesize``.
+        ``min(Config.N_synthesize, len(candidates))``.
 
     Raises:
         RerankLengthError: LLM returned an array of the wrong length.
@@ -107,7 +107,8 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
         max_tokens=max_tokens,
     )
     parsed = LlmRerankResult.model_validate_json(result.text)
-    if len(parsed.ranked) != config.N_synthesize:
-        msg = f"expected {config.N_synthesize}, got {len(parsed.ranked)}"
+    expected = min(config.N_synthesize, len(candidates))
+    if len(parsed.ranked) != expected:
+        msg = f"expected {expected}, got {len(parsed.ranked)}"
         raise RerankLengthError(msg)
     return parsed

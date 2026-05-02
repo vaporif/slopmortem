@@ -6,7 +6,6 @@ import sqlite3
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
-import pytest
 from typer.testing import CliRunner
 
 from slopmortem.cli import app
@@ -15,6 +14,8 @@ from slopmortem.models import PendingReviewRow
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import pytest
 
 
 def test_pending_review_row_round_trips() -> None:
@@ -30,7 +31,6 @@ def test_pending_review_row_round_trips() -> None:
     assert row.haiku_decision == "merge"
 
 
-@pytest.mark.asyncio
 async def test_list_pending_review_returns_rows(tmp_path: Path) -> None:
     """Insert two pending_review rows directly, assert the reader returns them."""
     db = tmp_path / "journal.sqlite"

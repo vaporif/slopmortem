@@ -1,22 +1,13 @@
-# Curated post-mortem URLs: v0 initial-draft list (~800 rows across all 23 sectors).
-#
-# This list was compiled by AI from public sources (Wikipedia, founder essays,
-# major tech press) and HEAD-checked for liveness. All entries are companies
-# that genuinely shut down, went bankrupt, or were acquired-and-extinguished
-# as standalone entities. URLs that returned 4xx have been removed.
+# Curated post-mortem URLs across all 23 sectors. Entries are companies that
+# shut down, went bankrupt, or were acquired-and-extinguished as standalone
+# entities. CODEOWNERS-protected; review on all changes.
 #
 # Wikipedia is the dominant source because Wikipedia URLs survive longer than
 # founder blogs (Medium posts rot, personal blogs disappear). Wikipedia
 # articles are encyclopedic rather than founder-voice post-mortems, but they
 # carry dense factual content about WHAT failed and HOW.
 #
-# This is still a STARTING POINT, not the final review-quality corpus. Every
-# row should be re-verified by a human curator before it can serve as
-# canonical truth, and each `content_sha256_at_review` is left as
-# "PLACEHOLDER" until that review pass computes the real hash from the live
-# page body.
-#
-# Schema (per spec lines 1029-1031 / plan §1903-1914):
+# Schema:
 #   url                       (required) full URL of the post-mortem
 #   startup_name              (required) public-facing company name
 #   sector                    (required) value from `slopmortem/corpus/taxonomy.yml`
@@ -24,8 +15,6 @@
 #   reviewed_by               (required) email of the second-pair-of-eyes reviewer
 #   content_sha256_at_review  (required) sha256 of the page body at review time;
 #                             "PLACEHOLDER" until the human curator populates it.
-#
-# CODEOWNERS-protected (per spec line 260); review on all changes.
 
 # === fintech (12) ===
 - url: https://en.wikipedia.org/wiki/Wesabe

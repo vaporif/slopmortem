@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import pytest
-
 from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource
 
 if TYPE_CHECKING:
@@ -20,7 +18,6 @@ CSV_TEXT = (
 )
 
 
-@pytest.mark.asyncio
 async def test_crunchbase_yields_entry_per_row(tmp_path: Path) -> None:
     csv_path = tmp_path / "crunchbase.csv"
     csv_path.write_text(CSV_TEXT, encoding="utf-8")
@@ -37,7 +34,6 @@ async def test_crunchbase_yields_entry_per_row(tmp_path: Path) -> None:
     assert "widgets" in entries[0].markdown_text
 
 
-@pytest.mark.asyncio
 async def test_crunchbase_handles_missing_homepage(tmp_path: Path) -> None:
     text = "uuid,name,homepage_url,short_description\nabc,NoUrlCo,,A description without a URL.\n"
     csv_path = tmp_path / "crunchbase.csv"

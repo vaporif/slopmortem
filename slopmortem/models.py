@@ -29,8 +29,7 @@ _TAXONOMY_PATH = Path(__file__).resolve().parent / "corpus" / "taxonomy.yml"
 @cache
 def _load_taxonomy() -> dict[str, frozenset[str]]:
     """Load ``taxonomy.yml`` once, returning each closed-enum field as a frozenset."""
-    # yaml.safe_load is loosely typed; narrow at the dict boundary, same as
-    # slopmortem.corpus.sources.curated.
+    # yaml.safe_load is loosely typed; narrow at the dict boundary.
     raw = cast(
         "dict[str, list[Any]]",  # pyright: ignore[reportExplicitAny]
         yaml.safe_load(_TAXONOMY_PATH.read_text()),
@@ -38,12 +37,10 @@ def _load_taxonomy() -> dict[str, frozenset[str]]:
     return {field: frozenset(raw[field]) for field in _CLOSED_FACET_FIELDS}
 
 
-# Dynamic Literal types built from taxonomy.yml at module-load. Pydantic v2
-# emits these as ``"enum": [...]`` in the JSON schema, and Anthropic's
-# grammar-constrained sampler enforces them. Kills hallucinations like
-# ``geography="japan"`` (Haiku used to invent country names instead of the
-# regional ``apac`` bucket) or ``customer_type="b2c"`` (instead of the
-# taxonomy's ``consumer``).
+# Dynamic Literal types built from taxonomy.yml at module-load. Pydantic emits
+# them as ``"enum": [...]`` in the JSON schema, which Anthropic's grammar-
+# constrained sampler enforces — so Haiku can't return ``geography="japan"``
+# instead of ``apac``, or ``customer_type="b2c"`` instead of ``consumer``.
 _TAX = _load_taxonomy()
 _SECTOR_VALUES: tuple[str, ...] = tuple(sorted(_TAX["sector"]))
 _BUSINESS_MODEL_VALUES: tuple[str, ...] = tuple(sorted(_TAX["business_model"]))
@@ -90,9 +87,8 @@ class Facets(BaseModel):
 
     Closed enums are typed as ``Literal[*taxonomy_values]`` so Pydantic emits a
     JSON-schema ``enum`` constraint that Anthropic's grammar-constrained
-    sampler enforces. The post-hoc validator that used to coerce
-    out-of-taxonomy values to ``"other"`` is gone — out-of-enum values can't
-    reach this class anymore because the LLM can't generate them.
+    sampler enforces. Out-of-enum values can't reach this class — the LLM
+    can't generate them in the first place.
     """
 
     sector: SectorLit
@@ -112,9 +108,9 @@ class LLMSynthesis(BaseModel):
 
     failure_date, lifespan_months, and sources are intentionally missing. The
     dates are derived from CandidatePayload in stages.synthesize; sources are
-    passed through from CandidatePayload as well, since the LLM never sees
-    provenance URLs (the body is plain text after extract_clean) and used to
-    either emit nothing or hallucinate URLs that the host filter then dropped.
+    passed through from CandidatePayload because the LLM never sees provenance
+    URLs (the body is plain text after extract_clean), so asking for them
+    produced empty or hallucinated lists that the host filter dropped.
     """
 
     candidate_id: str

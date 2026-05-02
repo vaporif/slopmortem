@@ -1,9 +1,8 @@
-"""Curated source: length floor, platform blocklist, happy path.
+"""Curated source: length floor, happy path.
 
 The curated YAML loader is the entry point for hand-vetted post-mortems. It
 fetches each row's URL via ``safe_get``, runs it through ``extract_clean``,
-drops rows whose ``registrable_domain`` is in ``platform_domains.yml``, and skips
-rows whose extracted text falls under the 500-char floor.
+and skips rows whose extracted text falls under the 500-char floor.
 """
 
 from __future__ import annotations
@@ -13,11 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
-import pytest
-
 from slopmortem.corpus.sources.curated import CuratedSource
 
 if TYPE_CHECKING:
+    import pytest
+
     from slopmortem.models import RawEntry
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "curated_test.yml"
@@ -55,7 +54,6 @@ async def _fake_safe_get_factory(
     return AsyncMock(side_effect=_fn)
 
 
-@pytest.mark.asyncio
 async def test_curated_yields_long_text_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     response_map = {
         "https://example.com/long-postmortem": _canned_response(
@@ -85,21 +83,13 @@ async def test_curated_yields_long_text_rows(monkeypatch: pytest.MonkeyPatch) ->
     src = CuratedSource(yaml_path=FIXTURE)
     entries: list[RawEntry] = [e async for e in src.fetch()]
     urls = {e.url for e in entries}
-    # Long-text rows for non-blocklisted hosts pass through.
+    # Long-text rows pass through.
     assert "https://example.com/long-postmortem" in urls
     assert "https://realdomain.example/another-long-postmortem" in urls
     # Length floor: too-short row is dropped.
     assert "https://example.org/too-short-page" not in urls
-    # Blocklist: medium.com and substack.com rows never fetch.
-    assert "https://medium.com/@user/blocked-platform-post" not in urls
-    assert "https://username.substack.com/p/blocked-platform-post" not in urls
-    # safe_get must NOT be called for blocklisted hosts.
-    fetched_urls = {call.args[0] for call in fake_get.call_args_list}
-    assert "https://medium.com/@user/blocked-platform-post" not in fetched_urls
-    assert "https://username.substack.com/p/blocked-platform-post" not in fetched_urls
 
 
-@pytest.mark.asyncio
 async def test_curated_entry_has_expected_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     url = "https://example.com/long-postmortem"
     response_map = {
@@ -137,7 +127,6 @@ async def test_curated_entry_has_expected_fields(monkeypatch: pytest.MonkeyPatch
     assert target.fetched_at.tzinfo.utcoffset(target.fetched_at) == UTC.utcoffset(target.fetched_at)
 
 
-@pytest.mark.asyncio
 async def test_curated_skips_robots_disallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rows whose URL is disallowed by robots.txt are skipped (no fetch)."""
     url = "https://example.com/long-postmortem"

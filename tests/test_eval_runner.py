@@ -2,7 +2,9 @@
 
 Invokes ``main(argv)`` directly, never spawns a subprocess. Tests run the
 deterministic path (no env vars, no Qdrant, no real API calls) by
-monkeypatching ``run_query`` to return a hand-built Report.
+monkeypatching ``runner._run_cassettes`` — the cassette stage short-circuits
+to ``FAIL <rid>: no cassettes`` before reaching ``run_query`` when the
+cassette dir is missing, so patching ``run_query`` itself never takes effect.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slopmortem.evals import runner
+from slopmortem.evals.recording_helper import RecordResult
 from slopmortem.models import (
     InputContext,
     PerspectiveScore,
@@ -27,11 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
 
-    from slopmortem.budget import Budget
     from slopmortem.config import Config
-    from slopmortem.corpus.store import Corpus
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
 
 
 def _make_synth(
@@ -86,27 +85,32 @@ def _write_seed(tmp_path: Path, rows: Sequence[Mapping[str, object]]) -> Path:
     return p
 
 
-def _patch_run_query(
+def _patch_run_cassettes(
     monkeypatch: pytest.MonkeyPatch,
     fn: Callable[[InputContext], Synthesis],
 ) -> None:
-    """Replace ``slopmortem.evals.runner.run_query`` with a deterministic stub."""
+    """Replace ``runner._run_cassettes`` with a deterministic stub.
 
-    async def _fake(  # noqa: PLR0913
-        input_ctx: InputContext,
-        *,
-        llm: LLMClient,
-        embedding_client: EmbeddingClient,
-        corpus: Corpus,
-        config: Config,
-        budget: Budget,
-        progress: Callable[[str], None] | None = None,
-    ) -> Report:
-        del llm, embedding_client, corpus, config, budget, progress
-        return _make_report(input_ctx, [fn(input_ctx)])
+    Builds a hand-crafted ``Synthesis`` per row via *fn*, scores it through the
+    runner's own ``_score_report`` so the diff/baseline machinery sees a
+    realistic result dict, and honours ``scope_filter`` the same way the real
+    function does.
+    """
 
-    # Runner calls run_query via its own module reference; patch there.
-    monkeypatch.setattr("slopmortem.evals.runner.run_query", _fake)
+    async def _fake(
+        rows: list[InputContext],
+        row_ids: list[str],
+        scope_filter: str | None,
+    ) -> dict[str, dict[str, object]]:
+        results: dict[str, dict[str, object]] = {}
+        for ctx, rid in zip(rows, row_ids, strict=True):
+            if scope_filter is not None and rid != scope_filter:
+                continue
+            report = _make_report(ctx, [fn(ctx)])
+            results[rid] = runner._score_report(report, bodies_map={})
+        return results
+
+    monkeypatch.setattr("slopmortem.evals.runner._run_cassettes", _fake)
 
 
 def test_runner_exits_zero_when_baseline_matches(
@@ -118,7 +122,7 @@ def test_runner_exits_zero_when_baseline_matches(
     ]
     seed = _write_seed(tmp_path, rows)
 
-    _patch_run_query(monkeypatch, lambda _ctx: _make_synth(candidate_id="cand-0"))
+    _patch_run_cassettes(monkeypatch, lambda _ctx: _make_synth(candidate_id="cand-0"))
 
     baseline = {
         "version": 1,
@@ -170,9 +174,9 @@ def test_runner_exits_nonzero_on_regression(
     rows = [{"name": "alpha", "description": "An alpha pitch."}]
     seed = _write_seed(tmp_path, rows)
 
-    # Patched run_query returns a Synthesis with empty where_diverged. The
-    # baseline expects True, so this counts as a regression.
-    _patch_run_query(
+    # Patched cassette stage returns a Synthesis with empty where_diverged.
+    # The baseline expects True, so this counts as a regression.
+    _patch_run_cassettes(
         monkeypatch,
         lambda _ctx: _make_synth(candidate_id="cand-0", where_diverged=""),
     )
@@ -211,25 +215,32 @@ def test_runner_exits_nonzero_on_regression(
 
 
 def test_runner_record_flag_invokes_helper(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """--record dispatches to record_cassettes_for_inputs via asyncio.run."""
+    """--record dispatches to record_cassettes_for_inputs via anyio.run."""
     seed = _write_seed(tmp_path, [{"name": "alpha", "description": "x"}])
     baseline = tmp_path / "baseline.json"
     baseline.write_text("{}")
 
     seen: dict[str, object] = {}
 
-    async def fake_helper(
+    async def fake_helper(  # noqa: PLR0913 — mirrors the helper's full kwarg surface
         *,
         inputs: list[InputContext],
         output_dir: Path,
         corpus_fixture_path: Path,
         config: Config,
         max_cost_usd: float,
-    ) -> None:
-        del output_dir, corpus_fixture_path, config
+        progress: object = None,
+    ) -> RecordResult:
+        del output_dir, corpus_fixture_path, config, progress
         seen["called"] = True
         seen["inputs"] = inputs
         seen["max_cost_usd"] = max_cost_usd
+        return RecordResult(
+            rows_total=len(inputs),
+            rows_succeeded=len(inputs),
+            cassettes_written=0,
+            total_cost_usd=0.0,
+        )
 
     monkeypatch.setattr(
         "slopmortem.evals.recording_helper.record_cassettes_for_inputs",
@@ -257,6 +268,65 @@ def test_runner_record_flag_invokes_helper(monkeypatch: pytest.MonkeyPatch, tmp_
     assert seen["max_cost_usd"] == pytest.approx(1.5)
 
 
+def test_runner_record_scope_matches_sha1_row_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """--record --scope <sha1> matches anonymous rows via _row_id, not name."""
+    import hashlib  # noqa: PLC0415
+
+    description = "Anonymous pitch with no name."
+    sha1_id = hashlib.sha1(description.encode(), usedforsecurity=False).hexdigest()[:8]
+    seed = _write_seed(tmp_path, [{"name": "", "description": description}])
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}")
+
+    seen: dict[str, object] = {}
+
+    async def fake_helper(  # noqa: PLR0913
+        *,
+        inputs: list[InputContext],
+        output_dir: Path,
+        corpus_fixture_path: Path,
+        config: Config,
+        max_cost_usd: float,
+        progress: object = None,
+    ) -> RecordResult:
+        del output_dir, corpus_fixture_path, config, max_cost_usd, progress
+        seen["inputs"] = inputs
+        return RecordResult(
+            rows_total=len(inputs),
+            rows_succeeded=len(inputs),
+            cassettes_written=0,
+            total_cost_usd=0.0,
+        )
+
+    monkeypatch.setattr(
+        "slopmortem.evals.recording_helper.record_cassettes_for_inputs",
+        fake_helper,
+    )
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tests" / "fixtures" / "corpus_fixture.jsonl").write_text("")
+
+    with pytest.raises(SystemExit) as exc_info:
+        runner.main(
+            [
+                "--dataset",
+                str(seed),
+                "--baseline",
+                str(baseline),
+                "--record",
+                "--scope",
+                sha1_id,
+            ]
+        )
+    assert exc_info.value.code == 0
+    inputs = seen["inputs"]
+    assert isinstance(inputs, list)
+    assert len(inputs) == 1
+    assert inputs[0].description == description
+
+
 def test_runner_writes_baseline_when_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -264,7 +334,7 @@ def test_runner_writes_baseline_when_missing(
     rows = [{"name": "alpha", "description": "An alpha pitch."}]
     seed = _write_seed(tmp_path, rows)
 
-    _patch_run_query(monkeypatch, lambda _ctx: _make_synth(candidate_id="cand-0"))
+    _patch_run_cassettes(monkeypatch, lambda _ctx: _make_synth(candidate_id="cand-0"))
 
     baseline_path = tmp_path / "baseline-new.json"
     assert not baseline_path.exists()

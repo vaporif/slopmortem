@@ -17,7 +17,6 @@ gate exists to prevent accidental spend.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import contextlib
 import os
 import sys
@@ -26,26 +25,81 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+import anyio
 import yaml
 from openai import AsyncOpenAI
 from qdrant_client import AsyncQdrantClient
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 from slopmortem.budget import Budget
+from slopmortem.cli_progress import RichPhaseProgress
 from slopmortem.config import load_config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
 from slopmortem.corpus.sources.curated import CuratedSource
-from slopmortem.ingest import HaikuSlopClassifier, ingest
-from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
-from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient
+from slopmortem.ingest import INGEST_PHASE_LABELS, HaikuSlopClassifier, IngestPhase, ingest
+from slopmortem.llm.embedding_factory import make_embedder
+from slopmortem.llm.openai_embeddings import EMBED_DIMS
 from slopmortem.llm.openrouter import OpenRouterClient
 
 if TYPE_CHECKING:
     from slopmortem.corpus.sources.base import Enricher
     from slopmortem.ingest import Corpus as IngestCorpus
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.ingest import IngestResult
 
 _DEFAULT_MAX_COST_USD = 1.5
+
+
+class _RichIngestProgress(RichPhaseProgress[IngestPhase]):
+    """Recorder-local Rich-backed ingest progress; mirrors cli.RichIngestProgress."""
+
+    def __init__(self) -> None:
+        super().__init__(INGEST_PHASE_LABELS)
+
+
+def _make_progress_ctx() -> contextlib.AbstractContextManager[_RichIngestProgress | None]:
+    """Return the TTY-gated progress context manager used by :func:`_record`.
+
+    Piped invocations (CI, redirect-to-file) skip the Live render so log
+    capture stays readable. Extracted into a helper so the gate can be tested
+    without driving the heavy ``_record`` body end-to-end.
+    """
+    return _RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
+
+
+def _render_recorder_summary(
+    console: Console, *, out_path: Path, size_bytes: int, result: IngestResult
+) -> None:
+    """Render a panel summarizing the corpus dump and the underlying ingest run.
+
+    Mirrors the shape of ``slopmortem.cli._render_ingest_result`` plus the
+    out-path / byte-size pair that's specific to the corpus recorder. Built
+    locally rather than imported because the recorder needs the dump-side
+    fields, and ``_render_ingest_result`` is private + tied to its own panel
+    title.
+    """
+    table = Table(show_header=False, expand=False, box=None)
+    table.add_column("Field", style="bold cyan", no_wrap=True)
+    table.add_column("Value", style="white")
+    table.add_row("output", str(out_path))
+    table.add_row("bytes", f"{size_bytes:,}")
+    table.add_row("seen", str(result.seen))
+    table.add_row("processed", str(result.processed))
+    table.add_row("quarantined", str(result.quarantined))
+    table.add_row("skipped", str(result.skipped))
+    table.add_row("errors", str(result.errors))
+    table.add_row("source_failures", str(result.source_failures))
+    console.print(
+        Panel(
+            table,
+            title="[bold cyan]corpus dump[/bold cyan]",
+            title_align="left",
+            border_style="cyan",
+            expand=False,
+        )
+    )
 
 
 def _translate_seed_yaml(src: Path, dst: Path) -> None:
@@ -138,26 +192,7 @@ async def _record(
             model=config.model_facet,
         )
 
-        embedder: EmbeddingClient
-        if config.embedding_provider == "fastembed":
-            embedder = FastEmbedEmbeddingClient(
-                model=config.embed_model_id,
-                budget=budget,
-                cache_dir=config.embed_cache_dir,
-            )
-        elif config.embedding_provider == "openai":
-            openai_sdk = AsyncOpenAI(api_key=config.openai_api_key.get_secret_value())
-            embedder = OpenAIEmbeddingClient(
-                sdk=openai_sdk,
-                budget=budget,
-                model=config.embed_model_id,
-            )
-        else:
-            valid = ("fastembed", "openai")
-            msg = (
-                f"unknown embedding_provider {config.embedding_provider!r}; valid choices: {valid}"
-            )
-            raise ValueError(msg)
+        embedder = make_embedder(config, budget)
 
         classifier = HaikuSlopClassifier(llm=llm, model=config.model_summarize)
 
@@ -181,26 +216,36 @@ async def _record(
             sources = [CuratedSource(yaml_path=translated_yaml)]
             enrichers: list[Enricher] = []
 
-            _ = await ingest(
-                sources=sources,
-                enrichers=enrichers,
-                journal=journal,
-                corpus=corpus,
-                llm=llm,
-                embed_client=embedder,
-                budget=budget,
-                slop_classifier=classifier,
-                config=config,
-                post_mortems_root=post_mortems_root,
-            )
+            # TTY-gated: piped invocations (CI, redirect-to-file) skip the Live
+            # render so log capture stays readable.
+            with _make_progress_ctx() as bar:
+                result = await ingest(
+                    sources=sources,
+                    enrichers=enrichers,
+                    journal=journal,
+                    corpus=corpus,
+                    llm=llm,
+                    embed_client=embedder,
+                    budget=budget,
+                    slop_classifier=classifier,
+                    config=config,
+                    post_mortems_root=post_mortems_root,
+                    progress=bar,
+                )
 
             # Append, not replace: with_suffix(".recording") would clobber .jsonl.
             out_tmp = out_path.with_suffix(out_path.suffix + ".recording")
             out_tmp.parent.mkdir(parents=True, exist_ok=True)
             await dump_collection_to_jsonl(qclient, collection_name, out_tmp)
-            os.replace(out_tmp, out_path)  # noqa: PTH105 — atomic POSIX rename
+            out_tmp.replace(out_path)
             size_bytes = out_path.stat().st_size  # noqa: ASYNC240 — last line before exit
-            print(f"wrote {out_path} ({size_bytes} bytes)")  # noqa: T201 — CLI surface
+            summary_console = bar.console if bar is not None else Console(stderr=True)
+            _render_recorder_summary(
+                summary_console,
+                out_path=out_path,
+                size_bytes=size_bytes,
+                result=result,
+            )
         finally:
             # Suppress: the collection may not exist (ensure_collection failed
             # before creating it), and a delete failure must not mask whatever
@@ -249,14 +294,15 @@ def main(argv: list[str] | None = None) -> None:
         f"http://{config.qdrant_host}:{config.qdrant_port}"
     )
 
-    asyncio.run(
-        _record(
+    async def _do_record() -> None:
+        await _record(
             inputs_path=inputs_path,
             out_path=out_path,
             max_cost_usd=max_cost_usd,
             qdrant_url=qdrant_url,
         )
-    )
+
+    anyio.run(_do_record)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+# retail / ecommerce / media / hardware (original seed inputs — kept as-is)
 - name: solyndra
   description: Cylindrical thin-film solar manufacturer
   url: https://en.wikipedia.org/wiki/Solyndra
@@ -28,3 +29,84 @@
 - name: quibi
   description: Short-form mobile video service
   url: https://en.wikipedia.org/wiki/Quibi
+
+# fintech (covers seed: ledgermint)
+- name: powa-technologies
+  description: UK mobile-payments unicorn that collapsed in 2016
+  url: https://en.wikipedia.org/wiki/Powa_Technologies
+- name: wonga
+  description: UK payday lender, regulator-driven shutdown
+  url: https://en.wikipedia.org/wiki/Wonga.com
+- name: wesabe
+  description: Personal-finance startup outpaced by Mint
+  url: https://en.wikipedia.org/wiki/Wesabe
+- name: bench-accounting
+  description: Canadian B2B SaaS for SMB bookkeeping/financial-close, shut down Dec 2024
+  url: https://en.wikipedia.org/wiki/Bench_Accounting
+
+# healthtech (covers seed: vitalcue; existing: theranos)
+- name: outcome-health
+  description: Doctor-office ad network, fraud-driven collapse
+  url: https://en.wikipedia.org/wiki/Outcome_Health
+- name: ubiome
+  description: Consumer microbiome testing, billing-fraud bankruptcy
+  url: https://en.wikipedia.org/wiki/UBiome
+
+# climate / energy (covers seed: gridspring; existing: solyndra, better-place)
+- name: a123-systems
+  description: Lithium-ion battery maker, bankruptcy after Fisker collapse
+  url: https://en.wikipedia.org/wiki/A123_Systems
+- name: aquion-energy
+  description: Saltwater grid-storage battery startup, Chapter 11
+  url: https://en.wikipedia.org/wiki/Aquion_Energy
+
+# marketplace / social (covers seed: kakikaki)
+- name: friendster
+  description: Early social network outpaced by MySpace and Facebook
+  url: https://en.wikipedia.org/wiki/Friendster
+- name: path
+  description: Mobile-first social network, shut down 2018
+  url: https://en.wikipedia.org/wiki/Path_(social_network)
+
+# devtools (covers seed: kappa-cli)
+- name: rethinkdb
+  description: Realtime open-source database, monetization failure
+  url: https://en.wikipedia.org/wiki/RethinkDB
+- name: parse
+  description: Mobile BaaS acquired by Facebook, shut down 2017
+  url: https://en.wikipedia.org/wiki/Parse_(platform)
+
+# edtech (covers seed: yume-tutor)
+- name: altschool
+  description: Personalized-learning K-8 chain, pivoted then dissolved
+  url: https://en.wikipedia.org/wiki/AltSchool
+- name: knewton
+  description: Adaptive-learning platform, fire-sale acquisition
+  url: https://en.wikipedia.org/wiki/Knewton
+
+# biotech / pharma (covers seed: helixthread; existing: theranos)
+- name: insys-therapeutics
+  description: Opioid-pharma company, bankrupt after kickback convictions
+  url: https://en.wikipedia.org/wiki/Insys_Therapeutics
+
+# social media (covers seed: smolpark)
+- name: vine
+  description: Twitter's six-second video app, shut down 2017
+  url: https://en.wikipedia.org/wiki/Vine_(service)
+# Yo_(application) returns 404; the live article slug is Yo_(app).
+- name: yo
+  description: One-tap notification app, novelty-driven flameout
+  url: https://en.wikipedia.org/wiki/Yo_(app)
+
+# logistics / supply chain (covers seed: lastmile-iq; existing: webvan, kozmo-com)
+- name: boo-com
+  description: Dotcom-era online fashion retailer, fast burn through $135M
+  url: https://en.wikipedia.org/wiki/Boo.com
+
+# gaming (covers seed: shardbright)
+- name: 38-studios
+  description: Curt Schilling's MMO studio, RI-loan-default bankruptcy
+  url: https://en.wikipedia.org/wiki/38_Studios
+- name: onlive
+  description: Cloud gaming pioneer, two restructurings then shutdown
+  url: https://en.wikipedia.org/wiki/OnLive

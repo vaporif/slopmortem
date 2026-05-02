@@ -60,7 +60,7 @@ _TRANSIENT_MIDSTREAM_CODES = frozenset({"overloaded_error"})
 async def gather_with_limit[T](
     coros: Iterable[Coroutine[Any, Any, T]],  # pyright: ignore[reportExplicitAny]
     limit: int,
-) -> list[T | BaseException]:
+) -> list[T | Exception]:
     """Run *coros* concurrently with at most *limit* in flight.
 
     Wraps :func:`slopmortem.concurrency.gather_resilient` behind an
@@ -288,11 +288,9 @@ class OpenRouterClient:
                 raise RuntimeError(msg)
 
     def _emit(self, _event: SpanEvent) -> None:
-        # Mirrors slopmortem.stages.synthesize._emit_event: a no-op hook by
-        # default so tests can patch it to observe emissions. Production wiring
-        # (Laminar initialized in slopmortem.cli._query) is opt-in. If a future
-        # change wants this client to also emit, call
-        # Laminar.event(name=str(_event)) here gated on Laminar.is_initialized().
+        # No-op hook so tests can patch it to observe emissions. The active
+        # emit path lives in stages.synthesize._emit_event; this client stays
+        # silent until something needs it to participate.
         return
 
 

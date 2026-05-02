@@ -62,3 +62,12 @@ def embed_cassette_key(*, text: str, model: str) -> tuple[str, str]:
     """Compute the embedding cassette 2-tuple key (shared by dense and sparse)."""
     h = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return (model, h[:_TEXT_HASH_LEN])
+
+
+class NoCannedEmbeddingError(BaseException):
+    """Raised when an embedding cassette miss occurs under strict (canned-not-None) lookup.
+
+    BaseException (not Exception) so resilient fan-out wrappers can't swallow
+    it as an operational error — see ``NoCannedResponseError`` for the same
+    rationale.
+    """

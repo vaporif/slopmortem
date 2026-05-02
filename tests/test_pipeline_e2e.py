@@ -301,6 +301,11 @@ def _no_op_sparse_encoder(_t: str) -> dict[int, float]:
 
 
 def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
+    # Force ``enable_tracing=False`` so the test is hermetic. Without this,
+    # a developer's ``slopmortem.local.toml`` with ``enable_tracing=true``
+    # would leak through ``Config()`` and the ``trace_id`` assertion below
+    # would flip whenever a CLI-test sibling initialized Laminar in the
+    # same xdist worker.
     cfg = Config()
     return cfg.model_copy(
         update={
@@ -310,6 +315,7 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
             "model_rerank": _RERANK_MODEL,
             "model_synthesize": _SYNTH_MODEL,
             "model_consolidate": _CONSOLIDATE_MODEL,
+            "enable_tracing": False,
         }
     )
 
