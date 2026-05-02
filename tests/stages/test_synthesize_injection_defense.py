@@ -10,11 +10,10 @@ import pytest
 
 from conftest import llm_canned_key
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.llm import FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import Candidate, CandidatePayload, Facets, InputContext
+from slopmortem.stages import synthesize, synthesize_prompt_kwargs
 from slopmortem.stages import synthesize as synth_module
-from slopmortem.stages.synthesize import synthesize, synthesize_prompt_kwargs
 from slopmortem.tracing.events import SpanEvent
 
 _DEFAULT_MODEL = "test-synth-model"

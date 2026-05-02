@@ -3,9 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 
-from slopmortem.corpus.disk import write_canonical_atomic, write_raw_atomic
-from slopmortem.corpus.merge import MergeJournal
-from slopmortem.corpus.reconcile import DRIFT_CLASSES, reconcile
+from slopmortem.corpus import (
+    DRIFT_CLASSES,
+    MergeJournal,
+    reconcile,
+    write_canonical_atomic,
+    write_raw_atomic,
+)
 
 
 def _text_id(canonical_id: str) -> str:

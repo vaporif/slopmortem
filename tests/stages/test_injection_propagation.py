@@ -12,15 +12,15 @@ from datetime import date
 import pytest
 
 from slopmortem.config import Config
-from slopmortem.llm.fake import FakeLLMClient, NoCannedResponseError
+from slopmortem.llm import FakeLLMClient, NoCannedResponseError
 from slopmortem.models import (
     PerspectiveScore,
     SimilarityScores,
     Synthesis,
     TopRisks,
 )
+from slopmortem.stages import consolidate_risks
 from slopmortem.stages import consolidate_risks as cr_module
-from slopmortem.stages.consolidate_risks import consolidate_risks
 from slopmortem.tracing.events import SpanEvent
 
 _MODEL = "test-consolidate-model"

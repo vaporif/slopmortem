@@ -7,9 +7,8 @@ from datetime import UTC, datetime
 import pytest
 import pytest_asyncio
 
-from slopmortem.corpus.entity_resolution import resolve_entity
-from slopmortem.corpus.merge import MergeJournal
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
+from slopmortem.corpus import MergeJournal, resolve_entity
+from slopmortem.llm import FakeEmbeddingClient
 from slopmortem.models import AliasEdge, MergeState, RawEntry
 
 
