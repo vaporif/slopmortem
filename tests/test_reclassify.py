@@ -6,8 +6,7 @@ import sqlite3
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
-from slopmortem.corpus.merge import MergeJournal
-from slopmortem.corpus.reclassify import reclassify_quarantined
+from slopmortem.corpus import MergeJournal, reclassify_quarantined
 
 if TYPE_CHECKING:
     from pathlib import Path

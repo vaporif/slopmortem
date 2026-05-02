@@ -18,7 +18,7 @@ import inspect
 
 from slopmortem.corpus import tools_impl
 from slopmortem.corpus.tools_impl import get_post_mortem, search_corpus
-from slopmortem.llm.tools import to_openai_input_schema
+from slopmortem.llm import to_openai_input_schema
 
 BANNED_MODULES = frozenset({"subprocess"})
 BANNED_ATTRS = frozenset({("os", "system"), ("shutil", "rmtree"), ("shutil", "copy")})

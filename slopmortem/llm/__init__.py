@@ -26,6 +26,7 @@ from slopmortem.llm.fake_embeddings import FakeEmbeddingClient as FakeEmbeddingC
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient as FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import (
     EMBED_DIMS as EMBED_DIMS,
+    OPENAI_EMBED_MODELS as OPENAI_EMBED_MODELS,
     OpenAIEmbeddingClient as OpenAIEmbeddingClient,
 )
 from slopmortem.llm.openrouter import (
@@ -56,6 +57,7 @@ __all__ = [
     "LLMClient",
     "NoCannedEmbeddingError",
     "NoCannedResponseError",
+    "OPENAI_EMBED_MODELS",
     "OpenAIEmbeddingClient",
     "OpenRouterClient",
     "embed_cassette_key",
