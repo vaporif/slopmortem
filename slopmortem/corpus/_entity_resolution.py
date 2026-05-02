@@ -1,18 +1,12 @@
 # pyright: reportAny=false
 """Entity resolution: tier-1, tier-2, tier-3 canonical_id derivation.
 
-``resolve_entity`` returns a :class:`ResolveResult` with the chosen
-canonical_id, the action (``create`` / ``merge`` / ``resolver_flipped`` /
-``alias_blocked``), and any span events the caller should emit.
-
 Tiered IDs:
 
 - Tier 1: registrable_domain (via ``tldextract``). Demoted if the domain is
-  on the CODEOWNERS-protected ``platform_domains.yml`` blocklist, or if a
-  recycled-domain founding-year delta or parent/subsidiary suffix delta
-  forces demotion.
-- Tier 2: ``{normalized_name}::{sector}``. Used when tier 1 is demoted or
-  blocked.
+  on ``platform_domains.yml``, or recycled-domain founding-year delta /
+  parent/subsidiary suffix delta forces demotion.
+- Tier 2: ``{normalized_name}::{sector}``.
 - Tier 3: dense-embedding cosine similarity against the existing tier-2
   canonical, with a Haiku tiebreaker inside the calibration band
   ``[0.65, 0.85]``.
@@ -468,19 +462,13 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     force_similarity: float | None = None,
     tiebreaker_max_tokens: int | None = None,
 ) -> ResolveResult:
-    """Resolve *entry* to a canonical_id, returning a typed result.
+    """Resolve *entry* to a canonical_id.
 
-    Behavioral notes worth keeping near the signature:
-
-    - ``alias_hint``: when set (e.g. founder blog mentions "we became X"), the
-      resolver writes the alias edge atomically with an ``alias_blocked``
-      journal row and short-circuits.
-    - ``founding_year``: drives the recycled-domain check
-      (same registrable_domain + founding_year delta > 10).
-    - ``llm_client``: only required for in-band tier-3 calls. ``None`` is fine
-      outside the band.
-    - ``force_similarity``: test-only escape hatch; skips the embedding cosine
-      and uses the value directly.
+    - ``alias_hint`` set → alias edge + ``alias_blocked`` journal row written
+      atomically; short-circuits.
+    - ``founding_year`` drives the recycled-domain check (delta > 10).
+    - ``llm_client`` only required for in-band tier-3 calls.
+    - ``force_similarity`` is a test-only escape hatch.
 
     Sqlite or LLM exceptions propagate after the journal transaction rolls
     back (see :meth:`MergeJournal.upsert_alias_blocked`).

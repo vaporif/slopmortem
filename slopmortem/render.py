@@ -1,15 +1,10 @@
-"""Pure markdown renderer for :class:`Report`. No I/O. Text-in, text-out.
+"""Pure markdown renderer for :class:`Report`.
 
-Defense-in-depth output filter: clickable autolinks (``[txt](url)`` and
-reference-style ``[txt][ref]``) and image markdown (``![alt](url)``) are
-stripped from prose fields so the rendered output can't embed a one-click
-attacker URL or an exfil pixel. Sources render as plain text; the user has
-to copy-paste.
-
-The synthesize-stage URL allowlist already drops off-allowlist hosts before
-data reaches here. This module is the second line of defense for
-markdown-rendered prose that didn't pass through that filter (e.g.
-``where_diverged`` text).
+Strips clickable links and images from prose fields as a second line of
+defense behind the synthesize-stage URL allowlist — prose like
+``where_diverged`` doesn't pass through that filter, and a one-click
+attacker URL or exfil pixel in the rendered output is unacceptable.
+Sources render as plain text.
 """
 
 from __future__ import annotations

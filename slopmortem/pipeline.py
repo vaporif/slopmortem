@@ -1,17 +1,9 @@
-"""Top-level orchestration: ``run_query`` wires every stage of the pipeline.
+"""Pipeline orchestration. All side-effecting deps injected; CLI wires them up.
 
-Pure library code: no I/O, no stderr, no file access, no outbound HTTP. Every
-side-effecting capability is injected (LLM client, embedding client, Corpus,
-Budget, optional progress callback). The CLI in ``slopmortem.cli`` builds those
-deps and calls ``run_query``.
-
-Failure model:
-- A :class:`BudgetExceededError` from any stage truncates the run. Whatever
-  Synthesis values had accumulated up to that point come back in the final
-  :class:`Report` with ``budget_exceeded=True``.
-- Per-candidate synthesis failures do NOT abort the run. ``synthesize_all``
-  swallows them as exception entries; we filter those out so ``Report.candidates``
-  only carries successes.
+``BudgetExceededError`` truncates the run and returns a partial
+:class:`Report` with ``budget_exceeded=True``. Per-candidate synthesis
+failures don't abort — ``synthesize_all`` returns them as exception entries
+which we drop before populating ``Report.candidates``.
 """
 
 from __future__ import annotations

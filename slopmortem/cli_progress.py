@@ -1,12 +1,4 @@
-"""Reusable Rich progress display shared by the ingest, query, and recording CLIs.
-
-Holds a generic :class:`RichPhaseProgress` parametrized over a :class:`StrEnum`
-of phase keys plus the :class:`BarColumn` / :class:`MofNCompleteColumn` /
-:class:`TimeRemainingColumn` variants the progress widget composes. Three call
-sites consume it (``slopmortem ingest``, ``slopmortem query``, the eval
-recorders), so it lives outside ``cli.py`` to avoid the import-from-private
-smell across packages.
-"""
+"""Rich progress display shared by ingest, query, and the eval recorders."""
 
 from __future__ import annotations
 

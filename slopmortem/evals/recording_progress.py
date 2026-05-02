@@ -1,10 +1,8 @@
 """Progress Protocol for the eval cassette recorder.
 
-One phase task: ``ROWS`` (per-input outer loop). Inner ``run_query`` phases —
-facet/embed/rerank/synthesize — collapse onto it as transient status suffix
-ticks via :class:`_AggregateProgressBridge` in ``recording_helper``. Live
-spend is surfaced through per-row log lines and the post-run footer panel,
-not a dedicated bar.
+Single phase task ``ROWS``: inner ``run_query`` phases collapse onto it as
+transient status ticks via :class:`_AggregateProgressBridge` in
+``recording_helper``.
 """
 
 from __future__ import annotations
@@ -21,11 +19,7 @@ class RecordPhase(StrEnum):
 
 @runtime_checkable
 class RecordProgress(Protocol):
-    """Phase-level progress hooks for the eval cassette recorder.
-
-    Default :class:`NullRecordProgress` keeps the recorder decoupled from any
-    UI library; the runner wires a Rich implementation.
-    """
+    """Phase-level progress hooks; :class:`NullRecordProgress` decouples the recorder from any UI."""
 
     def start_phase(self, phase: RecordPhase, total: int | None) -> None: ...
 

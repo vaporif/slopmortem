@@ -1,15 +1,8 @@
 """Union-find over alias edges to dedupe canonicals belonging to one lifecycle.
 
-Retrieve emits parent-collapsed candidates (one per ``canonical_id``), but an
-M&A, rebrand, or pivot can leave two canonicals for what's really one
-lifecycle. The ``aliases`` SQLite table (see :mod:`slopmortem.corpus._merge`)
-records those lineage edges. This helper groups candidates into connected
-components and returns the top-scoring representative per component, with the
-other canonicals stashed on its ``alias_canonicals`` list.
-
-Pure Python, no I/O. Callers fetch alias edges however they like (per-id
-calls to :meth:`MergeJournal.fetch_aliases` or a one-shot scan of the
-``aliases`` table) and pass them in.
+M&A, rebrand, or pivot leaves two canonicals for one lifecycle; the ``aliases``
+SQLite table (see :mod:`slopmortem.corpus._merge`) records the lineage edges.
+Pure Python, no I/O — callers pass edges in.
 """
 
 from __future__ import annotations
@@ -44,9 +37,7 @@ def collapse_alias_components(
     """Collapse alias-connected candidates to one representative per component.
 
     *candidates* must arrive in descending-score order — the head of each
-    component becomes the representative; the other canonicals get appended
-    to its ``alias_canonicals`` list. Edges referencing canonicals outside
-    *candidates* are no-ops.
+    component becomes the representative.
     """
     if not candidates:
         return []

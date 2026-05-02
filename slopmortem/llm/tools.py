@@ -58,13 +58,9 @@ def to_strict_response_schema(
 ) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
     """Emit a ``response_format.json_schema.schema`` payload for OpenAI strict mode.
 
-    Pydantic v2 omits defaulted fields (including ``T | None = None``) from
-    ``required``. OpenAI strict mode wants every property in ``required``;
-    nullability gets expressed via ``anyOf:[T,null]`` instead. This helper
-    inlines ``$ref`` / ``$defs``, strips draft metadata, and adds every
-    top-level property (and every nested object's properties) to
-    ``required``. The ``anyOf:[T,null]`` shape is preserved as-is. Idempotent:
-    models without Optional defaults round-trip unchanged.
+    Pydantic v2 drops defaulted fields from ``required``; OpenAI strict mode
+    wants every property required and expects nullability as ``anyOf:[T,null]``.
+    This bridges that gap.
     """
     schema = model.model_json_schema()
     inlined = jsonref.replace_refs(schema, proxies=False, lazy_load=False)

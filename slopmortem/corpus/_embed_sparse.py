@@ -1,10 +1,9 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-"""BM25 sparse embedder, a wrapper around :mod:`fastembed`.
+"""BM25 sparse embedder wrapping :mod:`fastembed`.
 
-The Qdrant collection needs ``Modifier.IDF`` for the fastembed BM25 model;
-without IDF, sparse retrieval falls back to raw token-frequency matching.
-The model loads lazily on the first ``encode`` call so ONNX startup doesn't
-dominate test collection time.
+The Qdrant collection needs ``Modifier.IDF`` — without it sparse retrieval
+falls back to raw token-frequency matching. Model loads lazily so ONNX
+startup doesn't dominate test collection.
 """
 
 from __future__ import annotations

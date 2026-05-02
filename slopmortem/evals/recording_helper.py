@@ -1,9 +1,4 @@
-"""Record cassettes for a set of inputs end to end.
-
-Handles the ephemeral Qdrant lifecycle, the recording wrappers, the two-step
-atomic dir swap, and forces Tavily off. Test authors call this when they want
-a per-test cassette set without re-implementing the plumbing.
-"""
+"""End-to-end cassette recording: ephemeral Qdrant, recording wrappers, atomic dir swap, Tavily forced off."""
 
 from __future__ import annotations
 
@@ -47,21 +42,13 @@ if TYPE_CHECKING:
 _DEFAULT_MAX_COST_USD = 2.0
 _STALE_TMP_SECONDS = 24 * 3600
 _DEFAULT_MAX_CONCURRENT_ROWS = 3
-# Per-row pipeline emits one advance for FACET_EXTRACT, RETRIEVE, RERANK each,
-# plus up to ``N_synthesize`` for SYNTHESIZE. Used to size the aggregate bar so
-# percentage tracks subtask completion, not just row coarse counts.
+# FACET_EXTRACT + RETRIEVE + RERANK; ``N_synthesize`` more get added per row.
 _FIXED_TICKS_PER_ROW = 3
 
 
 @dataclass(frozen=True, slots=True)
 class RecordResult:
-    """Aggregate counters for one ``record_cassettes_for_inputs`` invocation.
-
-    Internal result type the runner consumes for the post-run footer. Counts
-    are computed during the run (rows attempted/succeeded, cassettes written
-    to disk after each successful atomic swap) and the running USD spend is
-    forwarded from the per-call ``on_cost`` hook.
-    """
+    """Aggregate counters for one ``record_cassettes_for_inputs`` invocation."""
 
     rows_total: int
     rows_succeeded: int
@@ -70,11 +57,7 @@ class RecordResult:
 
 
 def _sweep_stale_recording_dirs(root: Path, *, max_age_seconds: int) -> None:
-    """Remove ``*.recording`` dirs older than ``max_age_seconds`` under ``root``.
-
-    Best-effort. Any stat/rm failure is swallowed. Silently no-op when
-    ``root`` doesn't exist yet.
-    """
+    """Best-effort: remove ``*.recording`` dirs under ``root`` older than ``max_age_seconds``."""
     if not root.exists():
         return
     cutoff = time.time() - max_age_seconds
@@ -87,16 +70,8 @@ def _sweep_stale_recording_dirs(root: Path, *, max_age_seconds: int) -> None:
 
 
 def _atomic_swap(*, tmp_dir: Path, real_dir: Path) -> None:
-    """Two-step rename: real → real.old, tmp → real, rmtree real.old.
-
-    POSIX ``rename(2)`` needs an empty destination, so pre-rename the
-    existing real_dir out of the way before moving the tmp dir in. A SIGKILL
-    between the two replaces leaves either real_dir intact under ``.old`` or
-    the new dir under real_dir — never a half-populated tmp_dir under the
-    canonical name.
-    """
+    """Two-step rename so a SIGKILL leaves either ``real_dir`` or ``real_dir.old`` intact, never a half-written canonical dir."""
     old = real_dir.parent / (real_dir.name + ".old")
-    # Idempotent cleanup of any leftover ``.old`` from a prior crash.
     if old.exists():
         shutil.rmtree(old, ignore_errors=True)
     if real_dir.exists():
@@ -125,21 +100,13 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
 ) -> RecordResult:
     """Record cassettes for every input in ``inputs`` under ``output_dir/<scope>/``.
 
-    Rows run in parallel under an ``anyio.CapacityLimiter(max_concurrent_rows)``
-    so a 10-row run finishes in ~``ceil(N/limit)`` row-times. Per-row deps
-    (Budget, OpenRouterClient, embedder) are shared across rows; per-row
-    cost ceilings are enforced by the recording wrappers' ``max_cost_usd``.
-    Failed rows clean their tmp dirs; the first failure re-raises after
-    every other row settles. Default ``max_concurrent_rows=3`` keeps total
-    in-flight Sonnet calls (~``limit * (3 + N_synthesize)``) under typical
-    OpenRouter per-key rate limits. The helper forces
-    ``enable_tavily_synthesis=False``.
+    Rows run under ``CapacityLimiter(max_concurrent_rows)``; the default
+    keeps in-flight Sonnet calls under typical OpenRouter per-key limits.
+    Failed rows clean their tmp dirs; the first failure re-raises after the
+    others settle. Tavily is forced off.
     """
-    # Lazy imports so import-time cycles stay cheap.
+    # Lazy: ``runner`` imports back into this module.
     from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
-
-    # Lazy import: the runner imports back into this module, so a top-level
-    # import would cycle at process start.
     from slopmortem.evals.runner import (  # noqa: PLC0415
         _row_id,  # pyright: ignore[reportPrivateUsage]
     )
@@ -164,11 +131,9 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             qdrant_url=qdrant_url,
         ) as corpus:
             set_query_corpus(corpus)
-            # Shared deps: SDK, Budget, OpenRouterClient, embedder. Per-row
-            # spend caps are enforced by each per-stage RecordingLLMClient
-            # via its own ``max_cost_usd``; the inner Budget is sized to the
-            # worst-case run total so a single shared instance never starves
-            # a row mid-stage.
+            # Shared Budget sized to the worst-case run total so it never
+            # starves a row; per-row caps are enforced by each
+            # ``RecordingLLMClient`` via its own ``max_cost_usd``.
             budget = Budget(
                 cap_usd=max(
                     cfg.max_cost_usd_per_query,
@@ -195,10 +160,8 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             async def _record_row(ctx: InputContext) -> None:
                 nonlocal cassettes_written, rows_succeeded
                 async with limiter:
-                    # Share the directory-naming function with the replay path
-                    # (`slopmortem.evals.runner._row_id`) so anonymous inputs
-                    # (`ctx.name == ""`) write to the same `<sha1[:8]>` dir
-                    # that replay reads from.
+                    # Share dir naming with replay (``runner._row_id``) so
+                    # anonymous inputs hit the same ``<sha1[:8]>`` slot.
                     scope_name = _row_id(ctx)
                     real_dir = output_dir / scope_name
                     tmp_dir = (
@@ -231,10 +194,6 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
                             max_cost_usd=max_cost_usd,
                             on_cost=_on_cost,
                         )
-                        # Each stage uses a different `model` (`model_facet`,
-                        # `model_rerank`, `model_synthesize`); the router
-                        # dispatches based on the `model=` kwarg the stage
-                        # already supplies, so no extra plumbing is needed.
                         routed_llm = _ByModelLLM(
                             {
                                 cfg.model_facet: rec_llm_facet,
@@ -266,8 +225,6 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
                         raise
                     else:
                         _atomic_swap(tmp_dir=tmp_dir, real_dir=real_dir)
-                        # Recording wrappers write flat under real_dir, so a
-                        # non-recursive glob counts every cassette this row wrote.
                         n_cassettes = len(list(real_dir.glob("*.json")))
                         cassettes_written += n_cassettes
                         rows_succeeded += 1
@@ -275,9 +232,6 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
                         bridge.top_up()
 
             results = await gather_resilient(*(_record_row(ctx) for ctx in inputs))
-            # Surface the first exception so partial-failure runs still error
-            # out. Successful rows have already atomic-swapped their cassette
-            # dirs and stay on disk.
             for r in results:
                 if isinstance(r, BaseException):
                     raise r
@@ -308,12 +262,7 @@ class _ByModelLLM:
         extra_body: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         max_tokens: int | None = None,
     ) -> CompletionResult:
-        """Forward ``complete`` to the wrapper keyed by ``model``.
-
-        Raises:
-            KeyError: When ``model`` is ``None`` or not in the dispatch table.
-                Callers must always pass an explicit model.
-        """
+        """Forward ``complete`` to the wrapper keyed by ``model`` (raises ``KeyError`` if unmapped)."""
         if model is None or model not in self._by_model:
             msg = f"no recording wrapper for model={model!r}"
             raise KeyError(msg)
@@ -330,19 +279,12 @@ class _ByModelLLM:
 
 
 class _AggregateProgressBridge:
-    """Funnel one row's inner :class:`QueryPhase` advances into the shared ROWS bar.
+    """Funnel one row's :class:`QueryPhase` advances into the shared ROWS bar.
 
-    Each parallel row gets its own bridge; every bridge advances the same
-    ``RecordPhase.ROWS`` task on the shared :class:`RecordProgress` sink. The
-    sink's total is pre-summed at the helper level as
-    ``len(inputs) * (3 + N_synthesize)``, so the percentage tracks subtask
-    completion instead of stepping in row-sized chunks. Inline phase detail
-    (``set_phase_status``) is dropped under parallel mode — concurrent rows
-    posting to one status line would race and produce gibberish.
-
-    Rows that retrieve fewer than ``N_synthesize`` candidates fire fewer
-    SYNTHESIZE advances than budgeted; :meth:`top_up` settles the difference
-    at row completion so the bar always reaches its declared total.
+    The sink's total is pre-summed across rows so percentage tracks subtask
+    completion. Inline ``set_phase_status`` is dropped under parallel mode
+    (concurrent rows would race the status line). :meth:`top_up` settles
+    rows that fire fewer SYNTHESIZE advances than budgeted.
     """
 
     def __init__(self, sink: RecordProgress, ticks_per_row: int) -> None:
@@ -351,7 +293,6 @@ class _AggregateProgressBridge:
         self._ticked = 0
 
     def start_phase(self, phase: QueryPhase, total: int) -> None:
-        # Phase totals are pre-summed at the helper level.
         del phase, total
 
     def advance_phase(self, phase: QueryPhase, n: int = 1) -> None:
@@ -366,19 +307,16 @@ class _AggregateProgressBridge:
         del phase
 
     def set_phase_status(self, phase: QueryPhase, status: str | None) -> None:
-        # Inline detail would race across rows under parallel mode.
         del phase, status
 
     def log(self, message: str) -> None:
         self._sink.log(message)
 
     def error(self, phase: QueryPhase, message: str) -> None:
-        # Attribute to ROWS since inner phases have no task in parallel mode.
         del phase
         self._sink.error(RecordPhase.ROWS, message)
 
     def top_up(self) -> None:
-        # Advance ticks the row didn't fire so the bar reaches its declared total.
         remaining = self._ticks_per_row - self._ticked
         if remaining > 0:
             self._sink.advance_phase(RecordPhase.ROWS, remaining)

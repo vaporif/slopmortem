@@ -1,23 +1,5 @@
 r"""Eval runner: drive a JSONL dataset through the pipeline and diff against a baseline.
 
-Usage:
-    python -m slopmortem.evals.runner --dataset PATH --baseline PATH \
-        [--live] [--record] [--write-baseline]
-
-Modes:
-    DEFAULT (cassettes): FakeLLMClient + FakeEmbeddingClient backed by
-        committed cassettes under tests/fixtures/cassettes/evals/<row_id>/,
-        plus an ephemeral Qdrant collection seeded from
-        tests/fixtures/corpus_fixture.jsonl. Requires a running Qdrant
-        instance on localhost:6333. This is what `just eval` and CI run.
-    --live: real production deps via slopmortem.cli._common._build_deps. Operator-
-        invoked, out of CI scope. Costs real money.
-    --record: re-record cassettes against the live API. Calls
-        record_cassettes_for_inputs() with --max-cost-usd as the ceiling.
-    --scope <row_id>: restrict record or replay to one row. Unknown scopes
-        exit 2 with a usage error before any pipeline call.
-    --write-baseline: write the current run's results to --baseline.
-
 Baseline JSON shape (normative)::
 
     {

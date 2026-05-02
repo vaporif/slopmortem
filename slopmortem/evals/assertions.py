@@ -1,16 +1,9 @@
-"""Pure assertions over a Synthesis, used by the eval runner.
+"""Pure predicates over a Synthesis. Eval runner owns regression semantics.
 
-Regression semantics live in the runner module docstring; these functions
-are just the predicates.
-
-These functions are pure: no I/O, no async, no module-level state. The
-runner constructs the allowed_hosts set itself, because the read-side
-Corpus Protocol does not expose payload.sources.
-
-claims_grounded_in_body requires the candidate body. In --live mode the
-public Corpus Protocol does not expose bodies, so the runner emits True
-vacuously (mirroring how all_sources_in_allowed_domains collapses to the
-fixed allowlist there).
+In ``--live`` mode the Corpus Protocol exposes neither payload sources nor
+bodies, so the runner skips ``all_sources_in_allowed_domains`` /
+``claims_grounded_in_body`` (they'd vacuously pass) and constructs the
+allowlist itself.
 """
 
 from __future__ import annotations
@@ -64,10 +57,9 @@ _NUMERIC_CLAIM_RE = re.compile(
 
 
 def claims_grounded_in_body(s: Synthesis, body: str) -> bool:
-    """True iff every numeric-looking claim in s appears verbatim in body.
+    """True iff every numeric-looking claim in ``s`` appears verbatim in ``body``.
 
-    Scans why_similar and the four similarity.*.rationale strings. False
-    positives are tolerated; re-record the baseline when the rule
+    Tolerant of false positives; re-record the baseline if the rule
     legitimately disagrees.
     """
     rationales = (

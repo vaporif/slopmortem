@@ -1,11 +1,7 @@
-"""Rich UI for the eval cassette recorder: phase progress + post-run footer panel.
+"""Rich UI for the eval cassette recorder.
 
-:class:`RichRecordProgress` wraps the shared :class:`RichPhaseProgress` widget
-with the recorder's phase labels. :func:`render_record_footer` mirrors the
-shape of ``slopmortem.cli._render_query_footer`` — same border style, same
-`` • ``-joined facts — so the recorder's done state reads consistently with
-the query CLI. Live spend is surfaced via per-row log lines and the footer;
-no dedicated bar.
+:func:`render_record_footer` mirrors ``slopmortem.cli._render_query_footer``
+so recorder and query CLI report consistently.
 """
 
 from __future__ import annotations
