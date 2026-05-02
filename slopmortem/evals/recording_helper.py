@@ -32,8 +32,7 @@ from slopmortem.evals.recording_progress import (
     RecordPhase,
     RecordProgress,
 )
-from slopmortem.llm.embedding_factory import make_embedder
-from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.llm import OpenRouterClient, make_embedder
 from slopmortem.pipeline import QueryPhase, run_query
 
 if TYPE_CHECKING:
@@ -41,7 +40,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from slopmortem.config import Config
-    from slopmortem.llm.client import CompletionResult
+    from slopmortem.llm import CompletionResult
     from slopmortem.models import InputContext
 
 
@@ -153,7 +152,7 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
         feeds these straight into ``render_record_footer``.
     """
     # Lazy imports so import-time cycles stay cheap.
-    from slopmortem.corpus.tools_impl import _set_corpus  # noqa: PLC0415
+    from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
 
     # Lazy import: the runner imports back into this module, so a top-level
     # import would cycle at process start.
@@ -180,7 +179,7 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point
             corpus_fixture_path,
             qdrant_url=qdrant_url,
         ) as corpus:
-            _set_corpus(corpus)
+            set_query_corpus(corpus)
             # Shared deps: SDK, Budget, OpenRouterClient, embedder. Per-row
             # spend caps are enforced by each per-stage RecordingLLMClient
             # via its own ``max_cost_usd``; the inner Budget is sized to the

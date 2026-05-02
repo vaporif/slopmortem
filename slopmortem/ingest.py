@@ -52,13 +52,19 @@ from lmnr import Laminar, observe
 
 from slopmortem._time import utcnow_iso
 from slopmortem.concurrency import gather_resilient
-from slopmortem.corpus.chunk import CHUNK_STRATEGY_VERSION, chunk_markdown
-from slopmortem.corpus.disk import write_canonical_atomic, write_raw_atomic
-from slopmortem.corpus.entity_resolution import resolve_entity
-from slopmortem.corpus.extract import extract_clean
-from slopmortem.corpus.merge_text import Section, combined_hash, combined_text
-from slopmortem.corpus.paths import safe_path
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
+from slopmortem.corpus import (
+    CHUNK_STRATEGY_VERSION,
+    Section,
+    chunk_markdown,
+    combined_hash,
+    combined_text,
+    extract_clean,
+    resolve_entity,
+    safe_path,
+    write_canonical_atomic,
+    write_raw_atomic,
+)
+from slopmortem.llm import prompt_template_sha, render_prompt
 from slopmortem.models import (
     CandidatePayload,
     Facets,
@@ -72,10 +78,9 @@ if TYPE_CHECKING:
 
     from slopmortem.budget import Budget
     from slopmortem.config import Config
-    from slopmortem.corpus.merge import MergeJournal
-    from slopmortem.corpus.sources.base import Enricher, Source
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.corpus import MergeJournal
+    from slopmortem.corpus.sources import Enricher, Source
+    from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import RawEntry
 
 # Sparse encoder shape: Callable[[text], {token_id: weight}].
@@ -492,7 +497,7 @@ async def _facet_call(
 ) -> Facets:
     # ValidationError from strict-mode parsing propagates up to the per-entry
     # isolator in ``ingest()`` so one bad doc doesn't kill the run.
-    from slopmortem.stages.facet_extract import extract_facets  # noqa: PLC0415
+    from slopmortem.stages import extract_facets  # noqa: PLC0415
 
     return await extract_facets(text, llm, model, max_tokens=max_tokens)
 

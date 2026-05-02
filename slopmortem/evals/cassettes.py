@@ -19,19 +19,20 @@ from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
-from slopmortem.llm.cassettes import (
+from slopmortem.llm import (
+    FakeEmbeddingClient,
+    FakeLLMClient,
+    FakeResponse,
     NoCannedEmbeddingError as NoCannedEmbeddingError,  # noqa: PLC0414 - explicit re-export for back-compat
+    embed_cassette_key,
 )
-from slopmortem.llm.cassettes import embed_cassette_key
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from slopmortem.config import Config
-    from slopmortem.llm.fake import CompletionResult
+    from slopmortem.llm import CompletionResult
 
 
 _SCHEMA_MAJOR = 1

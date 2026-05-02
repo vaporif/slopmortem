@@ -16,8 +16,12 @@ from typing import TYPE_CHECKING, Any
 from lmnr import Laminar
 
 from slopmortem.concurrency import gather_resilient
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
-from slopmortem.llm.tools import synthesis_tools, to_strict_response_schema
+from slopmortem.llm import (
+    prompt_template_sha,
+    render_prompt,
+    synthesis_tools,
+    to_strict_response_schema,
+)
 from slopmortem.models import LLMSynthesis, Synthesis
 from slopmortem.tracing.events import SpanEvent
 
@@ -25,7 +29,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from slopmortem.config import Config
-    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm import LLMClient
     from slopmortem.models import Candidate, InputContext
 
 

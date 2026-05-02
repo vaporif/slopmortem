@@ -18,9 +18,11 @@ if TYPE_CHECKING:
 
 
 async def gather_resilient[T](*aws: Awaitable[T]) -> list[T | Exception]:
-    """``Exception``s are returned in-list; ``BaseException`` subclasses
-    (``KeyboardInterrupt``, ``SystemExit``, ``CancelledError``, cassette-miss
-    errors) re-raise so they aren't absorbed as a dropped candidate.
+    """Run *aws* concurrently; per-task ``Exception``s are returned, never raised.
+
+    ``BaseException`` subclasses (``KeyboardInterrupt``, ``SystemExit``,
+    ``CancelledError``, cassette-miss errors) re-raise so they aren't
+    absorbed as a dropped candidate.
     """
     results = await asyncio.gather(*aws, return_exceptions=True)
     for r in results:

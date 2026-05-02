@@ -6,12 +6,11 @@ from typing import TYPE_CHECKING
 
 from lmnr import observe
 
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
-from slopmortem.llm.tools import to_strict_response_schema
+from slopmortem.llm import prompt_template_sha, render_prompt, to_strict_response_schema
 from slopmortem.models import Facets
 
 if TYPE_CHECKING:
-    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm import LLMClient
 
 
 @observe(name="stage.facet_extract")

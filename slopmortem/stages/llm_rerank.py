@@ -7,13 +7,12 @@ from typing import TYPE_CHECKING
 from lmnr import Laminar, observe
 
 from slopmortem.errors import RerankLengthError
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
-from slopmortem.llm.tools import to_strict_response_schema
+from slopmortem.llm import prompt_template_sha, render_prompt, to_strict_response_schema
 from slopmortem.models import LlmRerankResult
 
 if TYPE_CHECKING:
     from slopmortem.config import Config
-    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm import LLMClient
     from slopmortem.models import Candidate, Facets
 
 

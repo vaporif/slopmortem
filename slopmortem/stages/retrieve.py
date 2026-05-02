@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from slopmortem.corpus.store import Corpus
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.llm import EmbeddingClient
     from slopmortem.models import Candidate, Facets
 
 type SparseEncoder = Callable[[str], dict[int, float]]

@@ -27,11 +27,13 @@ from lmnr import Laminar, observe
 
 from slopmortem.budget import BudgetExceededError
 from slopmortem.models import PipelineMeta, Report, Synthesis, TopRisks
-from slopmortem.stages.consolidate_risks import consolidate_risks
-from slopmortem.stages.facet_extract import extract_facets
-from slopmortem.stages.llm_rerank import llm_rerank
-from slopmortem.stages.retrieve import retrieve
-from slopmortem.stages.synthesize import synthesize_all
+from slopmortem.stages import (
+    consolidate_risks,
+    extract_facets,
+    llm_rerank,
+    retrieve,
+    synthesize_all,
+)
 from slopmortem.tracing import git_sha, mint_run_id
 from slopmortem.tracing.events import SpanEvent
 
@@ -39,8 +41,7 @@ if TYPE_CHECKING:
     from slopmortem.budget import Budget
     from slopmortem.config import Config
     from slopmortem.corpus.store import Corpus
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import Candidate, InputContext, ScoredCandidate, SimilarityScores
     from slopmortem.stages.retrieve import SparseEncoder
 

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from qdrant_client import AsyncQdrantClient
 
-from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
+from slopmortem.corpus import QdrantCorpus, ensure_collection
 from slopmortem.evals.corpus_fixture import restore_jsonl_to_collection
 
 if TYPE_CHECKING:

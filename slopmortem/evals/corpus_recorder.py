@@ -36,16 +36,13 @@ from rich.table import Table
 from slopmortem.budget import Budget
 from slopmortem.cli_progress import RichPhaseProgress
 from slopmortem.config import load_config
-from slopmortem.corpus.merge import MergeJournal
-from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
-from slopmortem.corpus.sources.curated import CuratedSource
+from slopmortem.corpus import MergeJournal, QdrantCorpus, ensure_collection
+from slopmortem.corpus.sources import CuratedSource
 from slopmortem.ingest import INGEST_PHASE_LABELS, HaikuSlopClassifier, IngestPhase, ingest
-from slopmortem.llm.embedding_factory import make_embedder
-from slopmortem.llm.openai_embeddings import EMBED_DIMS
-from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.llm import EMBED_DIMS, OpenRouterClient, make_embedder
 
 if TYPE_CHECKING:
-    from slopmortem.corpus.sources.base import Enricher
+    from slopmortem.corpus.sources import Enricher
     from slopmortem.ingest import Corpus as IngestCorpus
     from slopmortem.ingest import IngestResult
 
