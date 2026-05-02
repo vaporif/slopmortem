@@ -470,35 +470,20 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
 ) -> ResolveResult:
     """Resolve *entry* to a canonical_id, returning a typed result.
 
-    Args:
-        entry: The raw scraped document (URL + bytes + (source, source_id)).
-        journal: Merge journal (reverse-index, alias write, founding-year cache).
-        embed_client: Embeds the new entry's name + body head for tier-3 fuzzy.
-        name: Pre-extracted entity name. Caller (ingest, Task 5b) pulls this
-            via Haiku.
-        sector: Pre-extracted sector facet. Forms tier-2 ids.
-        founding_year: Pre-extracted founding year, if known. Drives
-            recycled-domain detection.
-        alias_hint: When set (e.g. founder blog mentions "we became X"), the
-            resolver writes the alias edge atomically with an
-            ``alias_blocked`` journal row and short-circuits.
-        llm_client: Only required for in-band tier-3 calls. Outside the band
-            the resolver auto-decides; ``None`` is fine if the band is never
-            entered.
-        haiku_model_id: Model id for the tier-3 tiebreaker.
-        tier3_band: Calibration band for the tier-3 tiebreaker.
-        force_similarity: Test-only. Skips the embedding cosine and uses
-            this value directly.
-        tiebreaker_max_tokens: Optional cap on completion tokens for the
-            tier-3 Haiku tiebreaker. ``None`` keeps the client's default.
+    Behavioral notes worth keeping near the signature:
 
-    Returns:
-        :class:`ResolveResult` with the chosen canonical_id and action.
+    - ``alias_hint``: when set (e.g. founder blog mentions "we became X"), the
+      resolver writes the alias edge atomically with an ``alias_blocked``
+      journal row and short-circuits.
+    - ``founding_year``: drives the recycled-domain check
+      (same registrable_domain + founding_year delta > 10).
+    - ``llm_client``: only required for in-band tier-3 calls. ``None`` is fine
+      outside the band.
+    - ``force_similarity``: test-only escape hatch; skips the embedding cosine
+      and uses the value directly.
 
-    Raises:
-        Exception: Any sqlite or LLM exception propagates after the journal
-            transaction rolls back (see
-            :meth:`MergeJournal.upsert_alias_blocked`).
+    Sqlite or LLM exceptions propagate after the journal transaction rolls
+    back (see :meth:`MergeJournal.upsert_alias_blocked`).
     """
     # tier-3 cache and founding-year cache live in the same sqlite file as the
     # merge journal. No public accessor on purpose — merge.py is read-only
