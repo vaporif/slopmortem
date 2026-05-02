@@ -217,10 +217,8 @@ async def _record(
             sources = [CuratedSource(yaml_path=translated_yaml)]
             enrichers: list[Enricher] = []
 
-            # TTY-gated mirror of slopmortem.cli's pattern: a piped invocation
-            # (CI, redirect-to-file) skips the Live render so log capture stays
-            # readable. Extracted gate lives in ``_make_progress_ctx`` so it can
-            # be tested without driving the rest of ``_record``.
+            # TTY-gated: piped invocations (CI, redirect-to-file) skip the Live
+            # render so log capture stays readable.
             with _make_progress_ctx() as bar:
                 result = await ingest(
                     sources=sources,
@@ -240,7 +238,7 @@ async def _record(
             out_tmp = out_path.with_suffix(out_path.suffix + ".recording")
             out_tmp.parent.mkdir(parents=True, exist_ok=True)
             await dump_collection_to_jsonl(qclient, collection_name, out_tmp)
-            os.replace(out_tmp, out_path)  # noqa: PTH105 — atomic POSIX rename
+            out_tmp.replace(out_path)
             size_bytes = out_path.stat().st_size  # noqa: ASYNC240 — last line before exit
             summary_console = bar.console if bar is not None else Console(stderr=True)
             _render_recorder_summary(

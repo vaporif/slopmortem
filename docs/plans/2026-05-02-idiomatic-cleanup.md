@@ -313,7 +313,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
 **Steps:**
 
-- [ ] **Step 1: Replace `corpus_recorder.py:243`.**
+- [x] **Step 1: Replace `corpus_recorder.py:243`.**
 
   Current:
 
@@ -329,7 +329,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   Confirm `out_tmp` is a `Path` by reading lines 240-243 (it is — `out_path.with_suffix(...)`).
 
-- [ ] **Step 2: Check whether `os` import is still needed.**
+- [x] **Step 2: Check whether `os` import is still needed.**
 
   ```
   grep -n "^import os\|os\." slopmortem/evals/corpus_recorder.py
@@ -337,11 +337,11 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   Other call sites likely keep it live (e.g. `os.environ.get("RUN_LIVE")` at line 285). Leave the import as-is unless this was the last use.
 
-- [ ] **Step 3: Verify.**
+- [x] **Step 3: Verify.**
 
   Run `just lint` (PTH105 noqa gone). Run `just test -k "corpus_recorder or recorder"`.
 
-- [ ] **Step 4: Commit.** Subject: `cleanup: Path.replace in corpus_recorder`.
+- [x] **Step 4: Commit.** Subject: `cleanup: Path.replace in corpus_recorder`.
 
 ---
 
