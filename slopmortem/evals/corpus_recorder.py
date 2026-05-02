@@ -34,12 +34,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from slopmortem.budget import Budget
-from slopmortem.cli import RichIngestProgress
+from slopmortem.cli_progress import RichPhaseProgress
 from slopmortem.config import load_config
 from slopmortem.corpus.merge import MergeJournal
 from slopmortem.corpus.qdrant_store import QdrantCorpus, ensure_collection
 from slopmortem.corpus.sources.curated import CuratedSource
-from slopmortem.ingest import HaikuSlopClassifier, ingest
+from slopmortem.ingest import HaikuSlopClassifier, IngestPhase, ingest
 from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
 from slopmortem.llm.openai_embeddings import EMBED_DIMS, OpenAIEmbeddingClient
 from slopmortem.llm.openrouter import OpenRouterClient
@@ -51,6 +51,36 @@ if TYPE_CHECKING:
     from slopmortem.llm.embedding_client import EmbeddingClient
 
 _DEFAULT_MAX_COST_USD = 1.5
+
+# Local label map mirrors slopmortem.cli._INGEST_PHASE_LABELS. Duplicated rather
+# than promoted to cli_progress.py so the generic widget stays decoupled from
+# slopmortem.ingest's phase enum; the IngestPhase key fails type-check at both
+# sites if a phase is added without a label.
+_INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
+    IngestPhase.GATHER: "Gathering entries from sources",
+    IngestPhase.CLASSIFY: "Classifying / slop-filtering",
+    IngestPhase.CACHE_WARM: "Warming prompt cache",
+    IngestPhase.FAN_OUT: "Facets + summarize fan-out",
+    IngestPhase.WRITE: "Entity-resolve / chunk / qdrant",
+}
+
+
+class _RichIngestProgress(RichPhaseProgress[IngestPhase]):
+    """Recorder-local Rich-backed ingest progress; mirrors cli.RichIngestProgress."""
+
+    def __init__(self) -> None:
+        """Build with ingest phase labels."""
+        super().__init__(_INGEST_PHASE_LABELS)
+
+
+def _make_progress_ctx() -> contextlib.AbstractContextManager[_RichIngestProgress | None]:
+    """Return the TTY-gated progress context manager used by :func:`_record`.
+
+    Piped invocations (CI, redirect-to-file) skip the Live render so log
+    capture stays readable. Extracted into a helper so the gate can be tested
+    without driving the heavy ``_record`` body end-to-end.
+    """
+    return _RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
 
 
 def _render_recorder_summary(
@@ -221,11 +251,9 @@ async def _record(
 
             # TTY-gated mirror of slopmortem.cli's pattern: a piped invocation
             # (CI, redirect-to-file) skips the Live render so log capture stays
-            # readable.
-            progress_ctx: contextlib.AbstractContextManager[RichIngestProgress | None] = (
-                RichIngestProgress() if sys.stderr.isatty() else contextlib.nullcontext()
-            )
-            with progress_ctx as bar:
+            # readable. Extracted gate lives in ``_make_progress_ctx`` so it can
+            # be tested without driving the rest of ``_record``.
+            with _make_progress_ctx() as bar:
                 result = await ingest(
                     sources=sources,
                     enrichers=enrichers,
