@@ -154,61 +154,42 @@ INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 class IngestProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem ingest``.
 
-    Methods are no-op-safe. :class:`NullProgress` is the default so the
-    orchestrator stays decoupled from any UI library; the CLI wires a Rich
-    impl. ``log`` is for neutral status lines (cache-warm result,
-    classification summary); ``error`` is for failures and the impl paints
-    those red.
+    Default :class:`NullProgress` keeps the orchestrator decoupled from any UI
+    library; the CLI wires a Rich impl. ``log`` is for neutral status lines,
+    ``error`` for failures (impl paints those red).
     """
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None:
-        """Announce *phase* with an expected ``total`` of advances.
+        """``total=None`` marks the phase indeterminate (Rich pulses; ETA blank)."""
 
-        ``total=None`` marks the phase indeterminate, for cases where the
-        producer can't know the size up front (e.g. ``GATHER`` without
-        ``--limit``). Rich renders a pulsing bar instead of a fake-totaled
-        one so the ETA column stays blank.
-        """
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None: ...
 
-    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
-        """Advance *phase*'s bar by ``n``."""
+    def end_phase(self, phase: IngestPhase) -> None: ...
 
-    def end_phase(self, phase: IngestPhase) -> None:
-        """Mark *phase* complete."""
+    def log(self, message: str) -> None: ...
 
-    def log(self, message: str) -> None:
-        """Emit a one-off status line."""
-
-    def error(self, phase: IngestPhase, message: str) -> None:
-        """Record an error against *phase*."""
+    def error(self, phase: IngestPhase, message: str) -> None: ...
 
 
 class NullProgress:
     """No-op :class:`IngestProgress` used when no display surface is attached."""
 
-    def start_phase(self, phase: IngestPhase, total: int | None) -> None:
-        """No-op."""
+    def start_phase(self, phase: IngestPhase, total: int | None) -> None: ...
 
-    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None:
-        """No-op."""
+    def advance_phase(self, phase: IngestPhase, n: int = 1) -> None: ...
 
-    def end_phase(self, phase: IngestPhase) -> None:
-        """No-op."""
+    def end_phase(self, phase: IngestPhase) -> None: ...
 
-    def log(self, message: str) -> None:
-        """No-op."""
+    def log(self, message: str) -> None: ...
 
-    def error(self, phase: IngestPhase, message: str) -> None:
-        """No-op."""
+    def error(self, phase: IngestPhase, message: str) -> None: ...
 
 
 @runtime_checkable
 class SlopClassifier(Protocol):
     """Score a document for LLM-generated-text likelihood; ``> threshold`` quarantines."""
 
-    async def score(self, text: str) -> float:
-        """Return the slop score in ``[0, 1]`` for *text*."""
-        ...
+    async def score(self, text: str) -> float: ...
 
 
 @dataclass
@@ -227,7 +208,6 @@ class InMemoryCorpus:
     points: list[_Point] = field(default_factory=list)
 
     async def upsert_chunk(self, point: object) -> None:
-        """Append the point to the in-memory list. Always succeeds."""
         if not isinstance(point, _Point):
             msg = f"InMemoryCorpus expects _Point, got {type(point).__name__}"
             raise TypeError(msg)
