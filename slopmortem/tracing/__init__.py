@@ -16,7 +16,7 @@ from uuid_extensions import uuid7str
 
 
 class TracingGuardError(RuntimeError):
-    """Raised when ``init_tracing`` refuses a tracer endpoint on policy grounds."""
+    pass
 
 
 PRIVATE_HOST_ALLOWLIST: set[str] = set()
@@ -37,7 +37,7 @@ def _all_loopback(addrs: list[str]) -> bool:
 
 
 def init_tracing(base_url: str | None = None, *, allow_remote: bool = False) -> None:
-    """Validate *base_url* before letting the tracer phone home."""
+    # Refuse non-loopback endpoints by default.
     if not base_url:
         return
     host = urlparse(base_url).hostname
