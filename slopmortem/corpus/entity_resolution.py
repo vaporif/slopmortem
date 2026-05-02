@@ -48,14 +48,13 @@ from anyio import to_thread
 
 from slopmortem._time import utcnow_iso
 from slopmortem.corpus._db import connect
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
+from slopmortem.llm import prompt_template_sha, render_prompt
 from slopmortem.models import MergeState
 from slopmortem.tracing.events import SpanEvent
 
 if TYPE_CHECKING:
     from slopmortem.corpus.merge import MergeJournal
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import AliasEdge, RawEntry
 
 

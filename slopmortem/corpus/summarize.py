@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from slopmortem.llm.prompts import prompt_template_sha, render_prompt
+from slopmortem.llm import prompt_template_sha, render_prompt
 
 if TYPE_CHECKING:
-    from slopmortem.llm.client import LLMClient
+    from slopmortem.llm import LLMClient
 
 
 async def summarize_for_rerank(
