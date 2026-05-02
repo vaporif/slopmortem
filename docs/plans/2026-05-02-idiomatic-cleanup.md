@@ -127,7 +127,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
 **Steps:**
 
-- [ ] **Step 1: Replace lines 274-279 in `slopmortem/corpus/qdrant_store.py`.**
+- [x] **Step 1: Replace lines 274-279 in `slopmortem/corpus/qdrant_store.py`.**
 
   Current code at `qdrant_store.py:274-281`:
 
@@ -162,11 +162,11 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   This preserves all-or-nothing semantics: any task raising propagates out of the task group's `__aexit__` (anyio cancels siblings), aborting the alias-collapse step exactly as `asyncio.gather` did.
 
-- [ ] **Step 2: Add `import anyio` to module-top imports of `slopmortem/corpus/qdrant_store.py`.**
+- [x] **Step 2: Add `import anyio` to module-top imports of `slopmortem/corpus/qdrant_store.py`.**
 
   Verified: `qdrant_store.py` does NOT currently import `anyio` at module top (zero matches). Add `import anyio` to the top-of-file import block. (The local `import asyncio` is gone, so no replacement is needed at the call site.)
 
-- [ ] **Step 3: Verify.**
+- [x] **Step 3: Verify.**
 
   ```
   grep -n "import asyncio\|asyncio\." slopmortem/corpus/qdrant_store.py
@@ -176,7 +176,7 @@ After each task: run targeted tests (`just test -k <pattern>`), then `just lint`
 
   Run `just test -k "qdrant or alias or retrieve"` and confirm green. Run `just typecheck`.
 
-- [ ] **Step 4: Commit.** Subject: `fix: replace asyncio.gather with anyio task group in qdrant_store`.
+- [x] **Step 4: Commit.** Subject: `fix: replace asyncio.gather with anyio task group in qdrant_store`.
 
 ---
 
