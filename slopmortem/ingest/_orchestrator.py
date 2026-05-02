@@ -64,6 +64,7 @@ from slopmortem.corpus import (
     write_canonical_atomic,
     write_raw_atomic,
 )
+from slopmortem.ingest._warm_cache import cache_read_ratio_event, cache_warm
 from slopmortem.llm import prompt_template_sha, render_prompt
 from slopmortem.models import (
     CandidatePayload,
@@ -99,10 +100,6 @@ __all__ = [
 type SparseEncoder = Callable[[str], dict[int, float]]
 
 logger = logging.getLogger(__name__)
-
-# Read-ratio threshold over the first N fan-out responses.
-_CACHE_READ_RATIO_THRESHOLD: Final[float] = 0.80
-_CACHE_READ_RATIO_PROBE_N: Final[int] = 5
 
 # Cap on per-entry exceptions attached as indexed attributes to the ingest span.
 # Beyond this we set ``errors.truncated_count`` and stop adding attribute keys
@@ -502,40 +499,6 @@ async def _summarize_call(
     )
     summary = res.text.strip()
     return summary, res.cache_read_tokens or 0, res.cache_creation_tokens or 0
-
-
-async def _cache_warm(
-    *,
-    llm: LLMClient,
-    model: str | None,
-    seed_text: str,
-    max_tokens: int | None = None,
-) -> tuple[bool, int, list[str]]:
-    """Run one serial summarize call to warm the prompt cache.
-
-    Returns ``(warmed, cache_creation_tokens, span_events)``. ``warmed`` is
-    True when ``cache_creation_tokens > 0`` (cache actually got written).
-    """
-    span: list[str] = []
-    try:
-        prompt = render_prompt("summarize", body=seed_text, source_id="warm")
-        res = await llm.complete(
-            prompt,
-            model=model,
-            cache=True,
-            extra_body={"prompt_template_sha": prompt_template_sha("summarize")},
-            max_tokens=max_tokens,
-        )
-        creation = res.cache_creation_tokens or 0
-        if creation == 0:
-            span.append(SpanEvent.CACHE_WARM_FAILED.value)
-            return False, 0, span
-    except Exception as exc:  # noqa: BLE001 - warming is best-effort
-        logger.warning("ingest: cache warm failed: %s", exc)
-        span.append(SpanEvent.CACHE_WARM_FAILED.value)
-        return False, 0, span
-    else:
-        return True, creation, span
 
 
 def _build_payload(  # noqa: PLR0913 - payload assembly takes every store-time field
@@ -1010,7 +973,7 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
         return result
 
     progress.start_phase(IngestPhase.CACHE_WARM, total=1)
-    warmed, warm_creation, warm_events = await _cache_warm(
+    warmed, warm_creation, warm_events = await cache_warm(
         llm=llm,
         model=config.model_summarize,
         seed_text=keepers[0][1][:1000],
@@ -1026,15 +989,9 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
     progress.end_phase(IngestPhase.FAN_OUT)
 
-    probe = [r for r in fanout if isinstance(r, _FanoutResult)][:_CACHE_READ_RATIO_PROBE_N]
-    if probe:
-        total_read = sum(r.cache_read for r in probe)
-        total_creation = sum(r.cache_creation for r in probe)
-        denom = total_read + total_creation
-        if denom > 0:
-            ratio = total_read / denom
-            if ratio < _CACHE_READ_RATIO_THRESHOLD:
-                result.span_events.append(SpanEvent.CACHE_READ_RATIO_LOW.value)
+    ratio_event = cache_read_ratio_event([r for r in fanout if isinstance(r, _FanoutResult)])
+    if ratio_event:
+        result.span_events.append(ratio_event)
 
     progress.start_phase(IngestPhase.WRITE, total=len(keepers))
     for (entry, body), fan in zip(keepers, fanout, strict=True):

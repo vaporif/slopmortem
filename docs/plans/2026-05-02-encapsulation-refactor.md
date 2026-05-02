@@ -825,7 +825,7 @@ Expected: green. T1.6's `corpus-leaf` / `llm-leaf` / etc. contracts still pass (
 - Create: `slopmortem/ingest/_warm_cache.py`
 - Modify: `slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 1: Identify the warm-cache block in `_orchestrator.py`**
+- [x] **Step 1: Identify the warm-cache block in `_orchestrator.py`**
 
 The warm-cache pattern is "first entry runs alone, then the rest fan out" — cited in `CLAUDE.md` and `slopmortem/ingest.py` (now `_orchestrator.py`) header. Find it by searching for `CACHE_READ_RATIO_LOW` and the surrounding fan-out:
 
@@ -835,7 +835,7 @@ grep -nE "CACHE_READ_RATIO_LOW|first entry|prompt cache warm" slopmortem/ingest/
 
 Capture the start and end line of the block plus any helper functions it depends on.
 
-- [ ] **Step 2: Extract the block to `_warm_cache.py`**
+- [x] **Step 2: Extract the block to `_warm_cache.py`**
 
 Create `slopmortem/ingest/_warm_cache.py` with a header comment:
 
@@ -855,7 +855,7 @@ from __future__ import annotations
 
 Move the block + helpers into this file. Update `_orchestrator.py` to import from `slopmortem.ingest._warm_cache`.
 
-- [ ] **Step 3: Verify the cache_read_ratio span event still fires**
+- [x] **Step 3: Verify the cache_read_ratio span event still fires**
 
 The warm-cache emits a `cache_read_ratio` span event when the ratio drops below 0.80 across the first 5 responses. Run a small sample ingest with cassettes:
 
@@ -867,7 +867,7 @@ Inspect the cassette trace for the `cache_read_ratio` span event (or run `grep -
 
 Expected: the span event still appears in the same shape as before extraction.
 
-- [ ] **Step 4: Run the full gate**
+- [x] **Step 4: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green; eval baseline byte-stable on the assertion summary.
