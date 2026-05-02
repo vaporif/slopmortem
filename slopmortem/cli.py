@@ -603,7 +603,7 @@ async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJourna
     every CLI invocation is cheap and means fresh dev databases work without
     an explicit setup step.
     """
-    from slopmortem.corpus.merge import MergeJournal  # noqa: PLC0415
+    from slopmortem.corpus import MergeJournal  # noqa: PLC0415
 
     journal_path = Path(
         config.merge_journal_path or str(post_mortems_root.parent / "journal.sqlite")
@@ -641,8 +641,8 @@ async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> Inges
     """
     from qdrant_client import AsyncQdrantClient  # noqa: PLC0415 - heavy dep, lazy import
 
-    from slopmortem.corpus.qdrant_store import ensure_collection  # noqa: PLC0415
-    from slopmortem.llm.openai_embeddings import EMBED_DIMS  # noqa: PLC0415
+    from slopmortem.corpus import ensure_collection  # noqa: PLC0415
+    from slopmortem.llm import EMBED_DIMS  # noqa: PLC0415
 
     if config.embed_model_id not in EMBED_DIMS:
         msg = f"unknown embed model {config.embed_model_id!r}; add it to EMBED_DIMS"
