@@ -4,7 +4,7 @@ import asyncio
 
 import pytest_asyncio
 
-from slopmortem.corpus.merge import MergeJournal
+from slopmortem.corpus import MergeJournal
 from slopmortem.models import AliasEdge
 
 
