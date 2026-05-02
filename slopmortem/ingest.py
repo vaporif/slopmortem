@@ -241,18 +241,17 @@ class FakeSlopClassifier:
 class HaikuSlopClassifier:
     """Asks Haiku whether a text describes a dead company.
 
-    Only runs on open-corpus sources (HN). Pre-vetted sources (curated YAML,
-    Crunchbase CSV) bypass slop in :func:`ingest` — their bodies are either
-    human-reviewed obituaries or Wayback'd live-era marketing pages, neither
-    of which benefits from the death-narrative check.
+    Only runs on open-corpus sources (HN). Pre-vetted sources bypass slop in
+    :func:`ingest` since their bodies are human-reviewed obituaries or
+    Wayback'd live-era marketing pages.
 
-    One LLM call per text. Returns 0.0 when Haiku says yes, else 1.0
-    (above ``slop_threshold=0.7``, so the entry quarantines).
+    Returns 0.0 when Haiku says yes, else 1.0 (above ``slop_threshold=0.7``,
+    so the entry quarantines).
 
-    ``char_limit=6000`` is sized so the demise narrative (which sits deep in
-    the body for older companies like Sun Microsystems or WeWork) falls
-    inside the window. Costs ~$6 more per full HN pass than a tighter
-    1500-char cap, but avoids false-negative quarantines on long obituaries.
+    ``char_limit=6000`` is sized so the demise narrative — often deep in the
+    body for older companies like Sun Microsystems or WeWork — falls inside
+    the window. Tighter 1500-char caps cause false-negative quarantines on
+    long obituaries.
     """
 
     llm: LLMClient
@@ -261,7 +260,6 @@ class HaikuSlopClassifier:
     max_tokens: int | None = None
 
     async def score(self, text: str) -> float:
-        """Ask Haiku whether *text* describes a dead company; map to 0.0 or 1.0."""
         snippet = text[: self.char_limit]
         prompt = render_prompt("slop_judge", text=snippet)
         result = await self.llm.complete(
