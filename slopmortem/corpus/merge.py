@@ -101,11 +101,9 @@ class MergeJournal:
     """Async wrapper over a SQLite merge journal. See module docstring."""
 
     def __init__(self, db_path: Path) -> None:
-        """Bind the journal to a sqlite file path; ``init()`` creates the schema."""
         self._db = db_path
 
     async def init(self) -> None:
-        """Create tables and indexes if missing."""
         await to_thread.run_sync(self._init_sync)
 
     def _init_sync(self) -> None:
@@ -121,7 +119,6 @@ class MergeJournal:
         source: str,
         source_id: str,
     ) -> None:
-        """Mark a row pending in a single-row transaction."""
         await to_thread.run_sync(self._upsert_state, canonical_id, source, source_id, "pending")
 
     async def upsert_resolver_flipped(
@@ -131,7 +128,6 @@ class MergeJournal:
         source: str,
         source_id: str,
     ) -> None:
-        """Mark a row resolver_flipped in a single-row transaction."""
         await to_thread.run_sync(
             self._upsert_state, canonical_id, source, source_id, "resolver_flipped"
         )
@@ -276,7 +272,6 @@ class MergeJournal:
             )
 
     async def fetch_pending(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-        """Return every row currently in ``merge_state='pending'`` as a dict."""
         return await to_thread.run_sync(self._fetch_pending_sync)
 
     def _fetch_pending_sync(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
@@ -304,7 +299,6 @@ class MergeJournal:
             return [_row_to_dict(r) for r in cur.fetchall()]
 
     async def lookup_canonical_for_source(self, source: str, source_id: str) -> str | None:
-        """Reverse-index lookup: the prior canonical_id for (source, source_id)."""
         return await to_thread.run_sync(self._lookup_reverse_sync, source, source_id)
 
     def _lookup_reverse_sync(self, source: str, source_id: str) -> str | None:
@@ -326,7 +320,6 @@ class MergeJournal:
             return None if row is None else str(row["canonical_id"])
 
     async def fetch_aliases(self, canonical_id: str) -> list[AliasEdge]:
-        """Return every alias edge that has ``canonical_id`` as the source."""
         rows = await to_thread.run_sync(self._fetch_aliases_sync, canonical_id)
         return [AliasEdge.model_validate(r) for r in rows]
 

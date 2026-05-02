@@ -7,7 +7,7 @@ text. Spec line 244 enumerates the surfaces; this test pins them.
 
 from __future__ import annotations
 
-from slopmortem.corpus.extract import extract_clean
+from slopmortem.corpus import extract_clean
 
 
 def test_extract_strips_html_comments_and_hidden() -> None:

@@ -476,7 +476,7 @@ grep -lrnE "(^|[[:space:]])from slopmortem\.(corpus|llm|stages|corpus\.sources)\
 
 The grep output is the CREATE/MODIFY boundary for this task. Do not touch files outside it. Save the list to a scratch file or capture it in the PR description.
 
-- [ ] **Step 2: Rewrite imports file by file**
+- [x] **Step 2: Rewrite imports file by file**
 
 For each file in the list, rewrite imports of submodules to imports from the package façade. Examples:
 

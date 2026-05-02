@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 
-from slopmortem.corpus.sources.tavily import TavilyEnricher
+from slopmortem.corpus.sources import TavilyEnricher
 from slopmortem.models import RawEntry
 
 
