@@ -1118,7 +1118,7 @@ Expected: 2 slop-gate tests pass; full gate green.
 **Files:**
 - Modify: `slopmortem/ingest/__init__.py`
 
-- [ ] **Step 1: Derive the explicit public surface from current callers**
+- [x] **Step 1: Derive the explicit public surface from current callers**
 
 Run:
 
@@ -1145,7 +1145,7 @@ grep -rnE "(class _Point|from slopmortem\.ingest import.*_Point)" slopmortem/ te
 
 Pick the preferred option unless `_Point` ends up moved by a later task. Do NOT redirect the import to `slopmortem.corpus.qdrant_store`.
 
-- [ ] **Step 2: Replace the star-import init with explicit re-exports**
+- [x] **Step 2: Replace the star-import init with explicit re-exports**
 
 Edit `slopmortem/ingest/__init__.py`:
 
@@ -1168,7 +1168,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke && just eval`
 Expected: green. If a test breaks because of a missing name, add it to step 2's import block (and to step 1's grep output for posterity).
