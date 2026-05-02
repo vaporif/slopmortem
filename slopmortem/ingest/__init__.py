@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from slopmortem.ingest._ingest import (
+    ingest as ingest,
+)
 from slopmortem.ingest._orchestrator import (
     INGEST_PHASE_LABELS as INGEST_PHASE_LABELS,
 )
@@ -28,9 +31,6 @@ from slopmortem.ingest._orchestrator import (
 )
 from slopmortem.ingest._orchestrator import (
     _Point as _Point,
-)
-from slopmortem.ingest._orchestrator import (
-    ingest as ingest,
 )
 
 __all__ = [

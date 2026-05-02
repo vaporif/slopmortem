@@ -18,7 +18,7 @@ from slopmortem.config import Config
 from slopmortem.corpus import MergeJournal
 from slopmortem.ingest import InMemoryCorpus
 from slopmortem.ingest._fan_out import _FanoutResult
-from slopmortem.ingest._orchestrator import _process_entry
+from slopmortem.ingest._journal_writes import _process_entry
 from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient
 from slopmortem.models import Facets, RawEntry
 

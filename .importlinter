@@ -9,7 +9,7 @@ allow_indirect_imports = True
 # Lazy imports of _embed_sparse defer the ~150MB fastembed ONNX load past startup.
 ignore_imports =
     slopmortem.llm.tools -> slopmortem.corpus._tools_impl
-    slopmortem.ingest._orchestrator -> slopmortem.corpus._embed_sparse
+    slopmortem.ingest._ingest -> slopmortem.corpus._embed_sparse
     slopmortem.evals.recording_helper -> slopmortem.corpus._embed_sparse
     slopmortem.stages.retrieve -> slopmortem.corpus._embed_sparse
 source_modules =
@@ -118,6 +118,7 @@ source_modules =
     slopmortem.tracing
 forbidden_modules =
     slopmortem.ingest._fan_out
+    slopmortem.ingest._ingest
     slopmortem.ingest._journal_writes
     slopmortem.ingest._orchestrator
     slopmortem.ingest._slop_gate
