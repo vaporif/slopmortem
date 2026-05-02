@@ -449,13 +449,12 @@ async def resolve_entity(  # noqa: PLR0913 — keyword-only resolver entry point
     """Resolve *entry* to a canonical_id.
 
     - ``alias_hint`` set → alias edge + ``alias_blocked`` journal row written
-      atomically; short-circuits.
+      atomically, short-circuits.
     - ``founding_year`` drives the recycled-domain check (delta > 10).
     - ``llm_client`` only required for in-band tier-3 calls.
     - ``force_similarity`` is a test-only escape hatch.
 
-    Sqlite or LLM exceptions propagate after the journal transaction rolls
-    back (see :meth:`MergeJournal.upsert_alias_blocked`).
+    Sqlite or LLM exceptions propagate after the journal transaction rolls back.
     """
     # tier-3 cache and founding-year cache live in the same sqlite file as the
     # merge journal. No public accessor on purpose — merge.py is read-only

@@ -1,10 +1,9 @@
-"""Pure markdown renderer for :class:`Report`.
+"""Markdown renderer for :class:`Report`.
 
-Strips clickable links and images from prose fields as a second line of
-defense behind the synthesize-stage URL allowlist — prose like
-``where_diverged`` doesn't pass through that filter, and a one-click
-attacker URL or exfil pixel in the rendered output is unacceptable.
-Sources render as plain text.
+Strips clickable links and images from prose as a second line of defense
+behind the synthesize-stage URL allowlist: prose like ``where_diverged``
+doesn't pass through that filter, and a one-click attacker URL or exfil
+pixel in the rendered output is unacceptable.
 """
 
 from __future__ import annotations

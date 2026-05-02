@@ -1,8 +1,6 @@
-"""Warm-cache pattern for prompt cache hit ratios.
-
-The first entry runs alone so the prompt prefix lands in the OpenRouter cache;
-the rest fan out concurrently. Preserves the CACHE_READ_RATIO_LOW invariant
-(see CLAUDE.md).
+"""Warm-cache pattern: first entry runs alone so the prompt prefix lands in the
+OpenRouter cache, the rest fan out concurrently. Preserves the
+CACHE_READ_RATIO_LOW invariant (see CLAUDE.md).
 """
 
 from __future__ import annotations

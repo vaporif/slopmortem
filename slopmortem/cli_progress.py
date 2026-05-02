@@ -63,7 +63,10 @@ class ThickBarColumn(BarColumn):
 
 
 class OptionalMofNCompleteColumn(MofNCompleteColumn):
-    """Hides ``M of N`` for single-shot phases; the pulse-then-fill bar already conveys done vs not-done."""
+    """Hides ``M of N`` for single-shot phases.
+
+    The pulse-then-fill bar already conveys done vs not-done.
+    """
 
     @override
     def render(self, task: Task) -> Text:

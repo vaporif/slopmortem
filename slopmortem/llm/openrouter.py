@@ -117,8 +117,8 @@ class OpenRouterClient:
         cache_write = 0
         cost = 0.0
 
-        # Build kwargs once; only include max_tokens when set so unset callers
-        # keep the SDK's "no cap" behavior and don't send max_tokens=None upstream.
+        # Only include max_tokens when set so unset callers keep the SDK's
+        # "no cap" behavior — sending max_tokens=None upstream is rejected.
         base_kw: dict[str, Any] = {  # pyright: ignore[reportExplicitAny]
             "model": model or self._default_model,
             "response_format": response_format,
