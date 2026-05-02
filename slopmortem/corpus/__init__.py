@@ -57,16 +57,12 @@ from slopmortem.corpus._reconcile import (
 from slopmortem.corpus._reconcile import (
     reconcile as reconcile,
 )
-from slopmortem.corpus._schema import (
+from slopmortem.corpus._store import Corpus as Corpus
+from slopmortem.models import (
     AliasEdge as AliasEdge,
-)
-from slopmortem.corpus._schema import (
     MergeState as MergeState,
-)
-from slopmortem.corpus._schema import (
     RawEntry as RawEntry,
 )
-from slopmortem.corpus._store import Corpus as Corpus
 from slopmortem.corpus._summarize import summarize_for_rerank as summarize_for_rerank
 from slopmortem.corpus._tools_impl import set_query_corpus as set_query_corpus
 
