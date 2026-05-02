@@ -46,6 +46,7 @@ dev = [
   "jsonschema>=4.26",
   "ruff>=0.15",
   "basedpyright>=1.39",
+  "import-linter>=2.4",
 ]
 
 [tool.pytest.ini_options]

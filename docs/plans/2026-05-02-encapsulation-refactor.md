@@ -97,11 +97,11 @@ This plan implements `docs/specs/2026-05-01-encapsulation-refactor-design.md`. R
 - Modify: `pyproject.toml`
 - Create: `.importlinter`
 
-- [ ] **Step 1: Add `import-linter` to dev dependency group**
+- [x] **Step 1: Add `import-linter` to dev dependency group**
 
 Edit `pyproject.toml` `[dependency-groups]` `dev = [...]`. Insert `"import-linter>=2.4",` in the alphabetical position (after `basedpyright`).
 
-- [ ] **Step 2: Create `.importlinter` with bare-minimum config**
+- [x] **Step 2: Create `.importlinter` with bare-minimum config**
 
 Write `.importlinter`:
 
