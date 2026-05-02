@@ -1238,7 +1238,7 @@ Late/lazy imports inside `cli.py` helpers (`qdrant_client`, `MergeJournal`, `Fak
 - Move: `slopmortem/cli.py` → `slopmortem/cli/_app.py`
 - Create: `slopmortem/cli/__init__.py`
 
-- [ ] **Step 1: Capture the pre-move `--help` output as a baseline**
+- [x] **Step 1: Capture the pre-move `--help` output as a baseline**
 
 Run:
 
@@ -1252,7 +1252,7 @@ uv run slopmortem embed-prefetch --help > /tmp/cli_help_prefetch_before.txt
 
 T3.4 will diff these against the post-extraction outputs.
 
-- [ ] **Step 2: Move the file into the new package**
+- [x] **Step 2: Move the file into the new package**
 
 Run:
 
@@ -1261,7 +1261,7 @@ mkdir -p slopmortem/cli
 git mv slopmortem/cli.py slopmortem/cli/_app.py
 ```
 
-- [ ] **Step 3: Write the new `cli/__init__.py`**
+- [x] **Step 3: Write the new `cli/__init__.py`**
 
 Edit `slopmortem/cli/__init__.py`:
 
@@ -1275,11 +1275,11 @@ from slopmortem.cli._app import app as app
 __all__ = ["app"]
 ```
 
-- [ ] **Step 4: Verify `pyproject.toml` `[project.scripts]` still resolves**
+- [x] **Step 4: Verify `pyproject.toml` `[project.scripts]` still resolves**
 
 Read `pyproject.toml` line 29: `slopmortem = "slopmortem.cli:app"`. Expected: this still resolves because `cli/__init__.py` re-exports `app`. No edit needed.
 
-- [ ] **Step 5: Diff the `--help` outputs**
+- [x] **Step 5: Diff the `--help` outputs**
 
 Run:
 
@@ -1290,7 +1290,7 @@ diff /tmp/cli_help_root_before.txt /tmp/cli_help_root_after.txt
 
 Expected: empty diff. Repeat for each subcommand `--help`. Any non-empty diff is a regression — stop and investigate.
 
-- [ ] **Step 6: Run the full gate**
+- [x] **Step 6: Run the full gate**
 
 Run: `just test && just lint && just typecheck && just smoke`
 Expected: green.
