@@ -1,43 +1,10 @@
 # pyright: reportAny=false
-"""Ingest orchestration: sources -> enrichers -> slop -> facets -> summarize -> chunks -> qdrant.
+"""Top-level ``ingest()`` orchestration.
 
-This module holds only the `ingest()` function. Types, protocols, dataclasses,
-and pure helpers live in `_orchestrator.py`; per-stage logic lives in
-`_warm_cache.py`, `_fan_out.py`, `_journal_writes.py`, and `_slop_gate.py`.
-The split keeps the package's dependency graph acyclic.
-
-Pipeline:
-
-1. Per source, iterate ``Source.fetch()`` async. Per-source failures log and
-   the run continues.
-2. Per entry, apply enrichers in declared order. trafilatura sanitizes and
-   extracts the canonical body when HTML is present; entries below the length
-   floor get dropped.
-3. Slop classify. ``slop_score > config.slop_threshold`` quarantines the doc:
-   no qdrant point, no merge journal row, separate ``quarantine_journal``
-   table, body under ``post_mortems_root/quarantine/<content_sha256>.md``.
-4. Cache-warm one serial LLM call so the prompt cache is hot for fan-out.
-5. Fan-out facet_extract + summarize_for_rerank under
-   ``anyio.CapacityLimiter(config.ingest_concurrency)``.
-6. Read-ratio probe on the first 5 fan-out responses. If
-   ``cache_read / (cache_read + cache_creation) < 0.80`` emit
-   :attr:`SpanEvent.CACHE_READ_RATIO_LOW`.
-7. Resolve canonical id via
-   :func:`slopmortem.corpus._entity_resolution.resolve_entity`. The
-   ``resolver_flipped`` and ``alias_blocked`` actions short-circuit.
-8. ``upsert_pending`` row, atomic raw write, deterministic merge of all raw
-   sections for this canonical_id, atomic canonical write, chunk + embed,
-   delete + re-upsert all chunk points, ``mark_complete`` with skip_key LAST.
-
-Idempotency: skip_key is ``(content_hash, facet_prompt_hash,
-summarize_prompt_hash, haiku_model_id, embed_model_id, chunk_strategy_version,
-taxonomy_version, reliability_rank_version)``. A later ingest with a journal
-row already at ``complete`` and a matching skip_key short-circuits with no
-LLM, embed, or qdrant work. ``--force`` bypasses it.
-
-Concurrency contract: every LLM and embedding call routes through the same
-:class:`~slopmortem.budget.Budget` (reserve before, settle after) and the
-bounded fan-out limiter for the facet+summarize batch.
+Pipeline overview lives in ``docs/architecture.md`` and the load-bearing
+invariants are in CLAUDE.md. Per-stage logic is split across sibling
+modules (``_warm_cache``, ``_fan_out``, ``_journal_writes``, ``_slop_gate``)
+so the package's dependency graph stays acyclic.
 """
 
 from __future__ import annotations
@@ -137,16 +104,16 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
     result = IngestResult(dry_run=dry_run)
     progress = progress or NullProgress()
 
-    # Closure so every early-return path can drain the events; the list itself
-    # stays in result for tests and the CLI renderer.
+    # Drain events on every exit path; the list also stays on result for tests
+    # and the CLI renderer.
     def _emit_collected_events() -> None:
         if not Laminar.is_initialized():
             return
         for name in result.span_events:
             Laminar.event(name=name)
 
-    # Without per-entry attributes, swallowed exceptions only show up in stderr
-    # — the parent span returns OK and INGEST_ENTRY_FAILED carries no payload.
+    # Without per-entry attributes, swallowed exceptions only surface in stderr;
+    # the parent span returns OK and INGEST_ENTRY_FAILED carries no payload.
     def _record_error(entry_label: str, exc: BaseException) -> None:
         if not Laminar.is_initialized():
             return
@@ -179,16 +146,15 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             }
         )
 
-    # Default sparse encoder: BM25 via fastembed. Tests stub it with a
-    # dict-returning lambda so the ONNX model never loads under pytest.
+    # Tests stub this with a dict-returning lambda so the ~150 MB ONNX model
+    # never loads under pytest.
     if sparse_encoder is None:
         from slopmortem.corpus._embed_sparse import encode as _encode_sparse  # noqa: PLC0415
 
         sparse_encoder = _encode_sparse
 
-    # When ``--limit`` is set, ``total=limit`` gives Rich a real denominator
-    # so the ETA column works. Without it, the count isn't known up front,
-    # so pass ``None`` (indeterminate, pulsing bar) rather than lying with 0.
+    # ``total=None`` when --limit isn't set: count isn't known up front, so
+    # let the bar pulse instead of lying with 0.
     progress.start_phase(IngestPhase.GATHER, total=limit)
     entries, source_failures = await _gather_entries(
         sources, span_events=result.span_events, limit=limit, progress=progress
@@ -326,10 +292,9 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
             progress.advance_phase(IngestPhase.WRITE)
             continue
         except BaseException as exc:
-            # CancelledError / SystemExit / etc; ``except Exception`` above misses
-            # these. Surface what's escaping (which entry, what type) via the
-            # progress error channel before letting it propagate, so the run
-            # terminates loud rather than silent.
+            # CancelledError / SystemExit slip past ``except Exception``. Surface
+            # which entry and what type via progress before re-raising so the
+            # run terminates loud rather than silent.
             progress.error(
                 IngestPhase.WRITE,
                 f"FATAL {type(exc).__name__} on {entry.source}:{entry.source_id}: {exc}",

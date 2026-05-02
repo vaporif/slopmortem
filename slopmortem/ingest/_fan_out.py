@@ -14,10 +14,6 @@ import anyio
 
 from slopmortem.concurrency import gather_resilient
 from slopmortem.corpus import chunk_markdown
-
-# `_Point` and `_text_id_for` are intra-package private boundary imports —
-# see T2.3 in docs/plans/2026-05-02-encapsulation-refactor.md. They stay in
-# `_orchestrator.py` to avoid moving the public `_Point` __all__ surface.
 from slopmortem.ingest._orchestrator import (
     IngestPhase,
     IngestProgress,
@@ -54,8 +50,8 @@ async def _facet_call(
     model: str | None,
     max_tokens: int | None = None,
 ) -> Facets:
-    # ValidationError from strict-mode parsing propagates up to the per-entry
-    # isolator in ``ingest()`` so one bad doc doesn't kill the run.
+    # ValidationError propagates to the per-entry isolator in ``ingest()`` so
+    # one bad doc doesn't kill the run.
     from slopmortem.stages import extract_facets  # noqa: PLC0415
 
     return await extract_facets(text, llm, model, max_tokens=max_tokens)
@@ -68,11 +64,7 @@ async def _summarize_call(
     model: str | None,
     max_tokens: int | None = None,
 ) -> tuple[str, int, int]:
-    """Return ``(summary, cache_read, cache_creation)``.
-
-    Inlined instead of delegating to ``summarize_for_rerank`` because we need
-    the raw cache-token counters, which the helper discards.
-    """
+    """Inlined; ``summarize_for_rerank`` discards the raw cache-token counters."""
     prompt = render_prompt("summarize", body=text, source_id="")
     res = await llm.complete(
         prompt,
@@ -95,9 +87,8 @@ async def _facet_summarize_fanout(
     """Run facet+summarize concurrently under ``ingest_concurrency`` capacity.
 
     Returns one :class:`_FanoutResult` per entry in order, or the exception
-    that aborted that entry. The limiter bounds in-flight LLM calls. Facet
-    and summarize for the same entry run sequentially so two LLM calls never
-    share one limiter slot.
+    that aborted that entry. Facet and summarize for the same entry run
+    sequentially so two LLM calls never share one limiter slot.
     """
     limiter = anyio.CapacityLimiter(config.ingest_concurrency)
     bar = progress or NullProgress()
@@ -133,7 +124,6 @@ async def _embed_and_upsert(  # noqa: PLR0913 - every dependency is required at 
     embed_model_id: str,
     sparse_encoder: SparseEncoder,
 ) -> int:
-    """Chunk, embed dense + sparse, and upsert one point per chunk. Returns count."""
     chunks = chunk_markdown(body, parent_canonical_id=canonical_id)
     if not chunks:
         return 0

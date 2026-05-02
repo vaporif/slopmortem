@@ -1,17 +1,9 @@
 # pyright: reportAny=false
 """Slop-gate routing.
 
-Entries with ``slop_score > config.slop_threshold`` route to :func:`_quarantine`
-and get no Qdrant point and no merge-journal row. Pre-vetted sources (in
-:data:`_PRE_VETTED_SOURCES`) bypass the classifier entirely — their bodies are
-human-reviewed obituaries (curated YAML) or upstream-filtered closed-status
-records (crunchbase_csv). ``--reclassify`` is the only path back from
-quarantine.
-
-The orchestrator owns the routing decision (quarantine vs keep) so it can also
-mutate ``IngestResult`` and progress state in the same loop iteration; this
-module exposes :func:`classify_one` for the score-and-bypass logic and
-:func:`_quarantine` for the terminal write.
+Entries scoring above ``config.slop_threshold`` route to :func:`_quarantine`
+and get no Qdrant point and no merge-journal row. ``--reclassify`` is the only
+path back.
 """
 
 from __future__ import annotations
@@ -37,12 +29,10 @@ __all__ = ["_PRE_VETTED_SOURCES", "_quarantine", "classify_one"]
 
 logger = logging.getLogger(__name__)
 
-# Sources pre-filtered to "confirmed dead company" upstream of slopmortem:
-# curated YAML is human-reviewed, crunchbase_csv is filtered to status=closed.
-# Running the LLM dead-company classifier on these wastes spend AND
-# misclassifies — Wayback'd Crunchbase homepages are pre-death marketing copy,
-# not death narratives. Skip slop entirely for these; HN and any future
-# open-corpus sources still go through it.
+# Pre-filtered to "confirmed dead company" upstream: curated YAML is human-
+# reviewed, crunchbase_csv is filtered to status=closed. Running the LLM on
+# these wastes spend and misclassifies (Wayback'd Crunchbase homepages are
+# pre-death marketing copy, not death narratives).
 _PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_csv"})
 
 
@@ -58,11 +48,10 @@ async def classify_one(
     pre_vetted_sources: frozenset[str] = _PRE_VETTED_SOURCES,
     on_error: Callable[[Exception], None],
 ) -> float:
-    """Return the slop score for *entry*, or 0.0 for pre-vetted sources / classifier failures.
+    """Return the slop score for *entry*; 0.0 for pre-vetted sources or failures.
 
-    Pre-vetted sources skip the classifier entirely. Classifier exceptions are
-    swallowed (defensive: never abort the run on a classifier hiccup) and
-    reported via *on_error* so the caller can wire its own progress / logging.
+    Classifier exceptions are swallowed (never abort a run on a classifier
+    hiccup) and reported via *on_error* for the caller's progress / logging.
     """
     if entry.source in pre_vetted_sources:
         return 0.0

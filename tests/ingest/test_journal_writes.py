@@ -70,15 +70,12 @@ def _cfg() -> Config:
     return Config(max_cost_usd_per_ingest=100.0, ingest_concurrency=5)
 
 
-# Façade re-exports shadow submodules: monkeypatching the corpus write
-# helpers must target the binding inside the module that owns _process_entry,
-# not slopmortem.corpus. importlib resolves to the live module object so the
-# patch lands on the same binding the production code calls.
+# Façade re-exports shadow submodules, so monkeypatch must target the binding
+# inside the module that owns _process_entry, not slopmortem.corpus.
 _JOURNAL_WRITES_MOD_NAME = "slopmortem.ingest._journal_writes"
 
 
 def _patch_target_module():
-    """Return the module that owns _process_entry."""
     return importlib.import_module(_JOURNAL_WRITES_MOD_NAME)
 
 

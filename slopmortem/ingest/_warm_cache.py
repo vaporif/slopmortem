@@ -1,9 +1,8 @@
 """Warm-cache pattern for prompt cache hit ratios.
 
-Preserves CACHE_READ_RATIO_LOW invariant — the first entry runs alone so the
-prompt prefix lands in the OpenRouter cache, then the remaining entries fan
-out concurrently. See CLAUDE.md and the orchestrator caller in
-`slopmortem/ingest/_orchestrator.py`.
+The first entry runs alone so the prompt prefix lands in the OpenRouter cache;
+the rest fan out concurrently. Preserves the CACHE_READ_RATIO_LOW invariant
+(see CLAUDE.md).
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ __all__ = ["cache_read_ratio_event", "cache_warm"]
 
 logger = logging.getLogger(__name__)
 
-# Read-ratio threshold over the first N fan-out responses.
 _CACHE_READ_RATIO_THRESHOLD: Final[float] = 0.80
 _CACHE_READ_RATIO_PROBE_N: Final[int] = 5
 

@@ -1,18 +1,8 @@
 # pyright: reportAny=false
 """Shared types, protocols, dataclasses, and pure helpers for the ingest package.
 
-The orchestration entry point (`ingest()`) lives in `_ingest.py`; per-stage logic
-lives in `_warm_cache.py`, `_fan_out.py`, `_journal_writes.py`, and `_slop_gate.py`.
-This module is the leaf of that graph — it imports from outside `slopmortem.ingest`
-only and is imported by every sibling module for the symbols below.
-
-Public surface (re-exported via `slopmortem.ingest.__init__`): `Corpus`,
-`InMemoryCorpus`, `IngestPhase`, `INGEST_PHASE_LABELS`, `IngestResult`,
-`SlopClassifier`, `FakeSlopClassifier`, `HaikuSlopClassifier`, `_Point`.
-Internal helpers (used by sibling modules across the private boundary):
-`_entry_summary_text`, `_enrich_pipeline`, `_gather_entries`, `_text_id_for`,
-`_skip_key`, `_build_payload`, `_truncate_to_tokens`, `_reliability_for`,
-`_date_from_year`.
+Leaf of the package's import graph: imports nothing from sibling ``slopmortem.ingest``
+modules and is imported by all of them.
 """
 
 from __future__ import annotations
@@ -53,18 +43,16 @@ __all__ = [
     "_Point",
 ]
 
-# Sparse encoder shape: Callable[[text], {token_id: weight}].
 type SparseEncoder = Callable[[str], dict[int, float]]
 
 logger = logging.getLogger(__name__)
 
-# Cap on per-entry exceptions attached as indexed attributes to the ingest span.
-# Beyond this we set ``errors.truncated_count`` and stop adding attribute keys
-# so a pathological run can't blow past Laminar's per-span attribute limit.
+# Cap on indexed per-entry exception attributes so a pathological run can't
+# blow past Laminar's per-span attribute limit. Beyond this we record only
+# ``errors.truncated_count``.
 _MAX_RECORDED_ERRORS: Final[int] = 50
 
-# Reliability rank for in-process classification. merge_text orders sections
-# by this. Curated > HN > Wayback > everything else.
+# merge_text orders sections by this. Curated > HN > Wayback > everything else.
 _RELIABILITY_RANK: Final[dict[str, int]] = {
     "curated": 0,
     "hn": 1,
@@ -81,9 +69,7 @@ class Corpus(Protocol):
 
     async def has_chunks(self, canonical_id: str) -> bool: ...
 
-    async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
-        # Called before a re-merge upsert.
-        ...
+    async def delete_chunks_for_canonical(self, canonical_id: str) -> None: ...
 
 
 class IngestPhase(StrEnum):
@@ -96,9 +82,8 @@ class IngestPhase(StrEnum):
     WRITE = "write"
 
 
-# Phase label map keyed on IngestPhase so any phase added above fails type-check
-# at every consumer until a label is provided. Lives next to the enum so the CLI
-# and the corpus recorder don't need to keep duplicate copies in sync.
+# Keyed on IngestPhase so adding a phase fails type-check at every consumer
+# until it gets a label here.
 INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
     IngestPhase.GATHER: "Gathering entries from sources",
     IngestPhase.CLASSIFY: "Classifying / slop-filtering",
@@ -196,17 +181,12 @@ class FakeSlopClassifier:
 class HaikuSlopClassifier:
     """Asks Haiku whether a text describes a dead company.
 
-    Only runs on open-corpus sources (HN). Pre-vetted sources bypass slop in
-    :func:`ingest` since their bodies are human-reviewed obituaries or
-    Wayback'd live-era marketing pages.
+    Returns 0.0 when Haiku says yes, else 1.0 (above the default
+    ``slop_threshold=0.7``, so the entry quarantines).
 
-    Returns 0.0 when Haiku says yes, else 1.0 (above ``slop_threshold=0.7``,
-    so the entry quarantines).
-
-    ``char_limit=6000`` is sized so the demise narrative (often deep in the
-    body for older companies like Sun Microsystems or WeWork) falls inside
-    the window. Tighter 1500-char caps cause false-negative quarantines on
-    long obituaries.
+    ``char_limit=6000`` is sized so the demise narrative falls inside the
+    window for long obituaries (Sun, WeWork). Tighter 1500-char caps caused
+    false-negative quarantines.
     """
 
     llm: LLMClient
@@ -297,9 +277,8 @@ def _skip_key(  # noqa: PLR0913 - the contract tuple is wide  # pyright: ignore[
 def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     """Clip *text* to at most *max_tokens* under cl100k_base.
 
-    Anthropic's tokenizer isn't published; cl100k_base (GPT-4) is a fine proxy
-    for cost control — the two agree to within ~10% on English prose, well
-    inside the truncation budget's headroom.
+    Anthropic's tokenizer isn't published; cl100k_base agrees to within ~10%
+    on English prose, well inside the truncation budget's headroom.
     """
     if max_tokens <= 0:
         return text
@@ -315,10 +294,8 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
 def _entry_summary_text(entry: RawEntry, *, max_tokens: int) -> str:  # pyright: ignore[reportUnusedFunction]  -- imported by _ingest.py
     """Return the entry's body text for slop / facet / summarize.
 
-    Clipped to *max_tokens* (cl100k_base proxy) to bound LLM input cost on
-    long-tail articles. Wikipedia entries especially can be 60KB+ after
-    trafilatura, but the demise narrative is almost always in the lead and
-    first major body section.
+    Clipped to *max_tokens* to bound LLM input cost on long-tail articles
+    (Wikipedia entries can run 60KB+ after trafilatura).
     """
     if entry.markdown_text:
         return _truncate_to_tokens(entry.markdown_text, max_tokens)
@@ -343,14 +320,10 @@ async def _gather_entries(  # pyright: ignore[reportUnusedFunction]  -- imported
 ) -> tuple[list[RawEntry], int]:
     """Collect entries from every source. Per-source failures are logged and counted.
 
-    When *limit* is set, gather stops as soon as ``len(out) >= limit``. Sources
+    When *limit* is set, gather stops as soon as ``len(out) >= limit``: sources
     beyond the cap aren't started, and an in-progress source breaks out of its
-    async iterator. ``--limit`` is a real fast-path knob for smoke tests, not
+    async iterator. So ``--limit`` is a real fast-path knob for smoke tests, not
     just a post-gather slice.
-
-    ``progress`` (when provided) gets one ``advance_phase(GATHER)`` per entry so
-    Rich's speed sampler can extrapolate an ETA when ``limit`` gives the bar a
-    known total.
     """
     out: list[RawEntry] = []
     failures = 0

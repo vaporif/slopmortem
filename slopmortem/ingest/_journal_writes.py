@@ -1,8 +1,8 @@
 # pyright: reportAny=false
 """Per-entry journal write ordering.
 
-Invariant (from CLAUDE.md): mark_complete fires ONLY after both Qdrant and
-disk writes succeed. The order is:
+Load-bearing invariant (CLAUDE.md): mark_complete fires only after both Qdrant
+and disk writes succeed. The fixed order is:
 
     1. journal.upsert_pending
     2. write_raw_atomic
@@ -10,10 +10,6 @@ disk writes succeed. The order is:
     4. corpus.delete_chunks_for_canonical
     5. _embed_and_upsert (Qdrant)
     6. journal.mark_complete
-
-Do NOT add a write path that bypasses this sequence. ProcessOutcome is the
-return type — the orchestrator inspects it to decide whether to log a
-per-entry failure or proceed.
 """
 
 from __future__ import annotations
@@ -34,8 +30,6 @@ from slopmortem.corpus import (
     write_canonical_atomic,
     write_raw_atomic,
 )
-
-# Intra-package private boundary imports — same pattern as _fan_out.py.
 from slopmortem.ingest._fan_out import _embed_and_upsert
 from slopmortem.ingest._orchestrator import (
     SparseEncoder,
@@ -63,11 +57,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProcessOutcome(StrEnum):
-    """What _process_entry did with one entry.
-
-    Enum so the match in ingest() is exhaustive — a new variant nobody
-    handled fails typecheck instead of going silently uncounted.
-    """
+    """Closed enum so the ``match`` in ingest() is exhaustive at typecheck."""
 
     PROCESSED = "processed"
     SKIPPED = "skipped"
@@ -93,11 +83,10 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
 ) -> ProcessOutcome:
     """Write raw + canonical + chunks for one resolved entry.
 
-    SKIPPED_EMPTY: chunking yielded zero chunks, so we skip mark_complete
-    rather than journal an entry with no Qdrant points. FAILED: an in-flight
-    write raised (today: delete_chunks_for_canonical on a re-merge); we abort
-    the entry before any upsert so we don't shadow prior orphans with a fresh
-    upsert layer.
+    SKIPPED_EMPTY: chunking yielded zero chunks, so mark_complete is skipped
+    rather than journalling an entry with no Qdrant points. FAILED: a write
+    raised (today only delete_chunks_for_canonical on a re-merge); we abort
+    before any upsert so we don't shadow prior orphans with a fresh layer.
     """
     name = entry.source_id  # ingest's name extraction is best-effort in v1
     sector = fan.facets.sector
@@ -117,8 +106,8 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         return ProcessOutcome.SKIPPED
     canonical_id = res.canonical_id
 
-    # v1 ingest only knows about THIS raw section. Merging with prior raw on
-    # disk happens via the read-back path in reconcile / multi-source ingest.
+    # v1 ingest only knows about this raw section; multi-source merge happens
+    # via the read-back path in reconcile.
     section = Section(
         text=body,
         reliability_rank=_reliability_for(entry.source),
@@ -180,15 +169,13 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         },
     )
 
-    # Delete then re-upsert all chunk points for this canonical_id so prior-run
-    # orphans don't pile up.
+    # Wipe prior chunks before re-upserting so orphans from a longer prior body
+    # don't leak their higher-index chunks into the merged result.
     if existing:
         try:
             await corpus.delete_chunks_for_canonical(canonical_id)
-        except Exception as exc:  # noqa: BLE001 — qdrant-client raises many transport/auth/validation shapes; recovery is the same for all.
-            # If we re-upsert on top of orphans, longer prior bodies leak their
-            # higher-index chunks into the merged result. Abort the entry and
-            # let reconcile pick up the drift on a later pass.
+        except Exception as exc:  # noqa: BLE001 - qdrant-client raises many transport/auth/validation shapes; recovery is the same for all.
+            # Abort the entry; reconcile picks up the drift on a later pass.
             Laminar.event(
                 name=SpanEvent.INGEST_ENTRY_FAILED.value,
                 attributes={
@@ -224,9 +211,9 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         sparse_encoder=sparse_encoder,
     )
     if chunks_written == 0:
-        # A "complete" row with zero Qdrant points is silent corpus drift, so
-        # leave the row pending and surface the empty chunk count to the
-        # operator. Reconcile catches the same class (a) drift retroactively.
+        # A "complete" row with zero Qdrant points is silent corpus drift. Leave
+        # the row pending and surface the empty chunk count; reconcile catches
+        # this class of drift retroactively.
         Laminar.event(
             name=SpanEvent.INGEST_ENTRY_EMPTY_CHUNKS.value,
             attributes={"canonical_id": canonical_id},
@@ -237,7 +224,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
         )
         return ProcessOutcome.SKIPPED_EMPTY
 
-    # mark_complete must run LAST: skip_key being set is the only signal a
+    # mark_complete must run last: skip_key being set is the only signal a
     # later ingest uses to short-circuit this entry.
     await journal.mark_complete(
         canonical_id=canonical_id,
