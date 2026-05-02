@@ -57,35 +57,35 @@ from rich.table import Table
 from slopmortem.budget import Budget
 from slopmortem.cli_progress import RichPhaseProgress
 from slopmortem.config import load_config
-from slopmortem.corpus.qdrant_store import QdrantCorpus
-from slopmortem.corpus.reclassify import reclassify_quarantined
-from slopmortem.corpus.reconcile import reconcile
-from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource
-from slopmortem.corpus.sources.curated import CuratedSource
-from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource
-from slopmortem.corpus.sources.tavily import TavilyEnricher
-from slopmortem.corpus.sources.wayback import WaybackEnricher
-from slopmortem.corpus.tools_impl import _set_corpus
+from slopmortem.corpus import (
+    QdrantCorpus,
+    reclassify_quarantined,
+    reconcile,
+    set_query_corpus,
+)
+from slopmortem.corpus.sources import (
+    CrunchbaseCsvSource,
+    CuratedSource,
+    HNAlgoliaSource,
+    TavilyEnricher,
+    WaybackEnricher,
+)
 from slopmortem.ingest import INGEST_PHASE_LABELS, IngestPhase, IngestResult, ingest
-from slopmortem.llm.embedding_factory import make_embedder
-from slopmortem.llm.fastembed_client import FastEmbedEmbeddingClient
-from slopmortem.llm.openrouter import OpenRouterClient
+from slopmortem.llm import FastEmbedEmbeddingClient, OpenRouterClient, make_embedder
 from slopmortem.models import InputContext
 from slopmortem.pipeline import QueryPhase, cutoff_iso, run_query
 from slopmortem.render import render
-from slopmortem.stages.facet_extract import extract_facets
-from slopmortem.stages.retrieve import retrieve
+from slopmortem.stages import extract_facets, retrieve
 from slopmortem.tracing import init_tracing
 
 if TYPE_CHECKING:
     from slopmortem.config import Config
-    from slopmortem.corpus.merge import MergeJournal
-    from slopmortem.corpus.sources.base import Enricher, Source
+    from slopmortem.corpus import MergeJournal
+    from slopmortem.corpus.sources import Enricher, Source
     from slopmortem.corpus.store import Corpus
     from slopmortem.ingest import Corpus as IngestCorpus
     from slopmortem.ingest import SlopClassifier
-    from slopmortem.llm.client import LLMClient
-    from slopmortem.llm.embedding_client import EmbeddingClient
+    from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import Report
 
 logger = logging.getLogger(__name__)
@@ -271,8 +271,8 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
         config, post_mortems_root, dry_run=dry_run
     )
     # The ingest-side Corpus Protocol is wider than the query-side one used by
-    # _set_corpus; the underlying QdrantCorpus instance satisfies both.
-    _set_corpus(cast("Corpus", corpus))
+    # set_query_corpus; the underlying QdrantCorpus instance satisfies both.
+    set_query_corpus(cast("Corpus", corpus))
 
     sources: list[Source] = [
         CuratedSource(yaml_path=_default_curated_yaml(), rps=3.0),
@@ -433,7 +433,7 @@ async def _query(
     config = load_config()
     _maybe_init_tracing(config)
     llm, embedder, corpus, budget = _build_deps(config)
-    _set_corpus(corpus)
+    set_query_corpus(corpus)
     ctx = InputContext(name=name or "(unnamed)", description=description, years_filter=years)
     if debug_retrieve:
         await _debug_retrieve(ctx, llm=llm, embedder=embedder, corpus=corpus, config=config)
@@ -793,7 +793,7 @@ async def _replay(dataset: str) -> None:
     config = load_config()
     _maybe_init_tracing(config)
     llm, embedder, corpus, budget = _build_deps(config)
-    _set_corpus(corpus)
+    set_query_corpus(corpus)
 
     progress_ctx: contextlib.AbstractContextManager[RichQueryProgress | None] = (
         RichQueryProgress() if sys.stderr.isatty() else contextlib.nullcontext()
