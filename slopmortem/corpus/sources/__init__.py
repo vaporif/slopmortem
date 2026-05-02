@@ -2,6 +2,19 @@
 
 from __future__ import annotations
 
-from slopmortem.corpus.sources.base import Enricher, Source
+from slopmortem.corpus.sources.base import Enricher as Enricher, Source as Source
+from slopmortem.corpus.sources.crunchbase_csv import CrunchbaseCsvSource as CrunchbaseCsvSource
+from slopmortem.corpus.sources.curated import CuratedSource as CuratedSource
+from slopmortem.corpus.sources.hn_algolia import HNAlgoliaSource as HNAlgoliaSource
+from slopmortem.corpus.sources.tavily import TavilyEnricher as TavilyEnricher
+from slopmortem.corpus.sources.wayback import WaybackEnricher as WaybackEnricher
 
-__all__ = ["Enricher", "Source"]
+__all__ = [
+    "CrunchbaseCsvSource",
+    "CuratedSource",
+    "Enricher",
+    "HNAlgoliaSource",
+    "Source",
+    "TavilyEnricher",
+    "WaybackEnricher",
+]
