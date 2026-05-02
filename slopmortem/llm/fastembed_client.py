@@ -29,7 +29,6 @@ class FastEmbedEmbeddingClient:
         budget: Budget,
         cache_dir: Path | None = None,
     ) -> None:
-        """Bind the model and budget; defer fastembed import and model load until first embed."""
         if model not in EMBED_DIMS:
             msg = f"unknown embed model {model!r}; add it to EMBED_DIMS"
             raise ValueError(msg)
@@ -41,20 +40,16 @@ class FastEmbedEmbeddingClient:
 
     @property
     def dim(self) -> int:
-        """Vector dimensionality for the configured embedding model."""
         return EMBED_DIMS[self.model]
 
     async def prefetch(self) -> None:
-        """Force the ONNX model to load now (e.g. CI cache warm); otherwise lazy on first embed."""
+        # Force the ONNX model to load now (e.g. CI cache warm); otherwise
+        # lazy on first embed.
         await self._ensure_loaded()
 
     async def _ensure_loaded(self) -> TextEmbedding:
-        """Materialize the fastembed model on first use. Idempotent.
-
-        Lock-and-double-check so concurrent embed() calls (ingest fans out to
-        ``ingest_concurrency`` callers) don't each load a separate ~550MB
-        model into memory.
-        """
+        # Lock-and-double-check so concurrent embed() calls (ingest fans out to
+        # ingest_concurrency callers) don't each load a separate ~550MB model.
         if self._te is not None:
             return self._te
         async with self._load_lock:
@@ -88,7 +83,7 @@ class FastEmbedEmbeddingClient:
             raise RuntimeError(msg) from exc
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        """Embed *texts* locally; budget reserve/settle 0.0 for contract symmetry."""
+        # Budget reserve/settle 0.0 for contract symmetry with paid clients.
         if model is not None and model != self.model:
             msg = (
                 f"FastEmbedEmbeddingClient was constructed with {self.model!r}; "
@@ -108,13 +103,9 @@ class FastEmbedEmbeddingClient:
 
     @staticmethod
     def _embed_sync(te: TextEmbedding, texts: list[str]) -> tuple[list[list[float]], int]:
-        """Run fastembed inference + tokenizer count on a worker thread.
-
-        Vectors are L2-normalized before return so cosine == dot in Qdrant.
-        fastembed routes ``nomic-ai/nomic-embed-text-v1.5`` through
-        ``PooledEmbedding`` (mean pooling, no normalization), so the normalize
-        happens here.
-        """
+        # L2-normalize before return so cosine == dot in Qdrant. fastembed
+        # routes nomic-embed-text-v1.5 through PooledEmbedding (mean pooling,
+        # no normalization), so the normalize happens here.
         vectors: list[list[float]] = []
         for v in te.embed(texts):
             arr = np.asarray(v, dtype=np.float32)

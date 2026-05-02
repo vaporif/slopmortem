@@ -48,11 +48,9 @@ class FakeEmbeddingClient:
 
     @property
     def dim(self) -> int:
-        """Vector dimensionality for the configured embedding model."""
         return EMBED_DIMS[self.model]
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        """Return canned vectors when configured; otherwise sha256-derived deterministic vectors."""
         eff_model = model or self.model
         self.calls.append(_EmbedCall(texts=list(texts), model=eff_model))
         if self._canned is not None:

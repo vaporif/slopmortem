@@ -63,7 +63,6 @@ class OpenAIEmbeddingClient:
         initial_backoff: float = 1.0,
         sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
-        """Bind an SDK instance, budget, and tunable retry knobs."""
         if model not in OPENAI_EMBED_MODELS:
             msg = (
                 f"OpenAIEmbeddingClient does not support model {model!r}; "
@@ -79,11 +78,9 @@ class OpenAIEmbeddingClient:
 
     @property
     def dim(self) -> int:
-        """Vector dimensionality for the configured embedding model."""
         return EMBED_DIMS[self.model]
 
     async def embed(self, texts: list[str], *, model: str | None = None) -> EmbeddingResult:
-        """Embed *texts* and settle the real cost against the budget."""
         eff_model = model or self.model
         if not texts:
             return EmbeddingResult(vectors=[], n_tokens=0, cost_usd=0.0)
