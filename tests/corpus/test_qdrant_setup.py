@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from qdrant_client.models import Modifier
 
-from slopmortem.corpus.qdrant_store import ensure_collection
-from slopmortem.llm.openai_embeddings import EMBED_DIMS
+from slopmortem.corpus import ensure_collection
+from slopmortem.llm import EMBED_DIMS
 
 
 @pytest.mark.requires_qdrant

@@ -132,5 +132,4 @@ class Config(BaseSettings):
 
 
 def load_config() -> Config:
-    """Build a Config from the current TOML + env + dotenv state."""
     return Config()

@@ -23,11 +23,9 @@ class Budget:
 
     @property
     def remaining(self) -> float:
-        """USD left after settled spend and outstanding reservations."""
         return self.cap_usd - self.spent_usd - sum(self.reserved.values())
 
     async def reserve(self, amount_usd: float) -> str:
-        """Hold *amount_usd* under the lock; return a reservation id for settle()."""
         async with self.lock:
             if self.remaining < amount_usd:
                 msg = f"need {amount_usd:.4f}, have {self.remaining:.4f}"

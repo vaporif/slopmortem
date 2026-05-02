@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from slopmortem.corpus.merge_text import Section, combined_hash, combined_text
+from slopmortem.corpus import Section, combined_hash, combined_text
 
 
 def test_combined_text_deterministic_across_orderings():

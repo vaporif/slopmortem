@@ -6,5 +6,4 @@ from datetime import UTC, datetime
 
 
 def utcnow_iso() -> str:
-    """Current UTC time as a Z-suffixed ISO-8601 string."""
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")

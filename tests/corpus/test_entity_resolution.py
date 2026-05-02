@@ -8,11 +8,9 @@ import pytest
 import pytest_asyncio
 
 from conftest import llm_canned_key
-from slopmortem.corpus.entity_resolution import ResolveResult, resolve_entity
-from slopmortem.corpus.merge import MergeJournal
-from slopmortem.llm.fake import FakeLLMClient, FakeResponse
-from slopmortem.llm.fake_embeddings import FakeEmbeddingClient
-from slopmortem.llm.prompts import render_prompt
+from slopmortem.corpus import MergeJournal, resolve_entity
+from slopmortem.corpus.entity_resolution import ResolveResult
+from slopmortem.llm import FakeEmbeddingClient, FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import MergeState, RawEntry
 from slopmortem.tracing.events import SpanEvent
 

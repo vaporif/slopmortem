@@ -23,7 +23,6 @@ type FrontMatter = dict[str, object]
 
 
 def _render(body: str, front_matter: FrontMatter) -> str:
-    """Render YAML front-matter and body into a single markdown string."""
     post = frontmatter.Post(body)
     post.metadata = front_matter
     return frontmatter.dumps(post)
@@ -51,7 +50,6 @@ async def write_canonical_atomic(
     *,
     front_matter: FrontMatter | None = None,
 ) -> None:
-    """Atomically write the canonical merged markdown for *text_id*."""
     path = safe_path(base, kind="canonical", text_id=text_id)
     contents = _render(body, front_matter or {})
     await to_thread.run_sync(_write_sync, path, contents)
@@ -65,19 +63,17 @@ async def write_raw_atomic(
     *,
     front_matter: FrontMatter | None = None,
 ) -> None:
-    """Atomically write the per-source raw markdown for *text_id*."""
     path = safe_path(base, kind="raw", text_id=text_id, source=source)
     contents = _render(body, front_matter or {})
     await to_thread.run_sync(_write_sync, path, contents)
 
 
 def read_canonical(base: Path, text_id: str) -> str:
-    """Read the full markdown (front-matter + body) for canonical *text_id*."""
     path = safe_path(base, kind="canonical", text_id=text_id)
     return path.read_text(encoding="utf-8")
 
 
 def read_front_matter(path: Path) -> FrontMatter:
-    """Parse YAML front matter from *path*; empty dict when no delimiters present."""
+    """Empty dict when no front-matter delimiters present."""
     post = frontmatter.load(str(path))
     return {str(k): v for k, v in post.metadata.items()}
