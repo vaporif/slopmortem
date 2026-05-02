@@ -293,7 +293,7 @@ async def _run_ingest(  # noqa: PLR0913, C901 - the ingest CLI surface is wide.
 
 def _default_curated_yaml() -> Path:
     """Return the in-tree curated post-mortem YAML path shipped with the package."""
-    return Path(__file__).parent / "corpus" / "sources" / "curated" / "post_mortems_v0.yml"
+    return Path(__file__).parent.parent / "corpus" / "sources" / "curated" / "post_mortems_v0.yml"
 
 
 async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJournal:

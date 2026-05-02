@@ -1,20 +1,11 @@
 """Re-score quarantined docs; declassify survivors out of the quarantine tree.
 
-``slopmortem ingest --reclassify`` re-runs the classifier when the threshold
-or model changes; declassified docs flow back toward entity resolution on the
-next normal ``ingest`` run.
+Survivors move from ``<post_mortems_root>/quarantine/<sha>.md`` to
+``<post_mortems_root>/raw/<source>/<text_id>.md`` (text_id = first 16 hex of
+content_sha256, matching :func:`slopmortem.ingest._text_id_for`); the
+quarantine row is dropped via :meth:`MergeJournal.drop_quarantine_row`.
 
-The quarantine row primary key is ``(content_sha256, source, source_id)``
-(see :mod:`slopmortem.corpus._merge` schema). Quarantine markdown lives at
-``<post_mortems_root>/quarantine/<content_sha256>.md``. Survivors move to
-``<post_mortems_root>/raw/<source>/<text_id>.md``, where ``text_id`` is the
-first 16 hex chars of the content_sha256 (consistent with
-:func:`slopmortem.ingest._text_id_for` and what the merge journal expects).
-The quarantine row is dropped via
-:meth:`MergeJournal.drop_quarantine_row`. The next normal ``ingest`` run
-re-fetches the entry from its source and routes it through entity resolution.
-
-We don't write a ``merge_state="pending"`` row at this point: the schema's
+No ``merge_state="pending"`` row is written here: the schema's
 ``canonical_id TEXT NOT NULL`` constraint plus the resolver-flip semantics in
 :func:`slopmortem.corpus._entity_resolution.resolve_entity` need a real
 canonical_id, which only entity resolution can assign. The next normal ingest

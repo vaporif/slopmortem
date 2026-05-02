@@ -55,7 +55,7 @@ class _CorpusReadProto(Protocol):
 
 
 class ReconcileRow(BaseModel):
-    """One drift finding: which file/row, which class, optional repair hint."""
+    """One drift finding."""
 
     drift_class: str
     canonical_id: str | None

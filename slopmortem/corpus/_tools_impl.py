@@ -1,8 +1,7 @@
 """Tool implementations exposed to the LLM via OpenRouter function-calling.
 
-The corpus tools (``_get_post_mortem`` / ``_search_corpus``) delegate to a
-module-level :class:`Corpus` bound at CLI startup via :func:`_set_corpus`.
-The indirection keeps tool functions as plain ``async def`` so they match the
+Corpus tools delegate to a module-level :class:`Corpus` bound via
+:func:`_set_corpus` so the functions stay plain ``async def`` and match the
 :class:`ToolSpec` signature contract (no closures, no bound methods).
 """
 
@@ -47,8 +46,6 @@ __all__ = [
 
 
 class GetPostMortemArgs(BaseModel):
-    """Arguments for ``get_post_mortem``: canonical id and read budget."""
-
     canonical_id: str
     max_chars: int = 8000
 
@@ -70,16 +67,12 @@ class SearchFacets(BaseModel):
 
 
 class SearchCorpusArgs(BaseModel):
-    """Arguments for ``search_corpus``: query string and optional facet filters."""
-
     q: str
     facets: SearchFacets | None = None
     limit: int = 5
 
 
 class SearchHit(BaseModel):
-    """A single corpus search result with the minimal fields the LLM reasons about."""
-
     canonical_id: str
     name: str
     snippet: str
@@ -87,15 +80,11 @@ class SearchHit(BaseModel):
 
 
 class TavilySearchArgs(BaseModel):
-    """Arguments for ``tavily_search``: web search query string."""
-
     q: str
     limit: int = 5
 
 
 class TavilyExtractArgs(BaseModel):
-    """Arguments for ``tavily_extract``: URL to fetch and extract."""
-
     url: str
 
 

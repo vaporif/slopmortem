@@ -1,9 +1,8 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportIndexIssue=false, reportOptionalSubscript=false
 """Qdrant-backed corpus store: collection bootstrap, read methods, and chunk upsert.
 
-Vendor-SDK boundary module. Qdrant's models are loosely typed (``Optional``
-/ ``Mapping`` everywhere), so the per-file ``reportAny`` / ``reportUnknown*``
-silences match the pattern from ``slopmortem/llm/openai_embeddings.py``.
+Vendor-SDK boundary; per-file ``reportAny`` / ``reportUnknown*`` silences
+match ``slopmortem/llm/openai_embeddings.py``.
 """
 
 from __future__ import annotations

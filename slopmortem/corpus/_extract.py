@@ -82,14 +82,7 @@ def _strip_attribute_text(root: Any) -> None:  # pyright: ignore[reportExplicitA
 
 
 def sanitize_html(html: str) -> str:
-    """Strip injection-surface nodes and attributes from *html*.
-
-    Args:
-        html: Raw HTML bytes/text from a fetched page.
-
-    Returns:
-        Cleaned HTML string ready to hand to a content extractor.
-    """
+    """Strip injection-surface nodes and attributes from *html*."""
     if not html or not html.strip():
         return ""
     try:
@@ -125,14 +118,7 @@ def _readability_extract(html: str) -> str:
 
 
 def extract_clean(html: str) -> str:
-    """Sanitize then extract main content; return ``""`` when below length floor.
-
-    Args:
-        html: Raw HTML from a fetched source page.
-
-    Returns:
-        Plain-text content if at least :data:`LENGTH_FLOOR` chars; empty string otherwise.
-    """
+    """Sanitize then extract main content; return ``""`` below :data:`LENGTH_FLOOR`."""
     cleaned = sanitize_html(html)
     if not cleaned:
         return ""
