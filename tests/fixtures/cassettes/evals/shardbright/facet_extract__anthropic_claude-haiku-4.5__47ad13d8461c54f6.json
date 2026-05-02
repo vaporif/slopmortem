@@ -13,9 +13,9 @@
   "response": {
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
-    "cost_usd": 0.002269,
+    "cost_usd": 0.002324,
     "stop_reason": "stop",
-    "text": "{\"sector\": \"gaming\", \"business_model\": \"ad_supported\", \"customer_type\": \"consumer\", \"geography\": \"global\", \"monetization\": \"tiered_freemium\", \"sub_sector\": \"4X strategy\", \"product_type\": \"mobile and PC game\", \"price_point\": null, \"founding_year\": null, \"failure_year\": null}"
+    "text": "{\"sector\": \"gaming\", \"business_model\": \"ad_supported\", \"customer_type\": \"consumer\", \"geography\": \"global\", \"monetization\": \"tiered_freemium\", \"sub_sector\": \"4X strategy games\", \"product_type\": \"mobile and PC game\", \"price_point\": \"free-to-play with in-game purchases\", \"founding_year\": null, \"failure_year\": null}"
   },
   "schema_version": "1.0"
 }

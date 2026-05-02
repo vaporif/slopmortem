@@ -226,9 +226,21 @@ class QdrantCorpus:
 
         # Collapse chunk hits to parents: best-score per canonical_id.
         # ``query_points`` returns ``QueryResponse`` whose ``.points`` is a
-        # list of ``ScoredPoint``.
+        # list of ``ScoredPoint``. Pre-sort by ``(-score, canonical_id, chunk_idx)``
+        # so tied scores break deterministically — Qdrant's RRF + FormulaQuery
+        # pipeline does not guarantee a stable order across runs, and that
+        # non-determinism otherwise leaks into the rerank prompt hash and into
+        # which chunk's payload wins per parent.
+        points = sorted(
+            resp.points,
+            key=lambda h: (
+                -float(h.score),
+                str((h.payload or {}).get("canonical_id", "")),
+                int((h.payload or {}).get("chunk_idx", 0)),
+            ),
+        )
         best: dict[str, tuple[float, dict[str, Any]]] = {}  # pyright: ignore[reportExplicitAny]
-        for hit in resp.points:
+        for hit in points:
             payload = dict(hit.payload or {})
             cid = str(payload.get("canonical_id", ""))
             if not cid:
