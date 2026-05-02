@@ -1,3 +1,4 @@
+import os
 import re
 
 import pytest
@@ -80,6 +81,6 @@ def vcr_config():
         "filter_headers": list(HEADER_ALLOWLIST),
         "before_record_request": before_record_request,
         "before_record_response": before_record_response,
-        "record_mode": "none",
+        "record_mode": "once" if os.environ.get("RECORD") else "none",
         "match_on": ("method", "scheme", "host", "port", "path", "query", "body"),
     }
