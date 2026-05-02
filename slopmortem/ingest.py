@@ -214,11 +214,9 @@ class InMemoryCorpus:
         self.points.append(point)
 
     async def has_chunks(self, canonical_id: str) -> bool:
-        """Return whether any point has the given parent canonical id."""
         return any(p.payload.get("canonical_id") == canonical_id for p in self.points)
 
     async def delete_chunks_for_canonical(self, canonical_id: str) -> None:
-        """Drop every point whose payload references *canonical_id*."""
         self.points = [p for p in self.points if p.payload.get("canonical_id") != canonical_id]
 
 
@@ -230,7 +228,6 @@ class FakeSlopClassifier:
     scores: dict[str, float] = field(default_factory=dict)
 
     async def score(self, text: str) -> float:
-        """Look up ``scores`` by exact match on the first 200 chars; fall back to default."""
         for key, val in self.scores.items():
             if text.startswith(key) or key in text:
                 return val
@@ -869,34 +866,11 @@ async def ingest(  # noqa: PLR0913, C901, PLR0912, PLR0915 - orchestration takes
 ) -> IngestResult:
     """Run one full ingest pass and return the aggregated :class:`IngestResult`.
 
-    Args:
-        sources: :class:`Source` adapters to fetch from. Per-source failures
-            log and the run continues.
-        enrichers: Optional pre-classifier enrichers (e.g. wayback fallback).
-        journal: SQLite merge journal — pending/complete writers and quarantine.
-        corpus: :class:`Corpus` write surface. Production is :class:`QdrantCorpus`.
-        llm: LLM client for facet_extract + summarize_for_rerank.
-        embed_client: Dense embedding client. Vector dim is read at the
-            client level; ingest never hardcodes dimensions.
-        budget: Shared :class:`~slopmortem.budget.Budget`. LLM and embedding
-            clients reserve and settle internally.
-        slop_classifier: Score-only classifier (Binoculars in production).
-        config: Loaded :class:`Config`. Reads ingest_concurrency,
-            slop_threshold, model ids, taxonomy/reliability versions.
-        post_mortems_root: Root for ``raw/``, ``canonical/``, ``quarantine/``.
-        dry_run: Count entries that would be ingested but write nothing —
-            no journal rows, no disk, no qdrant.
-        force: Bypass the skip_key short-circuit and re-process every entry.
-        sparse_encoder: BM25 sparse encoder override. ``None`` lazy-loads the
-            production fastembed model on first call. Tests pass a no-op stub
-            so they don't trigger the ~150 MB ONNX download.
-        limit: Cap on entries gathered. ``None`` is unbounded; when set,
-            sources past the cap aren't started.
-        progress: :class:`IngestProgress` sink for phase-level updates.
-            Defaults to :class:`NullProgress`.
-
-    Returns:
-        Counters and span event names for the run.
+    Per-entry and per-source failures log and continue; only budget exhaustion
+    truncates the run. ``dry_run`` counts entries without writing journal,
+    disk, or qdrant. ``force`` bypasses the skip_key short-circuit.
+    ``sparse_encoder=None`` lazy-loads the production fastembed model; tests
+    pass a no-op stub to dodge the ~150 MB ONNX download.
     """
     result = IngestResult(dry_run=dry_run)
     progress = progress or NullProgress()
