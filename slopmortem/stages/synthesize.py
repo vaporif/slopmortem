@@ -133,30 +133,12 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     max_tokens: int | None = None,
     on_candidate_done: Callable[[BaseException | None], None] | None = None,
 ) -> list[Synthesis | BaseException]:
-    """Cache-warm synthesize fan-out: one warm call, then :func:`gather_resilient`.
+    """Cache-warm fan-out: one warm call, then :func:`gather_resilient` for the rest.
 
-    The first call runs alone so the prompt cache is populated before the
-    parallel fan-out hits it — avoids a pile-up of cache-write races. The rest
-    run via :func:`gather_resilient` so one failed candidate can't cancel its
-    siblings; the reporting path filters out exceptions and notes the gap on
-    ``Report.candidates``.
-
-    Args:
-        candidates: All candidates to synthesize. May be empty.
-        ctx: The user's :class:`InputContext`.
-        llm: Async :class:`LLMClient`.
-        config: :class:`Config`.
-        model: Optional model override.
-        max_tokens: Optional cap on completion tokens, forwarded to each
-            :func:`synthesize` call.
-        on_candidate_done: Optional callback fired exactly once per candidate
-            when its ``synthesize`` call settles. Receives ``None`` on success
-            or the raised :class:`BaseException` on failure. For CLI
-            progress-bar wiring; the pipeline's pure path passes ``None``.
-
-    Returns:
-        A list the same length as *candidates*. Each entry is either a
-        :class:`Synthesis` or the :class:`BaseException` raised on its behalf.
+    First call runs alone so the prompt cache is populated before parallel
+    calls race to write it. Remaining calls use :func:`gather_resilient` so
+    a single failure doesn't cancel siblings — exceptions are returned
+    in-list, not raised.
     """
     if not candidates:
         return []
