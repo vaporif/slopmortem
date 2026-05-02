@@ -85,7 +85,7 @@ def _tavily_off(config: Config) -> Generator[Config]:
     yield config.model_copy(update={"enable_tavily_synthesis": False})
 
 
-async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point exposes each knob
+async def record_cassettes_for_inputs(  # noqa: PLR0913 — entry point exposes each knob
     *,
     inputs: list[InputContext],
     output_dir: Path,

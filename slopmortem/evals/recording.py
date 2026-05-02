@@ -35,7 +35,7 @@ _PREVIEW_CHARS_TEXT = 200
 class RecordingLLMClient:
     """Wrap a real `LLMClient`; write one LLM cassette per `complete()` call."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — wrapper exposes every recording knob explicitly
         self,
         *,
         inner: LLMClient,

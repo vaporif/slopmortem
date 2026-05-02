@@ -85,6 +85,7 @@ from slopmortem.evals.cassettes import (
     load_row_fakes,
 )
 from slopmortem.evals.qdrant_setup import setup_ephemeral_qdrant
+from slopmortem.evals.recording_progress import RecordPhase, RecordProgress
 from slopmortem.llm.fake import NoCannedResponseError
 from slopmortem.llm.openai_embeddings import EMBED_DIMS
 from slopmortem.models import (
@@ -505,6 +506,55 @@ def _build_argparser() -> argparse.ArgumentParser:
     return p
 
 
+class _RecordingFooterStats:
+    """Capture row + cost stats off a :class:`RecordProgress` for the post-run footer.
+
+    Wraps an underlying sink (Rich or Null) and forwards every call. Counts
+    ``advance_phase(ROWS)`` calls (one per successful row), parses the per-row
+    ``log`` line for ``"N cassettes"``, and remembers the last ``spent_usd``
+    pushed via ``cost_update``. Avoids changing :func:`record_cassettes_for_inputs`'s
+    return type while still feeding ``_render_record_footer`` real numbers.
+    """
+
+    def __init__(self, inner: RecordProgress) -> None:
+        """Bind the inner sink and initialize counters."""
+        self._inner = inner
+        self.rows_succeeded = 0
+        self.cassettes_written = 0
+        self.last_spent_usd = 0.0
+
+    def start_phase(self, phase: RecordPhase, total: int | None) -> None:
+        self._inner.start_phase(phase, total)
+
+    def advance_phase(self, phase: RecordPhase, n: int = 1) -> None:
+        if phase is RecordPhase.ROWS:
+            self.rows_succeeded += n
+        self._inner.advance_phase(phase, n=n)
+
+    def end_phase(self, phase: RecordPhase) -> None:
+        self._inner.end_phase(phase)
+
+    def set_phase_status(self, phase: RecordPhase, status: str | None) -> None:
+        self._inner.set_phase_status(phase, status)
+
+    def log(self, message: str) -> None:
+        # Per-row log shape pinned by ``record_cassettes_for_inputs``:
+        # ``✓ <scope> — N cassettes, $X.XXXX``. Pull N out by token rather
+        # than regex; cheaper and matches the format string exactly.
+        for token in message.split():
+            if token.isdigit():
+                self.cassettes_written += int(token)
+                break
+        self._inner.log(message)
+
+    def error(self, phase: RecordPhase, message: str) -> None:
+        self._inner.error(phase, message)
+
+    def cost_update(self, spent_usd: float, max_usd: float) -> None:
+        self.last_spent_usd = spent_usd
+        self._inner.cost_update(spent_usd, max_usd)
+
+
 def _run_record(
     *,
     dataset_path: Path,
@@ -512,8 +562,15 @@ def _run_record(
     max_cost_usd: float,
 ) -> None:
     """Dispatch to the recording helper. Exits the process on completion or error."""
+    import contextlib  # noqa: PLC0415
+
     from slopmortem.config import load_config  # noqa: PLC0415
     from slopmortem.evals import recording_helper  # noqa: PLC0415
+    from slopmortem.evals.recording_progress import NullRecordProgress  # noqa: PLC0415
+    from slopmortem.evals.render import RichRecordProgress  # noqa: PLC0415
+    from slopmortem.evals.render import (  # noqa: PLC0415
+        _render_record_footer,  # pyright: ignore[reportPrivateUsage]
+    )
 
     rows = _load_dataset(dataset_path)
     if scope is not None:
@@ -534,15 +591,37 @@ def _run_record(
             file=sys.stderr,
         )
         sys.exit(2)
-    asyncio.run(
-        recording_helper.record_cassettes_for_inputs(
-            inputs=rows,
-            output_dir=output_dir,
-            corpus_fixture_path=corpus_fixture_path,
-            config=cfg,
-            max_cost_usd=max_cost_usd,
-        )
+
+    progress_ctx: contextlib.AbstractContextManager[RichRecordProgress | None] = (
+        RichRecordProgress() if sys.stderr.isatty() else contextlib.nullcontext()
     )
+    with progress_ctx as bar:
+        sink: RecordProgress = bar if bar is not None else NullRecordProgress()
+        stats = _RecordingFooterStats(sink)
+        asyncio.run(
+            recording_helper.record_cassettes_for_inputs(
+                inputs=rows,
+                output_dir=output_dir,
+                corpus_fixture_path=corpus_fixture_path,
+                config=cfg,
+                max_cost_usd=max_cost_usd,
+                progress=stats,
+            )
+        )
+        # Footer goes to the bar's console when present so the panel renders
+        # under the live progress region rather than fighting it; the
+        # nullcontext branch falls back to a fresh stderr console.
+        from rich.console import Console  # noqa: PLC0415
+
+        footer_console = bar.console if bar is not None else Console(stderr=True)
+        _render_record_footer(
+            footer_console,
+            total_cost_usd=stats.last_spent_usd,
+            max_cost_usd=max_cost_usd,
+            rows_total=len(rows),
+            rows_succeeded=stats.rows_succeeded,
+            cassettes_written=stats.cassettes_written,
+        )
     sys.exit(0)
 
 

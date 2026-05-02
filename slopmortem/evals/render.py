@@ -61,12 +61,12 @@ class RichRecordProgress(RichPhaseProgress[RecordPhase]):
         """
         bar_total = max(max_usd, 1.001)
         if RecordPhase.COST not in self._tasks:
+            # ``add_task`` types ``completed`` as ``int``; seed at zero and let
+            # the immediate ``update`` push the float ``spent_usd`` through.
             self._tasks[RecordPhase.COST] = self._progress.add_task(
                 self._label(RecordPhase.COST),
                 total=bar_total,
-                completed=spent_usd,
             )
-            return
         self._progress.update(
             self._tasks[RecordPhase.COST],
             total=bar_total,
@@ -74,7 +74,7 @@ class RichRecordProgress(RichPhaseProgress[RecordPhase]):
         )
 
 
-def _render_record_footer(
+def _render_record_footer(  # noqa: PLR0913 — footer pulls every stat from the runner  # pyright: ignore[reportUnusedFunction]
     console: Console,
     *,
     total_cost_usd: float,
