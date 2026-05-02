@@ -22,15 +22,23 @@ if TYPE_CHECKING:
 
 @pytest.mark.requires_qdrant
 def test_runner_replay_passes_with_recorded_cassettes(tmp_path: Path) -> None:
-    """Happy path: ephemeral Qdrant + committed cassette dir → exit 0, non-empty rows."""
+    """Happy path: ephemeral Qdrant + committed cassette dir → exit 0, non-empty rows.
+
+    Uses ``kappa-cli`` because its committed cassettes actually clear the
+    ``min_similarity_score`` filter on both sides (rerank and post-synth).
+    Other rows in ``tests/evals/datasets/seed.jsonl`` (ledgermint, gridspring,
+    kakikaki, lastmile-iq, yume-tutor) score below 4.0 at one stage or the
+    other — see ``tests/evals/baseline.json`` for the per-row truth.
+    """
     dataset = tmp_path / "seed.jsonl"
     dataset.write_text(
         json.dumps(
             {
-                "name": "ledgermint",
+                "name": "kappa-cli",
                 "description": (
-                    "B2B SaaS that automates monthly close for US-based mid-market"
-                    " controllers; charges per-seat with a per-transaction overage tier."
+                    "Developer-focused B2B SaaS that ships a CLI plus a hosted control"
+                    " plane for managing ephemeral preview environments across cloud"
+                    " providers."
                 ),
             }
         )
@@ -51,8 +59,8 @@ def test_runner_replay_passes_with_recorded_cassettes(tmp_path: Path) -> None:
     assert excinfo.value.code == 0
     parsed = json.loads(baseline.read_text())
     assert parsed["version"] == 1
-    assert "ledgermint" in parsed["rows"]
-    row = parsed["rows"]["ledgermint"]
+    assert "kappa-cli" in parsed["rows"]
+    row = parsed["rows"]["kappa-cli"]
     assert row["candidates_count"] > 0, "happy path must exercise at least one candidate"
     assert row["assertions"], "assertions map must be non-empty on the happy path"
 
@@ -112,19 +120,34 @@ def test_runner_replay_unknown_scope_is_fatal(tmp_path: Path) -> None:
 def test_runner_replay_fails_loud_on_llm_cassette_miss(
     tmp_path: Path, capsys: CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Mutating an LLM cassette filename → NoCannedResponseError → FAIL line, candidates_count=0.
+    """Deleting an LLM cassette → NoCannedResponseError → FAIL line, candidates_count=0.
 
     Strategy: copy the committed ledgermint cassette dir into a tmp scope dir,
-    rewrite one synthesize__*.json filename to a deliberately-different prompt
-    hash, then invoke the runner against the tmp dir via the
+    delete the synthesize-stage cassette (the one with ``similarity`` in the
+    payload, not the rerank cassette which shares the same ``synthesize__``
+    prefix), then invoke the runner against the tmp dir via the
     ``runner._CASSETTE_ROOT`` monkeypatch hook.
+
+    Renaming wouldn't work — ``load_llm_cassettes`` keys cassettes by JSON
+    content (template_sha + model + prompt_hash), not by filename, so a
+    rename leaves the canned dict intact. Deletion actually removes the
+    canned response so the synthesis lookup misses.
     """
     src = Path("tests/fixtures/cassettes/evals/ledgermint")
     dst_root = tmp_path / "cassettes_root"
     dst = dst_root / "ledgermint"
     shutil.copytree(src, dst)
-    synth = next(dst.glob("synthesize__*.json"))
-    synth.rename(dst / "synthesize__deadbeefdeadbeef.json")
+    # Pick the synthesize-stage cassette specifically (the rerank cassette
+    # shares the ``synthesize__`` prefix because both stages use the same
+    # model). The rerank response text decodes to ``{"ranked": [...]}``;
+    # the synthesize response decodes to a single ``LLMSynthesis`` object
+    # with ``"candidate_id"``.
+    synth_cassette = next(
+        p
+        for p in dst.glob("synthesize__*.json")
+        if "ranked" not in json.loads(json.loads(p.read_text())["response"]["text"])
+    )
+    synth_cassette.unlink()
 
     dataset = tmp_path / "seed.jsonl"
     dataset.write_text(

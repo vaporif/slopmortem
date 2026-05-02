@@ -12,11 +12,18 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
-class NoCannedResponseError(KeyError):
+class NoCannedResponseError(BaseException):
     """Raised when FakeLLMClient can't find a canned reply for the given key.
 
     The error message names the missing ``(template_sha, model, prompt_hash)``
     so you can find the gap without a repro.
+
+    Inherits from BaseException, not Exception, so it propagates through the
+    resilient fan-out wrappers in ``slopmortem.stages.synthesize`` (which
+    catch ``Exception`` to keep one bad candidate from killing siblings). A
+    cassette miss is a test-fixture error, not an operational error — it must
+    surface to the eval runner instead of being silently absorbed as a
+    dropped candidate.
     """
 
 

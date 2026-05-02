@@ -47,8 +47,13 @@ class DuplicateCassetteError(Exception):
     """Raised when two cassette files in the same scope dir resolve to the same key."""
 
 
-class NoCannedEmbeddingError(KeyError):
-    """Raised when an embedding cassette miss occurs under strict (canned-not-None) lookup."""
+class NoCannedEmbeddingError(BaseException):
+    """Raised when an embedding cassette miss occurs under strict (canned-not-None) lookup.
+
+    BaseException (not Exception) so resilient fan-out wrappers can't swallow
+    it as an operational error — see ``NoCannedResponseError`` for the same
+    rationale.
+    """
 
 
 class RecordingBudgetExceededError(Exception):
