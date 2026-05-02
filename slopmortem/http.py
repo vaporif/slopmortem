@@ -22,7 +22,7 @@ _BLOCKED_IMDS_HOSTS = frozenset(
 
 
 class SSRFBlockedError(RuntimeError):
-    """Raised when ``safe_get`` / ``safe_post`` refuse a URL on SSRF-policy grounds."""
+    pass
 
 
 def _is_blocked_address(addr: str) -> bool:
