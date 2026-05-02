@@ -737,7 +737,7 @@ If cassettes are stale at the start of PR 2, drift inside PR 2 is ambiguous.
 - Move: `slopmortem/ingest.py` → `slopmortem/ingest/_orchestrator.py`
 - Create: `slopmortem/ingest/__init__.py`
 
-- [ ] **Step 1: Capture the pre-move external surface**
+- [x] **Step 1: Capture the pre-move external surface**
 
 Run:
 
@@ -749,7 +749,7 @@ grep -rhnE "from slopmortem\.ingest(\.|[[:space:]])" slopmortem/ tests/ \
 
 This is the list of names external callers import. T2.6 trims `__init__.py` to exactly this set.
 
-- [ ] **Step 2: Capture pre-move smoke/eval baseline**
+- [x] **Step 2: Capture pre-move smoke/eval baseline**
 
 Run:
 
@@ -760,7 +760,7 @@ just eval 2>&1 | tee /tmp/eval_before.txt
 
 These are the diff baselines for steps 7–8.
 
-- [ ] **Step 3: Grep for `__name__`-pinned log filters or span attributes**
+- [x] **Step 3: Grep for `__name__`-pinned log filters or span attributes**
 
 Run:
 
@@ -770,7 +770,7 @@ grep -rnE "(slopmortem\.ingest['\"]|name == ['\"]slopmortem\.ingest['\"]|getLogg
 
 Expected: empty. If anything matches, the move will silently change `__name__` from `slopmortem.ingest` to `slopmortem.ingest._orchestrator` and break the filter — fix or update before proceeding.
 
-- [ ] **Step 4: Move the file**
+- [x] **Step 4: Move the file**
 
 Run:
 
@@ -779,7 +779,7 @@ mkdir -p slopmortem/ingest
 git mv slopmortem/ingest.py slopmortem/ingest/_orchestrator.py
 ```
 
-- [ ] **Step 5+6: Add `__all__` to `_orchestrator.py` AND create `__init__.py` in the SAME commit**
+- [x] **Step 5+6: Add `__all__` to `_orchestrator.py` AND create `__init__.py` in the SAME commit**
 
 These two edits MUST land in one commit. If `__init__.py` lands first with `from … import *` but no `__all__` on `_orchestrator.py`, the wildcard re-export leaks `InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier`, and the test protocols to the public surface — a CLAUDE.md "fakes over mocks" violation that survives in git history.
 
@@ -801,7 +801,7 @@ The `noqa` is required because ruff disallows `import *` by default; here it is 
 
 Do not run `git commit` between 5a and 5b. T2.6 will replace this wildcard with explicit re-exports later — until then, the `__all__` is the only thing keeping fakes out of the public surface.
 
-- [ ] **Step 7: Verify the smoke/eval baseline holds**
+- [x] **Step 7: Verify the smoke/eval baseline holds**
 
 Run:
 
@@ -814,7 +814,7 @@ diff /tmp/eval_before.txt  /tmp/eval_after.txt  | head -40
 
 Expected: only timing/path differences in the smoke output; eval baseline byte-stable on the assertion summary.
 
-- [ ] **Step 8: Run the full gate**
+- [x] **Step 8: Run the full gate**
 
 Run: `just test && just lint && just typecheck`
 Expected: green. T1.6's `corpus-leaf` / `llm-leaf` / etc. contracts still pass (the move did not touch any cross-package imports).

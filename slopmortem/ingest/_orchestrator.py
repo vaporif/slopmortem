@@ -82,6 +82,19 @@ if TYPE_CHECKING:
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import RawEntry
 
+__all__ = [
+    "INGEST_PHASE_LABELS",
+    "Corpus",
+    "FakeSlopClassifier",
+    "HaikuSlopClassifier",
+    "InMemoryCorpus",
+    "IngestPhase",
+    "IngestResult",
+    "SlopClassifier",
+    "_Point",
+    "ingest",
+]
+
 # Sparse encoder shape: Callable[[text], {token_id: weight}].
 type SparseEncoder = Callable[[str], dict[int, float]]
 
