@@ -113,7 +113,7 @@ def _tavily_off(config: Config) -> Generator[Config]:
     yield config.model_copy(update={"enable_tavily_synthesis": False})
 
 
-async def record_cassettes_for_inputs(  # noqa: PLR0913 — entry point exposes each knob
+async def record_cassettes_for_inputs(  # noqa: PLR0913, PLR0915 — entry point exposes each knob; per-row inline closure intentional
     *,
     inputs: list[InputContext],
     output_dir: Path,
@@ -144,7 +144,7 @@ async def record_cassettes_for_inputs(  # noqa: PLR0913 — entry point exposes 
         progress: Optional :class:`RecordProgress` sink. Runner wires a Rich
             impl; ``None`` falls back to :class:`NullRecordProgress``.
         max_concurrent_rows: Upper bound on rows running concurrently. Default
-            3 keeps total in-flight Sonnet calls (~`limit × (3 + N_synthesize)`)
+            3 keeps total in-flight Sonnet calls (~``limit * (3 + N_synthesize)``)
             comfortably under typical OpenRouter per-key rate limits.
 
     Returns:

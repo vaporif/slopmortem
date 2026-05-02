@@ -6,8 +6,6 @@ import inspect
 import os
 from typing import TYPE_CHECKING
 
-import pytest
-
 from slopmortem.evals.recording_helper import (
     _AggregateProgressBridge,
     _atomic_swap,
@@ -87,61 +85,91 @@ def test_record_cassettes_for_inputs_accepts_progress_kwarg() -> None:
     assert isinstance(NullRecordProgress(), RecordProgress)
 
 
-def test_query_progress_bridge_collapses_to_rows_status() -> None:
-    """The bridge folds every inner phase event into ``ROWS``'s status suffix."""
+class _FakeSink:
+    """Minimal RecordProgress capturing advances/logs/errors for assertions."""
 
-    class _FakeSink:
-        def __init__(self) -> None:
-            self.statuses: list[str | None] = []
-            self.errors: list[tuple[RecordPhase, str]] = []
-            self.logs: list[str] = []
+    def __init__(self) -> None:
+        self.advances: list[tuple[RecordPhase, int]] = []
+        self.errors: list[tuple[RecordPhase, str]] = []
+        self.logs: list[str] = []
 
-        def start_phase(self, phase: RecordPhase, total: int | None) -> None:
-            del phase, total
-            pytest.fail(_NO_INNER_TASKS_MSG)
+    def start_phase(self, phase: RecordPhase, total: int | None) -> None:
+        del phase, total
 
-        def advance_phase(self, phase: RecordPhase, n: int = 1) -> None:
-            del phase, n
-            pytest.fail(_NO_INNER_TASKS_MSG)
+    def advance_phase(self, phase: RecordPhase, n: int = 1) -> None:
+        self.advances.append((phase, n))
 
-        def end_phase(self, phase: RecordPhase) -> None:
-            del phase
-            pytest.fail(_NO_INNER_TASKS_MSG)
+    def end_phase(self, phase: RecordPhase) -> None:
+        del phase
 
-        def set_phase_status(self, phase: RecordPhase, status: str | None) -> None:
-            assert phase == RecordPhase.ROWS
-            self.statuses.append(status)
+    def set_phase_status(self, phase: RecordPhase, status: str | None) -> None:
+        del phase, status
 
-        def log(self, message: str) -> None:
-            self.logs.append(message)
+    def log(self, message: str) -> None:
+        self.logs.append(message)
 
-        def error(self, phase: RecordPhase, message: str) -> None:
-            self.errors.append((phase, message))
+    def error(self, phase: RecordPhase, message: str) -> None:
+        self.errors.append((phase, message))
 
-        def cost_update(self, spent_usd: float, max_usd: float) -> None:
-            del spent_usd, max_usd
+    def cost_update(self, spent_usd: float, max_usd: float) -> None:
+        del spent_usd, max_usd
 
+
+def test_aggregate_bridge_funnels_inner_advances_to_rows() -> None:
+    """Every inner phase advance becomes one tick on the shared ROWS bar."""
     sink = _FakeSink()
-    bridge = _QueryProgressBridge(sink)
+    bridge = _AggregateProgressBridge(sink, ticks_per_row=8)  # 3 fixed + 5 synth
 
     bridge.start_phase(QueryPhase.FACET_EXTRACT, total=1)
-    assert sink.statuses[-1] == "extracting facets"
+    bridge.advance_phase(QueryPhase.FACET_EXTRACT)
+    bridge.advance_phase(QueryPhase.RETRIEVE)
+    bridge.advance_phase(QueryPhase.RERANK)
+    for _ in range(5):
+        bridge.advance_phase(QueryPhase.SYNTHESIZE)
 
-    bridge.start_phase(QueryPhase.SYNTHESIZE, total=2)
-    assert sink.statuses[-1] == "synthesizing post-mortems 0/2"
-    bridge.set_phase_status(QueryPhase.SYNTHESIZE, "warming prompt cache")
-    assert sink.statuses[-1] == "synthesizing post-mortems 0/2 — warming prompt cache"
+    # Each call lands on RecordPhase.ROWS with delta=1.
+    assert sink.advances == [(RecordPhase.ROWS, 1)] * 8
+
+
+def test_aggregate_bridge_top_up_fills_unfired_ticks() -> None:
+    """Rows that fire fewer SYNTHESIZE advances than budgeted top up at end."""
+    sink = _FakeSink()
+    bridge = _AggregateProgressBridge(sink, ticks_per_row=8)
+
+    bridge.advance_phase(QueryPhase.FACET_EXTRACT)
+    bridge.advance_phase(QueryPhase.RETRIEVE)
+    bridge.advance_phase(QueryPhase.RERANK)
+    # Only 2 of 5 syntheses fired (e.g., retrieve returned <N candidates).
     bridge.advance_phase(QueryPhase.SYNTHESIZE)
-    bridge.set_phase_status(QueryPhase.SYNTHESIZE, None)
-    assert sink.statuses[-1] == "synthesizing post-mortems 1/2"
+    bridge.advance_phase(QueryPhase.SYNTHESIZE)
+    bridge.top_up()
 
-    bridge.error(QueryPhase.SYNTHESIZE, "boom")
-    assert sink.errors == [(RecordPhase.ROWS, "boom")]
+    total_ticked = sum(n for _, n in sink.advances)
+    assert total_ticked == 8
+
+    # Calling top_up twice is idempotent — never overshoot.
+    bridge.top_up()
+    assert sum(n for _, n in sink.advances) == 8
+
+
+def test_aggregate_bridge_clamps_overshoot() -> None:
+    """A misbehaving inner stage can't push the bar past its declared total."""
+    sink = _FakeSink()
+    bridge = _AggregateProgressBridge(sink, ticks_per_row=4)
+
+    for _ in range(10):
+        bridge.advance_phase(QueryPhase.SYNTHESIZE)
+
+    assert sum(n for _, n in sink.advances) == 4
+
+
+def test_aggregate_bridge_forwards_log_and_error() -> None:
+    """Logs pass through; errors attach to ROWS regardless of source phase."""
+    sink = _FakeSink()
+    bridge = _AggregateProgressBridge(sink, ticks_per_row=8)
 
     bridge.log("hi")
-    assert sink.logs == ["hi"]
+    bridge.error(QueryPhase.SYNTHESIZE, "boom")
 
-    # end_phase must not flash an empty status between sub-steps.
-    statuses_before = list(sink.statuses)
-    bridge.end_phase(QueryPhase.SYNTHESIZE)
-    assert sink.statuses == statuses_before
+    assert sink.logs == ["hi"]
+    assert sink.errors == [(RecordPhase.ROWS, "boom")]
