@@ -643,7 +643,7 @@ async def _facet_summarize_fanout(
     llm: LLMClient,
     config: Config,
     progress: IngestProgress | None = None,
-) -> list[_FanoutResult | BaseException]:
+) -> list[_FanoutResult | Exception]:
     """Run facet+summarize concurrently under ``ingest_concurrency`` capacity.
 
     Returns one :class:`_FanoutResult` per entry in order, or the exception

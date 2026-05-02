@@ -60,7 +60,7 @@ _TRANSIENT_MIDSTREAM_CODES = frozenset({"overloaded_error"})
 async def gather_with_limit[T](
     coros: Iterable[Coroutine[Any, Any, T]],  # pyright: ignore[reportExplicitAny]
     limit: int,
-) -> list[T | BaseException]:
+) -> list[T | Exception]:
     """Run *coros* concurrently with at most *limit* in flight.
 
     Wraps :func:`slopmortem.concurrency.gather_resilient` behind an
