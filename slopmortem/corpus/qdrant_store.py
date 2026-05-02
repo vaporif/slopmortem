@@ -45,15 +45,8 @@ if TYPE_CHECKING:
 async def ensure_collection(client: AsyncQdrantClient, name: str, *, dim: int) -> None:
     """Create a hybrid (dense + sparse) collection or verify existing dim matches.
 
-    Args:
-        client: An :class:`AsyncQdrantClient` connected to the running service.
-        name: Collection name.
-        dim: Required dense vector dimensionality. Read by callers from
-            :data:`slopmortem.llm.openai_embeddings.EMBED_DIMS` keyed on
-            ``settings.embed_model_id`` (the single source of truth).
-
-    Raises:
-        ValueError: If the collection already exists with a different dim.
+    Raises ``ValueError`` if the collection already exists with a different
+    dim — caller's recovery is to drop ``data/qdrant/`` and re-ingest.
     """
     if await client.collection_exists(name):
         info = await client.get_collection(name)
@@ -81,7 +74,6 @@ async def _gather_alias_edges(
     candidates: list[Candidate],
     fetch: Callable[[str], Awaitable[list[AliasEdge]]],
 ) -> list[AliasEdge]:
-    """Fan out per-candidate alias-edge fetches; one failure aborts the rest."""
     edge_lists: list[list[AliasEdge]] = [[] for _ in candidates]
 
     async def _collect(idx: int, cid: str) -> None:
