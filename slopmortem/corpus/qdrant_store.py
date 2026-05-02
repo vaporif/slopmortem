@@ -104,23 +104,11 @@ class QdrantCorpus:
         rrf_k: int = 60,
         fetch_aliases: Callable[[str], Awaitable[list[AliasEdge]]] | None = None,
     ) -> None:
-        """Bind a Qdrant client, collection name, and on-disk markdown root.
-
-        Args:
-            client: Live :class:`AsyncQdrantClient`.
-            collection: Qdrant collection name.
-            post_mortems_root: Root for ``raw/`` and ``canonical/`` markdown.
-            facet_boost: Per-non-``"other"`` facet match boost added to the
-                inner RRF score. ``0.01`` matches the spec's provisional
-                value (lifts ~0.04 max for a 4-facet match against an RRF
-                ceiling of ~0.033).
-            rrf_k: Reciprocal-rank-fusion ``k`` constant, passed through to
-                the inner :class:`Prefetch`. Default 60 matches Qdrant's
-                server default.
-            fetch_aliases: Optional async fetcher (canonical_id -> alias
-                edges). When ``None``, the alias-graph dedup pass is a no-op
-                (handy for tests that don't seed an aliases table).
-        """
+        # ``facet_boost=0.01`` matches the spec's provisional value (lifts ~0.04
+        # max for a 4-facet match against an RRF ceiling of ~0.033). ``rrf_k=60``
+        # matches Qdrant's server default. ``fetch_aliases=None`` makes the
+        # alias-graph dedup pass a no-op — handy for tests that don't seed an
+        # aliases table.
         self._client = client
         self._collection = collection
         self._root = post_mortems_root
