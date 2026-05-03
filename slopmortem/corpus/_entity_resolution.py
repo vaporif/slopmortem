@@ -211,9 +211,7 @@ def _read_founding_year_sync(db_path: Path, registrable_domain: str) -> int | No
         )
         # sqlite3 Row indexing returns Any; column is INTEGER NULL.
         row = cast("sqlite3.Row | None", cur.fetchone())
-        if row is None:
-            return None
-        return cast("int | None", row["founding_year"])
+        return None if row is None else cast("int | None", row["founding_year"])
 
 
 def _write_founding_year_sync(
