@@ -164,7 +164,7 @@ Expected: all green. The new method is unused so far, so no behaviour drift.
 
 **Anti-scope:** Do NOT modify `pipeline.py` or `stages/__init__.py` yet. Do NOT touch the existing `llm_rerank()` function body. Do NOT delete the helpers in `pipeline.py` yet. Do NOT add tracing decorators to the new function — it's pure. Do NOT commit.
 
-- [ ] **Step 1: Add `logger` + new helpers to `stages/llm_rerank.py`**
+- [x] **Step 1: Add `logger` + new helpers to `stages/llm_rerank.py`**
 
 At the top of `slopmortem/stages/llm_rerank.py`, add `import logging` and a module logger after the other imports. Append the new helpers below the existing `llm_rerank()` function.
 
@@ -230,7 +230,7 @@ def select_top_n_by_similarity(
     return top_n, max(0, n_synthesize - len(top_n))
 ```
 
-- [ ] **Step 2: Read `tests/test_pipeline_e2e.py:694-785` to capture the existing helper tests**
+- [x] **Step 2: Read `tests/test_pipeline_e2e.py:694-785` to capture the existing helper tests**
 
 The relevant tests are:
 - `test_join_to_candidates_preserves_rerank_order` (`tests/test_pipeline_e2e.py:694-718`)
@@ -242,7 +242,7 @@ The relevant tests are:
 
 These will move to `tests/stages/test_llm_rerank.py` and be rewritten against `select_top_n_by_similarity` / `_join_by_id`.
 
-- [ ] **Step 3: Append migrated tests to `tests/stages/test_llm_rerank.py`**
+- [x] **Step 3: Append migrated tests to `tests/stages/test_llm_rerank.py`**
 
 Append to `tests/stages/test_llm_rerank.py`:
 
@@ -357,7 +357,7 @@ def test_select_top_n_by_similarity_empty_when_all_below() -> None:
 
 The new tests need `Candidate` and `CandidatePayload` already imported in `tests/stages/test_llm_rerank.py:14` — check that import covers `CandidatePayload` and add it if not.
 
-- [ ] **Step 4: Delete the migrated tests from `tests/test_pipeline_e2e.py`**
+- [x] **Step 4: Delete the migrated tests from `tests/test_pipeline_e2e.py`**
 
 Edit `tests/test_pipeline_e2e.py`:
 - Remove the `_filter_by_min_similarity, _filter_synth_by_min_similarity, _join_to_candidates` names from the `from slopmortem.pipeline import (...)` block at lines 38-45 — keep `QueryPhase`, `cutoff_iso`, `run_query` (and the still-needed `_filter_synth_by_min_similarity` until Task 3, see note below).
@@ -376,7 +376,7 @@ from slopmortem.pipeline import (
 )
 ```
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. New tests pass; pipeline.py still works because it still calls its own `_select_top_n` (unchanged in this task).
