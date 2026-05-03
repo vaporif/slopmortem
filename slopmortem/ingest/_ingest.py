@@ -96,12 +96,7 @@ def _record_entry_failure(  # noqa: PLR0913 - one seam, every dep
     exc: BaseException,
     message: str,
 ) -> None:
-    """Per-entry failure bookkeeping shared by classify and write loops.
-
-    Caller still owns ``progress.advance_phase`` and the ``continue`` because
-    the surrounding control flow varies (e.g. write phase has two distinct
-    failure arms in one loop body).
-    """
+    """Caller still owns ``progress.advance_phase`` and ``continue``: the write phase has two failure arms in one loop body."""
     label = f"{entry.source}:{entry.source_id}"
     logger.warning("ingest: %s", message)
     progress.error(phase, message)
