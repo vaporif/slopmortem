@@ -173,7 +173,7 @@ def test_unknown_source_lands_at_dead_letter_rank() -> None:
 Run: `uv run pytest tests/ingest/test_reliability_rank.py -v`
 Expected: FAIL — `slopmortem.corpus.sources._names` doesn't exist yet.
 
-- [ ] **Step B3: Create the source-name constants module**
+- [x] **Step B3: Create the source-name constants module**
 
 Create `slopmortem/corpus/sources/_names.py`:
 
@@ -200,7 +200,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step B4: Rewrite `_RELIABILITY_RANK` to use the constants and the correct keys**
+- [x] **Step B4: Rewrite `_RELIABILITY_RANK` to use the constants and the correct keys**
 
 Edit `slopmortem/ingest/_helpers.py`. Replace the existing `_RELIABILITY_RANK` block (currently at lines 40-46) and update `_build_payload`'s curated check:
 
@@ -227,7 +227,7 @@ provenance="curated_real" if provenance == SOURCE_CURATED else "scraped",
 
 Drop the `"wayback"` row entirely — the wayback enricher never sets `source="wayback"` (it `model_copy`s `raw_html`/`markdown_text` only).
 
-- [ ] **Step B5: Update `_PRE_VETTED_SOURCES` to use the constants**
+- [x] **Step B5: Update `_PRE_VETTED_SOURCES` to use the constants**
 
 Edit `slopmortem/ingest/_slop_gate.py:36`:
 
@@ -237,7 +237,7 @@ from slopmortem.corpus.sources._names import SOURCE_CRUNCHBASE_CSV, SOURCE_CURAT
 _PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({SOURCE_CURATED, SOURCE_CRUNCHBASE_CSV})
 ```
 
-- [ ] **Step B6: Update each source module to emit the constant**
+- [x] **Step B6: Update each source module to emit the constant**
 
 Edit `slopmortem/corpus/sources/curated.py:85` (and add the import at the top of the file):
 
@@ -260,22 +260,22 @@ from slopmortem.corpus.sources._names import SOURCE_CRUNCHBASE_CSV
 ```
 Replace `source="crunchbase_csv"` with `source=SOURCE_CRUNCHBASE_CSV`.
 
-- [ ] **Step B7: Run the new regression test**
+- [x] **Step B7: Run the new regression test**
 
 Run: `uv run pytest tests/ingest/test_reliability_rank.py -v`
 Expected: PASS — all three parametrize cases plus the dead-letter case.
 
-- [ ] **Step B8: Run the full suite**
+- [x] **Step B8: Run the full suite**
 
 Run: `just test`
 Expected: PASS. The merge-order tests in `tests/corpus/test_merge_deterministic.py` construct `Section` objects with manually-passed `reliability_rank` values, so they don't exercise the rank table — they keep passing. Tests in `tests/test_cli_reconcile.py`, `tests/test_paths.py`, `tests/corpus/test_merge_journal.py`, and `tests/corpus/test_reconcile_skeleton.py` use `"hn"` as a journal key (test data, not source-emitted) and don't touch `_reliability_for` either — leave them as-is.
 
-- [ ] **Step B9: Lint + typecheck**
+- [x] **Step B9: Lint + typecheck**
 
 Run: `just lint && just typecheck`
 Expected: both clean.
 
-- [ ] **Step B10: Commit**
+- [x] **Step B10: Commit**
 
 Run:
 ```

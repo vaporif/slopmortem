@@ -16,13 +16,14 @@ from typing import TYPE_CHECKING, Final
 from anyio import to_thread
 
 from slopmortem.corpus import safe_path
+from slopmortem.corpus.sources._names import SOURCE_CRUNCHBASE_CSV, SOURCE_CURATED
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
     from slopmortem.corpus import MergeJournal
-    from slopmortem.ingest._orchestrator import SlopClassifier
+    from slopmortem.ingest._ports import SlopClassifier
     from slopmortem.models import RawEntry
 
 __all__ = ["_PRE_VETTED_SOURCES", "_quarantine", "classify_one"]
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 # reviewed, crunchbase_csv is filtered to status=closed. Running the LLM on
 # these wastes spend and misclassifies (Wayback'd Crunchbase homepages are
 # pre-death marketing copy, not death narratives).
-_PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({"curated", "crunchbase_csv"})
+_PRE_VETTED_SOURCES: Final[frozenset[str]] = frozenset({SOURCE_CURATED, SOURCE_CRUNCHBASE_CSV})
 
 
 def _content_sha256(text: str) -> str:
