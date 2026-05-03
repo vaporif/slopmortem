@@ -82,7 +82,7 @@ The user's framing was "ports, fakes, helpers." Two readings:
 
 **Anti-scope:** Do NOT add other methods, properties, validators, or `__repr__` changes. Do NOT touch any other model class. Do NOT add a method to `PerspectiveScore`. Do NOT commit.
 
-- [ ] **Step 1: Read the current `SimilarityScores` definition**
+- [x] **Step 1: Read the current `SimilarityScores` definition**
 
 Read `slopmortem/models.py:76-82`. Confirm it's exactly:
 
@@ -96,7 +96,7 @@ class SimilarityScores(BaseModel):
     stage_scale: PerspectiveScore
 ```
 
-- [ ] **Step 2: Write the failing test for `mean()`**
+- [x] **Step 2: Write the failing test for `mean()`**
 
 Append to `tests/test_models.py`:
 
@@ -113,12 +113,12 @@ def test_similarity_scores_mean_averages_four_perspectives() -> None:
     assert scores.mean() == 5.0
 ```
 
-- [ ] **Step 3: Run the failing test**
+- [x] **Step 3: Run the failing test**
 
 Run: `uv run pytest tests/test_models.py::test_similarity_scores_mean_averages_four_perspectives -v`
 Expected: FAIL with `AttributeError: 'SimilarityScores' object has no attribute 'mean'`.
 
-- [ ] **Step 4: Add the `mean()` method**
+- [x] **Step 4: Add the `mean()` method**
 
 Edit `slopmortem/models.py`, replacing the body of `SimilarityScores`:
 
@@ -141,12 +141,12 @@ class SimilarityScores(BaseModel):
         ) / 4
 ```
 
-- [ ] **Step 5: Verify the test now passes**
+- [x] **Step 5: Verify the test now passes**
 
 Run: `uv run pytest tests/test_models.py::test_similarity_scores_mean_averages_four_perspectives -v`
 Expected: PASS.
 
-- [ ] **Step 6: Verify the full suite still passes**
+- [x] **Step 6: Verify the full suite still passes**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. The new method is unused so far, so no behaviour drift.

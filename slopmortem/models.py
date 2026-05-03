@@ -81,6 +81,12 @@ class SimilarityScores(BaseModel):
     gtm: PerspectiveScore
     stage_scale: PerspectiveScore
 
+    def mean(self) -> float:
+        """Mean of the four perspective scores. Used by post-rerank and post-synth filters."""
+        return (
+            self.business_model.score + self.market.score + self.gtm.score + self.stage_scale.score
+        ) / 4
+
 
 class Facets(BaseModel):
     """Facets extracted from an input pitch. Closed-key half pins the taxonomy schema.
