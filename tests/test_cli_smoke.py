@@ -5,7 +5,7 @@ Covers Task 10 plan steps:
 - CLI smoke for ``query`` with ``run_query`` monkeypatched to return a fixture
   Report.
 
-``slopmortem.cli._build_deps`` is the monkeypatch seam, so the smoke tests
+``slopmortem.deps.build_deps`` is the monkeypatch seam, so the smoke tests
 don't need real Qdrant / OpenRouter / OpenAI credentials.
 """
 
@@ -73,14 +73,14 @@ def _fixture_report(*, name: str = "Foo") -> Report:
 
 
 def _build_fake_deps(_config: Config) -> tuple[object, object, object, Budget]:
-    """Stand-in for :func:`slopmortem.cli._build_deps`; returns inert objects."""
+    """Stand-in for `slopmortem.deps.build_deps`; returns inert objects."""
     # Bare ``object()`` instances are fine here. The smoke test patches
     # ``run_query``, so these are never called.
     return object(), object(), object(), Budget(cap_usd=0.0)
 
 
 def _noop_set_corpus(_corpus: object) -> None:
-    """Stand-in for :func:`slopmortem.corpus.set_query_corpus`."""
+    """Stand-in for `slopmortem.corpus.set_query_corpus`."""
     return
 
 
@@ -88,14 +88,14 @@ def test_query_smoke_renders_report(monkeypatch: pytest.MonkeyPatch) -> None:
     """``slopmortem query --stdout`` runs end-to-end with a fake ``run_query``.
 
     Checks typer wiring: arg parsing, dispatch through ``_query``, render to
-    stdout via ``--stdout``, with ``_build_deps`` as the seam.
+    stdout via ``--stdout``, with ``build_deps`` as the seam.
     """
 
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name)
 
     # Swap dep-construction so the test doesn't need real OPENROUTER_API_KEY etc.
-    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.build_deps", _build_fake_deps)
     monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
 
@@ -112,7 +112,7 @@ def test_query_smoke_default_unnamed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name)
 
-    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.build_deps", _build_fake_deps)
     monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
 
@@ -128,7 +128,7 @@ def test_query_default_writes_to_runs_dir(monkeypatch: pytest.MonkeyPatch, tmp_p
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name)
 
-    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.build_deps", _build_fake_deps)
     monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
     monkeypatch.chdir(tmp_path)
@@ -154,7 +154,7 @@ def test_query_empty_candidates_exits_nonzero(
     async def _fake_run_query(input_ctx: InputContext, **_kwargs: Any) -> Report:
         return _fixture_report(name=input_ctx.name).model_copy(update={"candidates": []})
 
-    monkeypatch.setattr("slopmortem.cli._query_cmd._build_deps", _build_fake_deps)
+    monkeypatch.setattr("slopmortem.cli._query_cmd.build_deps", _build_fake_deps)
     monkeypatch.setattr("slopmortem.cli._query_cmd.set_query_corpus", _noop_set_corpus)
     monkeypatch.setattr("slopmortem.cli._query_cmd.run_query", _fake_run_query)
     monkeypatch.chdir(tmp_path)

@@ -6,7 +6,7 @@ Covers Task 10 plan steps:
 
 Tests use ``FakeLLMClient`` (canned ``(prompt_template_sha, model)`` responses)
 and ``FakeEmbeddingClient`` (sha256-derived vectors). The Corpus is an
-in-memory implementation of :class:`slopmortem.corpus.store.Corpus`; no
+in-memory implementation of `slopmortem.corpus.store.Corpus`; no
 Qdrant required.
 """
 
@@ -29,17 +29,11 @@ from slopmortem.models import (
     CandidatePayload,
     Facets,
     InputContext,
-    PerspectiveScore,
-    ScoredCandidate,
-    SimilarityScores,
     Synthesis,
     TopRisks,
 )
 from slopmortem.pipeline import (
     QueryPhase,
-    _filter_by_min_similarity,
-    _filter_synth_by_min_similarity,
-    _join_to_candidates,
     cutoff_iso,
     run_query,
 )
@@ -245,7 +239,7 @@ def _build_canned(
 
 @dataclass
 class _FakeCorpus:
-    """In-memory :class:`Corpus` for pipeline tests; no Qdrant, no fastembed."""
+    """In-memory `Corpus` for pipeline tests; no Qdrant, no fastembed."""
 
     candidates: list[Candidate]
     queries: list[dict[str, object]] = field(default_factory=list)
@@ -319,7 +313,7 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
 
 
 class _RecordingQueryProgress:
-    """Test stub for :class:`slopmortem.pipeline.QueryProgress`.
+    """Test stub for `slopmortem.pipeline.QueryProgress`.
 
     Records every phase event into ``self.events`` as ``("start", phase, total)``,
     ``("advance", phase, n)``, ``("end", phase)``, ``("log", message)``, or
@@ -691,100 +685,6 @@ def test_cutoff_iso_none_passthrough() -> None:
     assert cutoff_iso(years_filter=None) is None
 
 
-def test_join_to_candidates_preserves_rerank_order() -> None:
-    from slopmortem.models import (  # noqa: PLC0415
-        PerspectiveScore,
-        ScoredCandidate,
-        SimilarityScores,
-    )
-
-    retrieved = [_candidate(f"cand-{i}") for i in range(5)]
-
-    def _scored(cid: str) -> ScoredCandidate:
-        return ScoredCandidate(
-            candidate_id=cid,
-            perspective_scores=SimilarityScores(
-                business_model=PerspectiveScore(score=1.0, rationale="x"),
-                market=PerspectiveScore(score=1.0, rationale="x"),
-                gtm=PerspectiveScore(score=1.0, rationale="x"),
-                stage_scale=PerspectiveScore(score=1.0, rationale="x"),
-            ),
-            rationale="r",
-        )
-
-    # Rerank flips the order.
-    ranked = [_scored("cand-3"), _scored("cand-0"), _scored("cand-2")]
-    joined = _join_to_candidates(retrieved, ranked)
-    assert [c.canonical_id for c in joined] == ["cand-3", "cand-0", "cand-2"]
-
-
-def test_join_to_candidates_drops_unknown_ids() -> None:
-    from slopmortem.models import (  # noqa: PLC0415
-        PerspectiveScore,
-        ScoredCandidate,
-        SimilarityScores,
-    )
-
-    retrieved = [_candidate("cand-0"), _candidate("cand-1")]
-    ranked = [
-        ScoredCandidate(
-            candidate_id="ghost",
-            perspective_scores=SimilarityScores(
-                business_model=PerspectiveScore(score=1.0, rationale="x"),
-                market=PerspectiveScore(score=1.0, rationale="x"),
-                gtm=PerspectiveScore(score=1.0, rationale="x"),
-                stage_scale=PerspectiveScore(score=1.0, rationale="x"),
-            ),
-            rationale="r",
-        ),
-    ]
-    assert _join_to_candidates(retrieved, ranked) == []
-
-
-def _scored_with(cid: str, *, bm: float, mk: float, gtm: float, ss: float) -> ScoredCandidate:
-    return ScoredCandidate(
-        candidate_id=cid,
-        perspective_scores=SimilarityScores(
-            business_model=PerspectiveScore(score=bm, rationale="x"),
-            market=PerspectiveScore(score=mk, rationale="x"),
-            gtm=PerspectiveScore(score=gtm, rationale="x"),
-            stage_scale=PerspectiveScore(score=ss, rationale="x"),
-        ),
-        rationale="r",
-    )
-
-
-def test_filter_by_min_similarity_drops_below_threshold() -> None:
-    """Below-threshold means dropped; at-or-above means kept."""
-    ranked = [
-        _scored_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0),  # mean = 5.5
-        _scored_with("weak", bm=2.0, mk=2.0, gtm=2.0, ss=2.0),  # mean = 2.0
-        _scored_with("borderline", bm=4.0, mk=4.0, gtm=4.0, ss=4.0),  # mean = 4.0
-    ]
-    survivors = _filter_by_min_similarity(ranked, threshold=4.0)
-    assert [s.candidate_id for s in survivors] == ["strong", "borderline"]
-
-
-def test_filter_by_min_similarity_preserves_order() -> None:
-    """Filter preserves rerank order; it does not re-sort survivors."""
-    ranked = [
-        _scored_with("c", bm=5.0, mk=5.0, gtm=5.0, ss=5.0),
-        _scored_with("a", bm=8.0, mk=8.0, gtm=8.0, ss=8.0),
-        _scored_with("b", bm=6.0, mk=6.0, gtm=6.0, ss=6.0),
-    ]
-    survivors = _filter_by_min_similarity(ranked, threshold=4.0)
-    assert [s.candidate_id for s in survivors] == ["c", "a", "b"]
-
-
-def test_filter_by_min_similarity_empty_when_all_below() -> None:
-    """All weak candidates means an empty list — synthesis stage will skip."""
-    ranked = [
-        _scored_with("c1", bm=2.0, mk=2.0, gtm=2.0, ss=4.0),  # mean = 2.5
-        _scored_with("c2", bm=1.0, mk=1.0, gtm=1.0, ss=2.0),  # mean = 1.25
-    ]
-    assert _filter_by_min_similarity(ranked, threshold=4.0) == []
-
-
 async def test_run_query_zero_passes_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
     """A threshold above every rerank score yields an empty Report.candidates."""
     candidates = [_candidate(f"cand-{i}") for i in range(6)]
@@ -817,37 +717,6 @@ async def test_run_query_zero_passes_threshold(monkeypatch: pytest.MonkeyPatch) 
     assert report.top_risks.risks == []
     assert report.pipeline_meta.budget_exceeded is False
     assert report.pipeline_meta.min_similarity_score == 9.5
-
-
-def _synth_with(cid: str, *, bm: float, mk: float, gtm: float, ss: float) -> Synthesis:
-    return Synthesis(
-        candidate_id=cid,
-        name=cid,
-        one_liner="x",
-        failure_date=None,
-        lifespan_months=None,
-        similarity=SimilarityScores(
-            business_model=PerspectiveScore(score=bm, rationale="x"),
-            market=PerspectiveScore(score=mk, rationale="x"),
-            gtm=PerspectiveScore(score=gtm, rationale="x"),
-            stage_scale=PerspectiveScore(score=ss, rationale="x"),
-        ),
-        why_similar="x",
-        where_diverged="x",
-        failure_causes=["x"],
-        lessons_for_input=["x"],
-        sources=[],
-    )
-
-
-def test_filter_synth_by_min_similarity_drops_below_threshold() -> None:
-    """Synth filter drops when synth's own mean falls below the bar."""
-    syntheses = [
-        _synth_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0),  # mean = 5.5
-        _synth_with("synth_disagreed", bm=2.0, mk=2.0, gtm=1.0, ss=3.0),  # mean = 2.0
-    ]
-    kept = _filter_synth_by_min_similarity(syntheses, threshold=4.0)
-    assert [s.candidate_id for s in kept] == ["strong"]
 
 
 def _synth_payload_with_scores(
@@ -1014,7 +883,7 @@ def test_render_banner_mentions_filter_drops() -> None:
 async def test_pipeline_logs_drops_at_info(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """min_similarity drops emit an INFO log on slopmortem.pipeline."""
+    """min_similarity drops emit an INFO log on the rerank stage."""
     import logging  # noqa: PLC0415
 
     candidates = [_candidate(f"cand-{i}") for i in range(3)]
@@ -1034,7 +903,7 @@ async def test_pipeline_logs_drops_at_info(
 
     monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
-    with caplog.at_level(logging.INFO, logger="slopmortem.pipeline"):
+    with caplog.at_level(logging.INFO, logger="slopmortem.stages.llm_rerank"):
         _ = await run_query(
             ctx,
             llm=fake_llm,

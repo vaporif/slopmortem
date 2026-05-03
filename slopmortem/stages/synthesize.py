@@ -1,13 +1,14 @@
 """Synthesize stage: one candidate → one ``synthesize`` call.
 
 ``synthesize_all`` uses the cache-warm pattern (first call alone, then
-:func:`gather_resilient` on the rest) so one candidate's failure can't cancel
+`gather_resilient` on the rest) so one candidate's failure can't cancel
 the others. The tool-call loop, ``<untrusted_document>`` wrapping, and 5-turn
 bound live in ``slopmortem/llm/openrouter.py``.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from lmnr import Laminar
@@ -28,6 +29,9 @@ if TYPE_CHECKING:
     from slopmortem.config import Config
     from slopmortem.llm import LLMClient
     from slopmortem.models import Candidate, InputContext
+
+
+logger = logging.getLogger(__name__)
 
 
 def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
@@ -80,7 +84,7 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
     produced empty or hallucinated lists.
 
     When ``where_diverged == "prompt_injection_attempted"`` (the
-    :data:`_INJECTION_MARKER`), fires :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED`
+    `_INJECTION_MARKER`), fires `SpanEvent.PROMPT_INJECTION_ATTEMPTED`
     on the active Laminar span.
     """
     prompt = render_prompt(
@@ -131,10 +135,10 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     max_tokens: int | None = None,
     on_candidate_done: Callable[[BaseException | None], None] | None = None,
 ) -> list[Synthesis | BaseException]:
-    """Fan out :func:`synthesize` across *candidates* with cache-warm + resilient gather.
+    """Fan out `synthesize` across *candidates* with cache-warm + resilient gather.
 
     First call runs alone so the prompt cache is populated before parallel
-    calls race to write it. The rest use :func:`gather_resilient` so a single
+    calls race to write it. The rest use `gather_resilient` so a single
     failure doesn't cancel siblings — exceptions are returned in-list.
     """
     if not candidates:
@@ -154,3 +158,25 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     first = await _run_one(candidates[0])
     rest_results = await gather_resilient(*(_run_one(c) for c in candidates[1:]))
     return [first, *rest_results]
+
+
+def drop_below_min_similarity(
+    syntheses: list[Synthesis], *, min_similarity: float
+) -> tuple[list[Synthesis], int]:
+    """Drop syntheses whose own similarity mean falls below *min_similarity*.
+
+    Synthesis sometimes re-scores a candidate lower than rerank did, so a
+    row that cleared the rerank-side filter can come back below the bar.
+    Returns ``(kept, dropped_count)`` so the caller can record
+    ``PipelineMeta.filtered_post_synth`` without recomputing.
+    """
+    kept = [s for s in syntheses if s.similarity.mean() >= min_similarity]
+    dropped = len(syntheses) - len(kept)
+    if dropped > 0:
+        logger.info(
+            "min_similarity dropped %d/%d candidates post-synth (threshold=%.2f)",
+            dropped,
+            len(syntheses),
+            min_similarity,
+        )
+    return kept, dropped

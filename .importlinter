@@ -117,9 +117,11 @@ source_modules =
     slopmortem.tracing
 forbidden_modules =
     slopmortem.ingest._fan_out
+    slopmortem.ingest._helpers
+    slopmortem.ingest._impls
     slopmortem.ingest._ingest
     slopmortem.ingest._journal_writes
-    slopmortem.ingest._orchestrator
+    slopmortem.ingest._ports
     slopmortem.ingest._slop_gate
     slopmortem.ingest._warm_cache
 
@@ -127,10 +129,6 @@ forbidden_modules =
 name = cli._* is private — outside imports go through __init__
 type = forbidden
 allow_indirect_imports = True
-# TODO(deps-extraction): drop this once _build_deps moves to a shared module
-# (e.g. slopmortem/deps.py); see TODO in slopmortem/evals/runner.py.
-ignore_imports =
-    slopmortem.evals.runner -> slopmortem.cli._common
 source_modules =
     slopmortem.evals
     slopmortem.pipeline

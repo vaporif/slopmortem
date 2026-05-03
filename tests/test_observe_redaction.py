@@ -2,9 +2,9 @@
 
 The pipeline runs against fakes (helpers copied inline from
 ``tests/test_pipeline_e2e.py``; sharing them as a fixture is intentionally out
-of scope for this test file). Every fake :class:`Candidate`'s
+of scope for this test file). Every fake `Candidate`'s
 ``payload.body`` carries a sentinel string. After the run, the test scrapes
-every span attribute via OpenTelemetry's :class:`InMemorySpanExporter` and
+every span attribute via OpenTelemetry's `InMemorySpanExporter` and
 asserts the sentinel is nowhere captured.
 
 Wiring rationale: ``lmnr-python`` does not expose an exporter override on
@@ -211,7 +211,7 @@ def _build_canned(
 
 @dataclass
 class _FakeCorpus:
-    """In-memory :class:`Corpus`; mirrors the helper in test_pipeline_e2e.py."""
+    """In-memory `Corpus`; mirrors the helper in test_pipeline_e2e.py."""
 
     candidates: list[Candidate]
     queries: list[dict[str, object]] = field(default_factory=list)

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote_plus
 
+from slopmortem.corpus.sources._names import SOURCE_HN_ALGOLIA
 from slopmortem.corpus.sources._throttle import (
     HTTP_BAD_REQUEST,
     USER_AGENT,
@@ -75,7 +76,7 @@ class HNAlgoliaSource:
         body: object = hit.get("story_text") or hit.get("comment_text") or ""
         markdown_text = f"# {title}\n\n{body}".strip()
         return RawEntry(
-            source="hn_algolia",
+            source=SOURCE_HN_ALGOLIA,
             source_id=object_id,
             url=url,
             raw_html=None,

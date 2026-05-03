@@ -15,18 +15,20 @@ from slopmortem.ingest._fan_out import (
     _facet_summarize_fanout,
     _FanoutResult,
 )
+from slopmortem.ingest._helpers import (
+    _enrich_pipeline,
+    _entry_summary_text,
+    _gather_entries,
+)
 from slopmortem.ingest._journal_writes import (
     ProcessOutcome,
     _process_entry,
 )
-from slopmortem.ingest._orchestrator import (
+from slopmortem.ingest._ports import (
     _MAX_RECORDED_ERRORS,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
     IngestPhase,
     IngestResult,
     NullProgress,
-    _enrich_pipeline,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
-    _entry_summary_text,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
-    _gather_entries,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
 )
 from slopmortem.ingest._slop_gate import (
     _quarantine,
@@ -43,7 +45,7 @@ if TYPE_CHECKING:
     from slopmortem.config import Config
     from slopmortem.corpus import MergeJournal
     from slopmortem.corpus.sources import Enricher, Source
-    from slopmortem.ingest._orchestrator import (
+    from slopmortem.ingest._ports import (
         Corpus,
         IngestProgress,
         SlopClassifier,
@@ -85,6 +87,24 @@ def _record_error(result: IngestResult, entry_label: str, exc: BaseException) ->
     )
 
 
+def _record_entry_failure(  # noqa: PLR0913 - one seam, every dep
+    *,
+    result: IngestResult,
+    progress: IngestProgress,
+    phase: IngestPhase,
+    entry: RawEntry,
+    exc: BaseException,
+    message: str,
+) -> None:
+    """Caller still owns ``progress.advance_phase`` and ``continue``: the write phase has two failure arms in one loop body."""
+    label = f"{entry.source}:{entry.source_id}"
+    logger.warning("ingest: %s", message)
+    progress.error(phase, message)
+    _record_error(result, label, exc)
+    result.errors += 1
+    result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
+
+
 async def _classify_phase(  # noqa: PLR0913 - one phase, every dep at this seam
     entries: Sequence[RawEntry],
     *,
@@ -109,11 +129,14 @@ async def _classify_phase(  # noqa: PLR0913 - one phase, every dep at this seam
         try:
             enriched = await _enrich_pipeline(entry, enrichers)
         except Exception as exc:  # noqa: BLE001 - per-entry isolation.
-            logger.warning("ingest: enricher failed for %r: %s", entry.source_id, exc)
-            progress.error(IngestPhase.CLASSIFY, f"enricher failed for {entry.source_id}: {exc}")
-            _record_error(result, f"{entry.source}:{entry.source_id}", exc)
-            result.errors += 1
-            result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
+            _record_entry_failure(
+                result=result,
+                progress=progress,
+                phase=IngestPhase.CLASSIFY,
+                entry=entry,
+                exc=exc,
+                message=f"enricher failed for {entry.source_id}: {exc}",
+            )
             progress.advance_phase(IngestPhase.CLASSIFY)
             continue
 
@@ -154,7 +177,7 @@ async def _classify_phase(  # noqa: PLR0913 - one phase, every dep at this seam
 
 async def _write_phase(  # noqa: PLR0913 - one phase, every dep at this seam
     keepers: Sequence[tuple[RawEntry, str]],
-    fanout: Sequence[_FanoutResult | BaseException],
+    fanout: Sequence[_FanoutResult | Exception],
     *,
     journal: MergeJournal,
     corpus: Corpus,
@@ -174,17 +197,17 @@ async def _write_phase(  # noqa: PLR0913 - one phase, every dep at this seam
     """
     progress.start_phase(IngestPhase.WRITE, total=len(keepers))
     for (entry, body), fan in zip(keepers, fanout, strict=True):
-        if isinstance(fan, BaseException):
-            logger.warning(
-                "ingest: fan-out failed for %s:%s: %s", entry.source, entry.source_id, fan
+        if isinstance(fan, Exception):
+            # Phase=FAN_OUT because that's where the failure happened, even
+            # though we surface it during the WRITE loop.
+            _record_entry_failure(
+                result=result,
+                progress=progress,
+                phase=IngestPhase.FAN_OUT,
+                entry=entry,
+                exc=fan,
+                message=f"fan-out failed for {entry.source}:{entry.source_id}: {fan}",
             )
-            progress.error(
-                IngestPhase.FAN_OUT,
-                f"fan-out failed for {entry.source}:{entry.source_id}: {fan}",
-            )
-            _record_error(result, f"{entry.source}:{entry.source_id}", fan)
-            result.errors += 1
-            result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.WRITE)
             continue
         try:
@@ -204,19 +227,14 @@ async def _write_phase(  # noqa: PLR0913 - one phase, every dep at this seam
                 sparse_encoder=sparse_encoder,
             )
         except Exception as exc:  # noqa: BLE001 - per-entry isolation; run continues.
-            logger.warning(
-                "ingest: write phase failed for %s:%s: %s",
-                entry.source,
-                entry.source_id,
-                exc,
+            _record_entry_failure(
+                result=result,
+                progress=progress,
+                phase=IngestPhase.WRITE,
+                entry=entry,
+                exc=exc,
+                message=f"write phase failed for {entry.source}:{entry.source_id}: {exc}",
             )
-            progress.error(
-                IngestPhase.WRITE,
-                f"write phase failed for {entry.source}:{entry.source_id}: {exc}",
-            )
-            _record_error(result, f"{entry.source}:{entry.source_id}", exc)
-            result.errors += 1
-            result.span_events.append(SpanEvent.INGEST_ENTRY_FAILED.value)
             progress.advance_phase(IngestPhase.WRITE)
             continue
         except BaseException as exc:

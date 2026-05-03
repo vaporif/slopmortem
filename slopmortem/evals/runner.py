@@ -260,17 +260,13 @@ async def _run_cassettes(
 
 async def _run_live(rows: list[InputContext], row_ids: list[str]) -> dict[str, dict[str, object]]:
     """Run every row through real production deps. May spend real money."""
-    # Lazy import so cassette mode doesn't drag CLI deps in. Mirrors the CLI
-    # boot path so live evals get the same prod wiring.
-    # TODO(deps-extraction): _build_deps should live in a shared module  # noqa: TD003
-    # (e.g. slopmortem/deps.py) so evals can consume it without reaching into
-    # slopmortem.cli internals. Until then, T3.6's importlinter contract needs
-    # an ignore_imports exception for slopmortem.evals.runner -> slopmortem.cli._common.
-    from slopmortem.cli._common import _build_deps  # noqa: PLC0415
+    # Lazy import so cassette mode doesn't drag prod deps in (Qdrant client,
+    # OpenAI SDK). Mirrors the CLI boot path so live evals get the same wiring.
     from slopmortem.corpus import set_query_corpus  # noqa: PLC0415
+    from slopmortem.deps import build_deps  # noqa: PLC0415
 
     cfg = load_config()
-    llm, embedder, corpus, budget = _build_deps(cfg)
+    llm, embedder, corpus, budget = build_deps(cfg)
     set_query_corpus(corpus)
 
     results: dict[str, dict[str, object]] = {}
@@ -411,7 +407,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--live",
         action="store_true",
         help=(
-            "Use real production deps via slopmortem.cli._common._build_deps. "
+            "Use real production deps via slopmortem.deps.build_deps. "
             "Requires env keys + Qdrant; will spend real money. CI does not run this."
         ),
     )

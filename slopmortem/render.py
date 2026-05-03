@@ -1,4 +1,4 @@
-"""Markdown renderer for :class:`Report`.
+"""Markdown renderer for `Report`.
 
 Strips clickable links and images from prose as a second line of defense
 behind the synthesize-stage URL allowlist: prose like ``where_diverged``

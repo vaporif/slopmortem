@@ -1,7 +1,7 @@
 """Atomic markdown read/write for the raw and canonical post-mortem trees.
 
 Writes go to ``<path>.tmp`` then ``Path.replace`` (POSIX-atomic). Paths always
-go through :func:`safe_path`, no concatenation, no traversal.
+go through `safe_path`, no concatenation, no traversal.
 """
 
 from __future__ import annotations

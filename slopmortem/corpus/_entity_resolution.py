@@ -1,4 +1,3 @@
-# pyright: reportAny=false
 """Entity resolution: tier-1, tier-2, tier-3 canonical_id derivation.
 
 Tiered IDs:
@@ -18,7 +17,7 @@ Atomicity contracts:
   ``resolver_flipped`` in its terminal state — no transient ``pending`` row,
   no ingest of the new canonical (``--reconcile`` owns repair).
 - Alias precheck runs before any ingest write. With an alias hint,
-  :meth:`MergeJournal.upsert_alias_blocked` writes the alias edge and the
+  `MergeJournal.upsert_alias_blocked` writes the alias edge and the
   journal row in one SQLite transaction; on failure both roll back.
 
 Tier-3 decisions cache in a module-private ``tier3_decisions`` SQLite table
@@ -47,6 +46,8 @@ from slopmortem.models import MergeState
 from slopmortem.tracing import SpanEvent
 
 if TYPE_CHECKING:
+    import sqlite3
+
     from slopmortem.corpus._merge import MergeJournal
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import AliasEdge, RawEntry
@@ -208,11 +209,9 @@ def _read_founding_year_sync(db_path: Path, registrable_domain: str) -> int | No
             """,
             (registrable_domain,),
         )
-        row = cur.fetchone()
-        if row is None:
-            return None
-        val = row["founding_year"]
-        return None if val is None else int(val)
+        # sqlite3 Row indexing returns Any; column is INTEGER NULL.
+        row = cast("sqlite3.Row | None", cur.fetchone())
+        return None if row is None else cast("int | None", row["founding_year"])
 
 
 def _write_founding_year_sync(
@@ -250,8 +249,9 @@ def _read_tier3_decision_sync(
             """,
             (pair_key, haiku_model_id, tiebreaker_prompt_hash),
         )
-        row = cur.fetchone()
-        return None if row is None else str(row["decision"])
+        # sqlite3 Row indexing returns Any; decision column is TEXT NOT NULL.
+        row = cast("sqlite3.Row | None", cur.fetchone())
+        return None if row is None else cast("str", row["decision"])
 
 
 def _write_tier3_decision_sync(  # noqa: PLR0913 — keyword-only cache write
@@ -575,11 +575,12 @@ async def _maybe_tier3_collapse(  # noqa: PLR0913 — keyword-only internal hop
         return candidate_id
     rows = await journal.fetch_all()
     same_sector_suffix = f"::{sector.lower()}"
-    siblings = [
-        row["canonical_id"]
+    # journal.fetch_all values are sqlite-typed Any; canonical_id/merge_state are TEXT.
+    siblings: list[str] = [
+        cid
         for row in rows
-        if str(row["canonical_id"]).endswith(same_sector_suffix)
-        and row["canonical_id"] != candidate_id
+        if (cid := cast("str", row["canonical_id"])).endswith(same_sector_suffix)
+        and cid != candidate_id
         and row["merge_state"] in (MergeState.COMPLETE.value, MergeState.PENDING.value)
     ]
     if not siblings:

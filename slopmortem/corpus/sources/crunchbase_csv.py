@@ -10,6 +10,7 @@ import csv
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from slopmortem.corpus.sources._names import SOURCE_CRUNCHBASE_CSV
 from slopmortem.models import RawEntry
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ class CrunchbaseCsvSource:
                 url = _first_present(row, _URL_COLS) or None
                 desc = _first_present(row, _DESC_COLS) or None
                 yield RawEntry(
-                    source="crunchbase_csv",
+                    source=SOURCE_CRUNCHBASE_CSV,
                     source_id=ident,
                     url=url,
                     raw_html=None,

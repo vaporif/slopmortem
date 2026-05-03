@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,7 @@ def render_blocks(
     return blocks
 
 
+@functools.cache
 def prompt_template_sha(name: str) -> str:
     """First 16 hex chars of sha256 over the ``.j2`` source. Used as the fixture key."""
     return hashlib.sha256(_PROMPT_DIR.joinpath(f"{name}.j2").read_bytes()).hexdigest()[:16]

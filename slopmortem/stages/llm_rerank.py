@@ -1,7 +1,8 @@
-"""LLM rerank stage: one strict-mode JSON call → :class:`LlmRerankResult`."""
+"""LLM rerank stage: one strict-mode JSON call → `LlmRerankResult`."""
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from lmnr import Laminar, observe
@@ -13,7 +14,10 @@ from slopmortem.models import LlmRerankResult
 if TYPE_CHECKING:
     from slopmortem.config import Config
     from slopmortem.llm import LLMClient
-    from slopmortem.models import Candidate, Facets
+    from slopmortem.models import Candidate, Facets, ScoredCandidate
+
+
+logger = logging.getLogger(__name__)
 
 
 # Drop ``candidates`` from span attrs to keep ``payload.body`` out; a
@@ -33,7 +37,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
 
     Strict-mode schema constrains shape but not length, so the parsed array
     is re-validated against ``min(N_synthesize, len(candidates))`` — mismatch
-    raises :class:`RerankLengthError`.
+    raises `RerankLengthError`.
     """
     Laminar.set_span_attributes(
         {
@@ -83,3 +87,41 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
         msg = f"expected {expected}, got {len(parsed.ranked)}"
         raise RerankLengthError(msg)
     return parsed
+
+
+def _join_by_id(retrieved: list[Candidate], ranked: list[ScoredCandidate]) -> list[Candidate]:
+    # Drops any ranked id missing from retrieved — defensive, since the
+    # reranker only ever sees retrieved ids.
+    id_to_candidate = {c.canonical_id: c for c in retrieved}
+    out: list[Candidate] = []
+    for s in ranked:
+        cand = id_to_candidate.get(s.candidate_id)
+        if cand is not None:
+            out.append(cand)
+    return out
+
+
+def select_top_n_by_similarity(
+    *,
+    retrieved: list[Candidate],
+    ranked: list[ScoredCandidate],
+    min_similarity: float,
+    n_synthesize: int,
+) -> tuple[list[Candidate], int]:
+    """Apply the post-rerank min-similarity filter and slice to *n_synthesize*.
+
+    Returns ``(top_n, dropped_count)`` where ``dropped_count`` is
+    ``n_synthesize - len(top_n)`` — conflates min-sim drops with retrieve
+    under-fill, which is what ``PipelineMeta.filtered_pre_synth`` records.
+    """
+    survivors = [s for s in ranked if s.perspective_scores.mean() >= min_similarity]
+    sim_dropped = len(ranked) - len(survivors)
+    if sim_dropped > 0:
+        logger.info(
+            "min_similarity dropped %d/%d candidates post-rerank (threshold=%.2f)",
+            sim_dropped,
+            len(ranked),
+            min_similarity,
+        )
+    top_n = _join_by_id(retrieved, survivors)[:n_synthesize]
+    return top_n, max(0, n_synthesize - len(top_n))

@@ -75,7 +75,7 @@ def test_record_cassettes_for_inputs_accepts_progress_kwarg() -> None:
     Recording helper does live-API work; full end-to-end coverage is gated on
     ``RUN_LIVE`` cassettes. This thin signature check verifies the new param
     is plumbed through with a backward-compatible default and that
-    :class:`NullRecordProgress` satisfies the protocol — the path the runner
+    `NullRecordProgress` satisfies the protocol — the path the runner
     takes when ``sys.stderr`` isn't a TTY.
     """
     sig = inspect.signature(record_cassettes_for_inputs)

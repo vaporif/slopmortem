@@ -1,4 +1,4 @@
-"""Edge-case branches for ingest._orchestrator helpers."""
+"""Edge-case branches for ingest port stand-ins, helpers, and classifier impls."""
 
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ from slopmortem.ingest import (
     IngestPhase,
     InMemoryCorpus,
 )
-from slopmortem.ingest._orchestrator import (
-    NullProgress,
+from slopmortem.ingest._helpers import (
     _entry_summary_text,
     _gather_entries,
     _truncate_to_tokens,
 )
+from slopmortem.ingest._ports import NullProgress
 from slopmortem.llm import FakeLLMClient, FakeResponse, render_prompt
 from slopmortem.models import RawEntry
 

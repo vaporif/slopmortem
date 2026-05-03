@@ -204,3 +204,109 @@ async def test_llm_rerank_raises_when_llm_exceeds_top_n() -> None:
 
     with pytest.raises(RerankLengthError, match="expected 5, got 7"):
         await llm_rerank(candidates, "pitch", _facets(), fake_llm, cfg)
+
+
+def _scored_with(cid: str, *, bm: float, mk: float, gtm: float, ss: float):
+    from slopmortem.models import (  # noqa: PLC0415
+        PerspectiveScore,
+        ScoredCandidate,
+        SimilarityScores,
+    )
+
+    return ScoredCandidate(
+        candidate_id=cid,
+        perspective_scores=SimilarityScores(
+            business_model=PerspectiveScore(score=bm, rationale="x"),
+            market=PerspectiveScore(score=mk, rationale="x"),
+            gtm=PerspectiveScore(score=gtm, rationale="x"),
+            stage_scale=PerspectiveScore(score=ss, rationale="x"),
+        ),
+        rationale="r",
+    )
+
+
+def _retrieved_candidate(canonical_id: str) -> Candidate:
+    return Candidate(
+        canonical_id=canonical_id,
+        score=0.9,
+        payload=CandidatePayload(
+            name=canonical_id,
+            summary=f"{canonical_id} summary",
+            body=f"{canonical_id} body",
+            facets=_facets(),
+            founding_date=date(2018, 1, 1),
+            failure_date=date(2023, 1, 1),
+            founding_date_unknown=False,
+            failure_date_unknown=False,
+            provenance="curated_real",
+            slop_score=0.0,
+            sources=[],
+            text_id=canonical_id.replace("-", "") + "0123456789",
+        ),
+    )
+
+
+def test_join_by_id_preserves_rerank_order() -> None:
+    from slopmortem.stages.llm_rerank import _join_by_id  # noqa: PLC0415
+
+    retrieved = [_retrieved_candidate(f"cand-{i}") for i in range(5)]
+    ranked = [
+        _scored_with("cand-3", bm=1.0, mk=1.0, gtm=1.0, ss=1.0),
+        _scored_with("cand-0", bm=1.0, mk=1.0, gtm=1.0, ss=1.0),
+        _scored_with("cand-2", bm=1.0, mk=1.0, gtm=1.0, ss=1.0),
+    ]
+    joined = _join_by_id(retrieved, ranked)
+    assert [c.canonical_id for c in joined] == ["cand-3", "cand-0", "cand-2"]
+
+
+def test_join_by_id_drops_unknown_ids() -> None:
+    from slopmortem.stages.llm_rerank import _join_by_id  # noqa: PLC0415
+
+    retrieved = [_retrieved_candidate("cand-0"), _retrieved_candidate("cand-1")]
+    ranked = [_scored_with("ghost", bm=1.0, mk=1.0, gtm=1.0, ss=1.0)]
+    assert _join_by_id(retrieved, ranked) == []
+
+
+def test_select_top_n_by_similarity_drops_below_threshold() -> None:
+    from slopmortem.stages.llm_rerank import select_top_n_by_similarity  # noqa: PLC0415
+
+    retrieved = [_retrieved_candidate("strong"), _retrieved_candidate("weak")]
+    ranked = [
+        _scored_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0),  # mean = 5.5
+        _scored_with("weak", bm=2.0, mk=2.0, gtm=2.0, ss=2.0),  # mean = 2.0
+    ]
+    top_n, dropped = select_top_n_by_similarity(
+        retrieved=retrieved, ranked=ranked, min_similarity=4.0, n_synthesize=2
+    )
+    assert [c.canonical_id for c in top_n] == ["strong"]
+    assert dropped == 1  # n_synthesize - len(top_n) == 2 - 1
+
+
+def test_select_top_n_by_similarity_preserves_rerank_order() -> None:
+    from slopmortem.stages.llm_rerank import select_top_n_by_similarity  # noqa: PLC0415
+
+    retrieved = [_retrieved_candidate(cid) for cid in ("a", "b", "c")]
+    ranked = [
+        _scored_with("c", bm=5.0, mk=5.0, gtm=5.0, ss=5.0),
+        _scored_with("a", bm=8.0, mk=8.0, gtm=8.0, ss=8.0),
+        _scored_with("b", bm=6.0, mk=6.0, gtm=6.0, ss=6.0),
+    ]
+    top_n, _ = select_top_n_by_similarity(
+        retrieved=retrieved, ranked=ranked, min_similarity=4.0, n_synthesize=3
+    )
+    assert [c.canonical_id for c in top_n] == ["c", "a", "b"]
+
+
+def test_select_top_n_by_similarity_empty_when_all_below() -> None:
+    from slopmortem.stages.llm_rerank import select_top_n_by_similarity  # noqa: PLC0415
+
+    retrieved = [_retrieved_candidate("c1"), _retrieved_candidate("c2")]
+    ranked = [
+        _scored_with("c1", bm=2.0, mk=2.0, gtm=2.0, ss=4.0),  # mean = 2.5
+        _scored_with("c2", bm=1.0, mk=1.0, gtm=1.0, ss=2.0),  # mean = 1.25
+    ]
+    top_n, dropped = select_top_n_by_similarity(
+        retrieved=retrieved, ranked=ranked, min_similarity=4.0, n_synthesize=2
+    )
+    assert top_n == []
+    assert dropped == 2

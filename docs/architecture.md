@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    User([you]) -->|"slopmortem query 'pitch' / ingest"| CLI[["CLI · typer + asyncio.run"]]
+    User([you]) -->|"slopmortem query 'pitch' / ingest"| CLI[["CLI · typer + anyio.run"]]
     CLI --> Q1
     CLI --> I1
 
@@ -48,7 +48,7 @@ flowchart TD
         subgraph cross["cross-cutting"]
             direction TB
             Budget[budget.py]
-            Trace[tracing.py · OTel]
+            Trace[tracing/ · OTel]
         end
     end
 
@@ -69,7 +69,7 @@ flowchart TD
     end
 ```
 
-The CLI does one `asyncio.run` and that's it. Below that, every stage is `async def`. fastembed is CPU-bound, so it hops onto a thread. The synthesis fan-out goes through `asyncio.gather`. Each SDK keeps one connection pool alive for the whole invocation. You don't think that matters until you watch six sequential LLM calls each pay the TLS handshake tax.
+The CLI does one `anyio.run` per subcommand and that's it. Below that, every stage is `async def`. fastembed is CPU-bound, so it hops onto a thread via `anyio.to_thread.run_sync`. The synthesis fan-out goes through `gather_resilient` (an `anyio.gather` wrapper that returns exceptions instead of cancelling siblings). Each SDK keeps one connection pool alive for the whole invocation. You don't think that matters until you watch six sequential LLM calls each pay the TLS handshake tax.
 
 ## Query flow
 
@@ -100,63 +100,87 @@ The initial 500-URL seed costs about $7.50. The cap is $15 because retries happe
 
 ## What's where
 
+Underscore-prefixed submodules (`_foo.py`) are package-private; callers import
+from the package's `__init__.py`. Listing them here is descriptive, not
+prescriptive — the import contract is the package boundary.
+
 ```
 slopmortem/
-  cli.py                 # entry point; every command goes through anyio.run
-  pipeline.py            # query orchestration, async stage composition
-  ingest.py              # ingest orchestration + Haiku slop classifier
-  render.py              # Report → Markdown
-  models.py              # InputContext, Report, Synthesis, shared Pydantic types
-  config.py              # pydantic-settings; toml + env + .env
-  budget.py              # per-invocation cost cap
-  concurrency.py         # CapacityLimiter helpers and shared anyio plumbing
-  http.py                # shared httpx client + SSRF guard
-  errors.py              # typed error hierarchy
-  _time.py               # monotonic / wall-clock helpers (tests patch one symbol)
-  stages/                # facet_extract, retrieve, llm_rerank, synthesize, consolidate_risks
+  pipeline.py              # query orchestration, async stage composition
+  render.py                # Report → Markdown
+  models.py                # InputContext, Report, Synthesis, shared Pydantic types
+  config.py                # pydantic-settings; toml + env + .env
+  budget.py                # per-invocation cost cap
+  concurrency.py           # CapacityLimiter helpers and shared anyio plumbing
+  http.py                  # shared httpx client + SSRF guard
+  errors.py                # typed error hierarchy
+  cli_progress.py          # Rich progress display shared by ingest/query/eval recorders
+  _time.py                 # monotonic / wall-clock helpers (tests patch one symbol)
+  cli/
+    __init__.py            # Typer entrypoint; subcommands registered by side-effect import
+    _common.py             # shared helpers (config load, dep wiring) used by 2+ subcommands
+    _query_cmd.py          # `slopmortem query`
+    _ingest_cmd.py         # `slopmortem ingest`
+    _replay_cmd.py         # `slopmortem replay`
+    _embed_prefetch_cmd.py # `slopmortem embed-prefetch`
+  ingest/
+    __init__.py            # public surface: `ingest()`, IngestPhase, IngestResult, …
+    _ingest.py             # top-level `ingest()` orchestration
+    _ports.py              # Corpus / SlopClassifier protocols + IngestPhase / IngestResult / IngestProgress (leaf of import graph)
+    _helpers.py            # pure helpers shared across ingest internals
+    _impls.py              # InMemoryCorpus, FakeSlopClassifier, HaikuSlopClassifier (production stand-ins)
+    _slop_gate.py          # slop classifier routing → quarantine/ or fan-out
+    _warm_cache.py         # first-entry-alone prompt-cache warm pattern
+    _fan_out.py            # per-entry facet → summarize → embed → upsert
+    _journal_writes.py     # mark_pending → md write → qdrant upsert → mark_complete ordering
+  stages/                  # facet_extract, retrieve, llm_rerank, synthesize, consolidate_risks
   llm/
-    client.py            # LLMClient Protocol
-    openrouter.py        # OpenRouterClient (openai SDK pointed at openrouter.ai/api/v1)
-    fake.py              # FakeLLMClient for tests / cassette replay
-    cassettes.py         # vcrpy-style record/replay shim for LLM calls
-    embedding_client.py  # EmbeddingClient Protocol + EmbeddingResult
-    fastembed_client.py  # local ONNX (default; nomic-embed-text-v1.5)
-    openai_embeddings.py # OpenAI variant (text-embedding-3-{small,large})
-    fake_embeddings.py   # deterministic Fake variant for tests
-    tools.py             # synthesis_tools(config) factory; Pydantic → OpenAI-shape
-                         #   tool schema (OpenRouter forwards to Anthropic backends)
-    prices.yml           # source of truth for $$
-    prompts/             # *.j2 templates with paired JSON Schemas
+    __init__.py            # public surface: clients, fakes, prompt rendering, tools
+    client.py              # LLMClient Protocol + CompletionResult
+    openrouter.py          # OpenRouterClient (openai SDK pointed at openrouter.ai/api/v1)
+    fake.py                # FakeLLMClient for tests / cassette replay
+    cassettes.py           # vcrpy-style record/replay shim for LLM calls
+    embedding_client.py    # EmbeddingClient Protocol + EmbeddingResult
+    embedding_factory.py   # provider-dispatch factory (fastembed | openai | fake)
+    fastembed_client.py    # local ONNX (default; nomic-embed-text-v1.5)
+    openai_embeddings.py   # OpenAI variant (text-embedding-3-{small,large})
+    fake_embeddings.py     # deterministic Fake variant for tests
+    tools.py               # synthesis_tools(config) factory; Pydantic → OpenAI-shape tool schema
+    prices.yml             # source of truth for $$
+    prompts/               # *.j2 templates with paired JSON Schemas
   corpus/
-    sources/             # curated, hn_algolia, crunchbase_csv, wayback, tavily
-    qdrant_store.py      # hybrid retrieval (dense + sparse + facet RRF)
-    store.py             # Corpus Protocol shared by query and ingest
-    merge.py             # MergeJournal (stdlib sqlite3, WAL, busy_timeout=5000)
-    merge_text.py        # canonical-doc merge logic
-    reconcile.py         # six-drift-class scan + repair
-    reclassify.py        # re-run slop check on quarantined docs
-    entity_resolution.py # 3-tier dedupe (domain → embedding → Haiku tiebreak)
-    alias_graph.py       # canonical-id alias graph
-    chunk.py             # markdown → chunked vectors
-    embed_sparse.py      # fastembed BM25 / sparse vector path
-    extract.py           # trafilatura wrapper + length floor
-    summarize.py         # facet + rerank summary fan-out
-    schema.py            # Qdrant payload + collection schemas
-    disk.py              # raw/, canonical/, quarantine/ tree I/O
-    paths.py             # safe_path validation
-    taxonomy.yml         # sector / business-model / stage taxonomy
-    tools_impl.py        # backing impls for synthesis_tools()
-  evals/                 # eval runner, cassette harness, corpus recorder
-  tracing/               # Laminar/OTel; loopback default
-post_mortems/            # default ingest root (override via --post-mortems-root)
-  raw/<source>/<id>.md   # one file per fetched source doc
-  canonical/<id>.md      # one file per merged canonical entry
-  quarantine/<id>.md     # docs the slop classifier rejected
-journal.sqlite           # merge journal; sibling of post_mortems_root
-docs/specs/              # design spec + open issues
+    __init__.py            # public surface: Corpus, MergeJournal, QdrantCorpus, …
+    sources/               # curated, hn_algolia, crunchbase_csv, wayback, tavily
+    _store.py              # Corpus read-side Protocol shared by query and ingest
+    _qdrant_store.py       # hybrid retrieval (dense + sparse + facet RRF)
+    _merge.py              # MergeJournal (stdlib sqlite3, WAL, busy_timeout=5000)
+    _merge_text.py         # canonical-doc merge logic
+    _db.py                 # shared sqlite3 connection helper
+    _reconcile.py          # six-drift-class scan + repair
+    _reclassify.py         # re-run slop check on quarantined docs
+    _entity_resolution.py  # 3-tier dedupe (domain → embedding → Haiku tiebreak)
+    _alias_graph.py        # canonical-id alias graph
+    _chunk.py              # markdown → chunked vectors
+    _embed_sparse.py       # fastembed BM25 / sparse vector path
+    _extract.py            # trafilatura wrapper + length floor
+    _summarize.py          # facet + rerank summary fan-out
+    _disk.py               # raw/, canonical/, quarantine/ tree I/O
+    _paths.py              # safe_path validation
+    _tools_impl.py         # backing impls for synthesis_tools()
+    taxonomy.yml           # sector / business-model / stage taxonomy
+  tracing/
+    __init__.py            # Laminar/OTel init guard; refuses non-loopback by default
+    events.py              # closed StrEnum of span event names
+  evals/                   # eval runner, cassette harness, corpus recorder (NEVER imported by prod)
+post_mortems/              # default ingest root (override via --post-mortems-root)
+  raw/<source>/<id>.md     # one file per fetched source doc
+  canonical/<id>.md        # one file per merged canonical entry
+  quarantine/<id>.md       # docs the slop classifier rejected
+journal.sqlite             # merge journal; sibling of post_mortems_root
+docs/specs/                # design spec + open issues
 tests/
-  fixtures/cassettes/    # pytest-recording (vcrpy under the hood, no respx)
-  fixtures/              # corpus_fixture_inputs.yml, curated_test.yml, prompts/, injection/
-  evals/                 # baseline.json, datasets/, eval-side tests
+  fixtures/cassettes/      # pytest-recording (vcrpy under the hood, no respx)
+  fixtures/                # corpus_fixture_inputs.yml, curated_test.yml, prompts/, injection/
+  evals/                   # baseline.json, datasets/, eval-side tests
   {corpus,llm,sources,stages}/  # mirrors slopmortem/ subtree layout
 ```

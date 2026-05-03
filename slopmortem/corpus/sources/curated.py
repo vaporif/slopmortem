@@ -14,6 +14,7 @@ import httpx
 import yaml
 
 from slopmortem.corpus._extract import extract_clean
+from slopmortem.corpus.sources._names import SOURCE_CURATED
 from slopmortem.corpus.sources._throttle import (
     HTTP_BAD_REQUEST,
     USER_AGENT,
@@ -82,7 +83,7 @@ class CuratedSource:
             startup_name = row.get("startup_name")
             source_id = str(startup_name) if isinstance(startup_name, str) and startup_name else url
             yield RawEntry(
-                source="curated",
+                source=SOURCE_CURATED,
                 source_id=source_id,
                 url=url,
                 raw_html=resp.text,

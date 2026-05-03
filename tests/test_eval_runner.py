@@ -1,4 +1,4 @@
-"""Integration tests for :mod:`slopmortem.evals.runner`.
+"""Integration tests for `slopmortem.evals.runner`.
 
 Invokes ``main(argv)`` directly, never spawns a subprocess. Tests run the
 deterministic path (no env vars, no Qdrant, no real API calls) by

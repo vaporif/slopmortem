@@ -99,3 +99,15 @@ def test_merge_state_enum_values():
     }
     # NOT "quarantined"; quarantined docs live in quarantine_journal (Blocker B4).
     assert not hasattr(MergeState, "QUARANTINED")
+
+
+def test_similarity_scores_mean_averages_four_perspectives() -> None:
+    from slopmortem.models import PerspectiveScore, SimilarityScores  # noqa: PLC0415
+
+    scores = SimilarityScores(
+        business_model=PerspectiveScore(score=8.0, rationale="x"),
+        market=PerspectiveScore(score=6.0, rationale="x"),
+        gtm=PerspectiveScore(score=4.0, rationale="x"),
+        stage_scale=PerspectiveScore(score=2.0, rationale="x"),
+    )
+    assert scores.mean() == 5.0

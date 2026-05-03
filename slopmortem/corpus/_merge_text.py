@@ -33,7 +33,7 @@ def combined_text(sections: list[Section]) -> str:
 
 
 def combined_hash(sections: list[Section]) -> str:
-    """First 16 hex chars of sha256 over :func:`combined_text`.
+    """First 16 hex chars of sha256 over `combined_text`.
 
     Drives the skip-key ``content_hash``.
     """

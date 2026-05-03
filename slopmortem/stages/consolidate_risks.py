@@ -45,7 +45,7 @@ async def consolidate_risks(  # noqa: PLR0913 — every dep is required wiring a
 ) -> TopRisks:
     """Consolidate per-candidate lessons into a deduplicated risk list.
 
-    Returns an empty :class:`TopRisks` when ``syntheses`` is empty or when any
+    Returns an empty `TopRisks` when ``syntheses`` is empty or when any
     upstream synthesis flagged an injection attempt.
     """
     if not syntheses:

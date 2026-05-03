@@ -1,4 +1,4 @@
-"""Smoke tests for the shared :mod:`slopmortem.cli_progress` widget.
+"""Smoke tests for the shared `slopmortem.cli_progress` widget.
 
 Three checks:
 
@@ -13,7 +13,7 @@ The TTY-gate tests target the actual helper used by ``_record`` rather than
 re-evaluating the gate expression in the test body, so a divergence in the
 production code path is caught.
 
-Constructing :class:`Console` with ``file=StringIO(), force_terminal=True``
+Constructing `Console` with ``file=StringIO(), force_terminal=True``
 exercises the Rich render pipeline (otherwise it auto-detects no-color and
 short-circuits) while keeping output off the test runner's stdout/stderr.
 """
