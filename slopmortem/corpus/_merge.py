@@ -1,3 +1,4 @@
+# sqlite3.Cursor.fetchall/fetchone and sqlite3.Row.__getitem__ are typed Any in stdlib stubs.
 # pyright: reportAny=false
 """SQLite-backed merge journal, quarantine table, and alias graph.
 

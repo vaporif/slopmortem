@@ -314,12 +314,12 @@ Probably needs the header (heavy untyped-lib surface — leave alone unless audi
 - `slopmortem/corpus/_embed_sparse.py`
 - `slopmortem/evals/corpus_fixture.py` (eval-only, not prod)
 
-- [ ] **Step C1: Establish the typecheck baseline**
+- [x] **Step C1: Establish the typecheck baseline**
 
 Run: `just typecheck 2>&1 | tee /tmp/typecheck-before.txt; echo "exit=$?"`
 Expected: clean. Save the exit code.
 
-- [ ] **Step C2: Audit `slopmortem/ingest/_helpers.py`**
+- [x] **Step C2: Audit `slopmortem/ingest/_helpers.py`**
 
 Remove the first-line `# pyright: reportAny=false` header. Run:
 
@@ -329,40 +329,40 @@ just typecheck 2>&1 | tee /tmp/typecheck-helpers.txt
 
 If clean: keep the removal. If basedpyright now reports errors, inspect each. Per CLAUDE.md ("If a third-party stub is missing, narrow with cast and a one-line comment explaining why"), fix locally with `cast(...)` + a one-line `# reason` comment instead of restoring the file header. If most errors are from genuine third-party Any (e.g. `tiktoken.encode` returns `list[int]` — stubbed fine, so should not actually leak Any), restore the header and add a one-line comment justifying it.
 
-- [ ] **Step C3: Audit `slopmortem/ingest/_ports.py`**
+- [x] **Step C3: Audit `slopmortem/ingest/_ports.py`**
 
 Same procedure: remove header, run `just typecheck`, fix or restore.
 
-- [ ] **Step C4: Audit `slopmortem/ingest/_slop_gate.py`**
+- [x] **Step C4: Audit `slopmortem/ingest/_slop_gate.py`**
 
 Same procedure.
 
-- [ ] **Step C5: Audit `slopmortem/ingest/_impls.py`**
+- [x] **Step C5: Audit `slopmortem/ingest/_impls.py`**
 
 Same procedure.
 
-- [ ] **Step C6: Audit `slopmortem/ingest/_journal_writes.py`**
+- [x] **Step C6: Audit `slopmortem/ingest/_journal_writes.py`**
 
 Same procedure.
 
-- [ ] **Step C7: Audit `slopmortem/ingest/_fan_out.py`**
+- [x] **Step C7: Audit `slopmortem/ingest/_fan_out.py`**
 
 Same procedure.
 
-- [ ] **Step C8: Audit `slopmortem/corpus/_merge.py`**
+- [x] **Step C8: Audit `slopmortem/corpus/_merge.py`** (kept — sqlite3 stubs Any)
 
 Same procedure.
 
-- [ ] **Step C9: Audit `slopmortem/corpus/_entity_resolution.py`**
+- [x] **Step C9: Audit `slopmortem/corpus/_entity_resolution.py`**
 
 Same procedure. This file is the largest of the eight and most likely to surface real Any leaks; budget extra attention.
 
-- [ ] **Step C10: Final typecheck + lint + tests**
+- [x] **Step C10: Final typecheck + lint + tests**
 
 Run: `just typecheck && just lint && just test`
 Expected: all green.
 
-- [ ] **Step C11: Commit**
+- [x] **Step C11: Commit**
 
 Run:
 ```

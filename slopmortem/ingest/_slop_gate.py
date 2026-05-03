@@ -1,4 +1,3 @@
-# pyright: reportAny=false
 """Slop-gate routing.
 
 Entries scoring above ``config.slop_threshold`` route to `_quarantine`

@@ -1,4 +1,3 @@
-# pyright: reportAny=false
 """Pure helpers for ingest: hashing, truncation, payload assembly, gather loop.
 
 No I/O state: every helper takes its dependencies as parameters. No imports
