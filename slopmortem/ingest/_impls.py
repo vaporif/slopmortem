@@ -25,7 +25,7 @@ __all__ = [
 
 @dataclass
 class InMemoryCorpus:
-    """In-memory :class:`Corpus` for tests; not used in production."""
+    """In-memory `Corpus` for tests; not used in production."""
 
     points: list[_Point] = field(default_factory=list)
 
@@ -44,7 +44,7 @@ class InMemoryCorpus:
 
 @dataclass
 class FakeSlopClassifier:
-    """Deterministic test :class:`SlopClassifier`; ``scores`` overrides by text-key prefix."""
+    """Deterministic test `SlopClassifier`; ``scores`` overrides by text-key prefix."""
 
     default_score: float = 0.0
     scores: dict[str, float] = field(default_factory=dict)

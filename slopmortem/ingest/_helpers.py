@@ -1,7 +1,7 @@
 """Pure helpers for ingest: hashing, truncation, payload assembly, gather loop.
 
 No I/O state: every helper takes its dependencies as parameters. No imports
-from sibling ingest submodules except :mod:`_ports`.
+from sibling ingest submodules except `_ports`.
 """
 
 from __future__ import annotations

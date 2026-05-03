@@ -34,7 +34,7 @@ _MAX_RECORDED_ERRORS: Final[int] = 50
 
 @runtime_checkable
 class Corpus(Protocol):
-    """Narrow corpus surface ingest depends on; prod impl is :class:`QdrantCorpus`."""
+    """Narrow corpus surface ingest depends on; prod impl is `QdrantCorpus`."""
 
     async def upsert_chunk(self, point: object) -> None: ...
 
@@ -66,7 +66,7 @@ INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 class IngestProgress(Protocol):
     """Phase-level progress hooks.
 
-    Default :class:`NullProgress` keeps the orchestrator decoupled from any
+    Default `NullProgress` keeps the orchestrator decoupled from any
     UI library; the CLI wires a Rich impl.
     """
 
@@ -83,7 +83,7 @@ class IngestProgress(Protocol):
 
 
 class NullProgress:
-    """No-op :class:`IngestProgress` for when no display surface is attached."""
+    """No-op `IngestProgress` for when no display surface is attached."""
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None: ...
 
