@@ -8,7 +8,7 @@ the rest fan out concurrently. Preserves the CACHE_READ_RATIO_LOW invariant
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from slopmortem.llm import prompt_template_sha, render_prompt
 from slopmortem.tracing import SpanEvent
@@ -21,9 +21,6 @@ if TYPE_CHECKING:
 __all__ = ["cache_read_ratio_event", "cache_warm"]
 
 logger = logging.getLogger(__name__)
-
-_CACHE_READ_RATIO_THRESHOLD: Final[float] = 0.80
-_CACHE_READ_RATIO_PROBE_N: Final[int] = 5
 
 
 @runtime_checkable
@@ -66,13 +63,18 @@ async def cache_warm(
         return True, creation, span
 
 
-def cache_read_ratio_event(fanout: Sequence[_CacheRatioResult]) -> str | None:
-    """Emit a span event if the probe's cache-read ratio falls under the threshold.
+def cache_read_ratio_event(
+    fanout: Sequence[_CacheRatioResult],
+    *,
+    threshold: float,
+    probe_n: int,
+) -> str | None:
+    """Emit a span event if the probe's cache-read ratio falls under *threshold*.
 
-    Probes only the first :data:`_CACHE_READ_RATIO_PROBE_N` results; returns
-    ``None`` when no tokens flowed or the probe is empty.
+    Probes only the first *probe_n* results; returns ``None`` when no tokens
+    flowed or the probe is empty.
     """
-    probe = list(fanout)[:_CACHE_READ_RATIO_PROBE_N]
+    probe = list(fanout)[:probe_n]
     if not probe:
         return None
     total_read = sum(r.cache_read for r in probe)
@@ -81,6 +83,6 @@ def cache_read_ratio_event(fanout: Sequence[_CacheRatioResult]) -> str | None:
     if denom <= 0:
         return None
     ratio = total_read / denom
-    if ratio < _CACHE_READ_RATIO_THRESHOLD:
+    if ratio < threshold:
         return SpanEvent.CACHE_READ_RATIO_LOW.value
     return None

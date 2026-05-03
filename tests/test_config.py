@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from slopmortem.config import load_config
+from slopmortem.config import Config, load_config
 
 
 def test_defaults_load_from_toml(tmp_path, monkeypatch):
@@ -80,3 +80,102 @@ def test_dotenv_overrides_local_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("MAX_COST_USD_PER_QUERY", raising=False)
     cfg = load_config()
     assert cfg.max_cost_usd_per_query == 7.0
+
+
+_FIELD_REJECTS: list[tuple[str, object, str]] = [
+    ("slop_threshold", 1.5, "slop_threshold"),
+    ("slop_threshold", -0.1, "slop_threshold"),
+    ("min_similarity_score", 11.0, "min_similarity_score"),
+    ("min_similarity_score", -0.1, "min_similarity_score"),
+    ("cache_read_ratio_threshold", 1.5, "cache_read_ratio_threshold"),
+    ("cache_read_ratio_threshold", -0.1, "cache_read_ratio_threshold"),
+    ("K_retrieve", 0, "K_retrieve"),
+    ("N_synthesize", 0, "N_synthesize"),
+    ("ingest_concurrency", 0, "ingest_concurrency"),
+    ("rrf_k", 0, "rrf_k"),
+    ("max_doc_tokens", 0, "max_doc_tokens"),
+    ("cache_read_ratio_probe_n", 0, "cache_read_ratio_probe_n"),
+    ("max_tokens_facet", 0, "max_tokens_facet"),
+    ("max_tokens_summarize", 0, "max_tokens_summarize"),
+    ("max_tokens_rerank", 0, "max_tokens_rerank"),
+    ("max_tokens_synthesize", 0, "max_tokens_synthesize"),
+    ("max_tokens_consolidate", 0, "max_tokens_consolidate"),
+    ("max_tokens_slop_judge", 0, "max_tokens_slop_judge"),
+    ("max_tokens_tiebreaker", 0, "max_tokens_tiebreaker"),
+    ("facet_boost", -0.01, "facet_boost"),
+    ("retry_max_attempts", -1, "retry_max_attempts"),
+    ("retry_initial_backoff", -0.1, "retry_initial_backoff"),
+    ("tavily_calls_per_synthesis", -1, "tavily_calls_per_synthesis"),
+    ("max_cost_usd_per_query", 0.0, "max_cost_usd_per_query"),
+    ("max_cost_usd_per_ingest", 0.0, "max_cost_usd_per_ingest"),
+    ("max_cost_usd_per_query", -1.0, "max_cost_usd_per_query"),
+    ("qdrant_port", 0, "qdrant_port"),
+    ("qdrant_port", 70000, "qdrant_port"),
+]
+
+
+@pytest.mark.parametrize(("field", "bad", "match"), _FIELD_REJECTS)
+def test_field_constraint_rejects(tmp_path, monkeypatch, field, bad, match):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValidationError, match=match):
+        Config(**{field: bad})
+
+
+def test_embedding_provider_literal_rejects_unknown(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValidationError, match="embedding_provider"):
+        Config(embedding_provider="ollama")  # pyright: ignore[reportArgumentType]
+
+
+def test_tier3_band_inverted_rejected(tmp_path, monkeypatch):
+    """lo > hi swaps merge/split direction silently."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValidationError, match="tier3_calibration_band"):
+        Config(tier3_calibration_band=(0.85, 0.65))
+
+
+def test_tier3_band_out_of_unit_interval_rejected(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValidationError, match="tier3_calibration_band"):
+        Config(tier3_calibration_band=(-0.1, 0.85))
+    with pytest.raises(ValidationError, match="tier3_calibration_band"):
+        Config(tier3_calibration_band=(0.65, 1.5))
+
+
+def test_tier3_band_equal_endpoints_accepted(tmp_path, monkeypatch):
+    """lo == hi degenerates to a hard threshold — legal, collapses the tiebreaker band."""
+    monkeypatch.chdir(tmp_path)
+    cfg = Config(tier3_calibration_band=(0.7, 0.7))
+    assert cfg.tier3_calibration_band == (0.7, 0.7)
+
+
+def test_tavily_enabled_without_key_rejected(tmp_path, monkeypatch):
+    """Fail at load, not late inside the synthesis tool call."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    with pytest.raises(ValidationError, match="tavily_api_key"):
+        Config(enable_tavily_synthesis=True)
+
+
+def test_tavily_disabled_does_not_require_key(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    cfg = Config()
+    assert cfg.enable_tavily_synthesis is False
+    assert cfg.tavily_api_key.get_secret_value() == ""
+
+
+def test_openai_provider_without_key_rejected(tmp_path, monkeypatch):
+    """Fail at load, not inside the embedder factory."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ValidationError, match="openai_api_key"):
+        Config(embedding_provider="openai", embed_model_id="text-embedding-3-small")
+
+
+def test_fastembed_provider_does_not_require_openai_key(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    cfg = Config()
+    assert cfg.embedding_provider == "fastembed"
+    assert cfg.openai_api_key.get_secret_value() == ""

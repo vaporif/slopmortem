@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import override
+from typing import Literal, override
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -27,17 +27,20 @@ class Config(BaseSettings):
         toml_file=("slopmortem.toml", "slopmortem.local.toml"),
     )
 
-    K_retrieve: int = 30
-    N_synthesize: int = 5
-    min_similarity_score: float = 4.0
-    ingest_concurrency: int = 20
-    facet_boost: float = 0.01
-    rrf_k: int = 60
-    slop_threshold: float = 0.7
-    max_doc_tokens: int = 8000
+    K_retrieve: int = Field(default=30, ge=1)
+    N_synthesize: int = Field(default=5, ge=1)
+    min_similarity_score: float = Field(default=4.0, ge=0.0, le=10.0)
+    ingest_concurrency: int = Field(default=20, ge=1)
+    facet_boost: float = Field(default=0.01, ge=0.0)
+    rrf_k: int = Field(default=60, ge=1)
+    slop_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    max_doc_tokens: int = Field(default=8000, ge=1)
     tier3_calibration_band: tuple[float, float] = (0.65, 0.85)
-    max_cost_usd_per_query: float = 2.00
-    max_cost_usd_per_ingest: float = 15.00
+    max_cost_usd_per_query: float = Field(default=2.00, gt=0.0)
+    max_cost_usd_per_ingest: float = Field(default=15.00, gt=0.0)
+
+    cache_read_ratio_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
+    cache_read_ratio_probe_n: int = Field(default=5, ge=1)
 
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     model_facet: str = "anthropic/claude-haiku-4.5"
@@ -50,19 +53,19 @@ class Config(BaseSettings):
     # max output, so leaving these unset reserves the full 64K Anthropic
     # ceiling and surfaces as HTTP 402 on low-balance keys. Values sized to
     # each stage's actual output shape plus slack.
-    max_tokens_facet: int = 2000
-    max_tokens_summarize: int = 1500
-    max_tokens_rerank: int = 4000
-    max_tokens_synthesize: int = 16000
-    max_tokens_consolidate: int = 2048
-    max_tokens_slop_judge: int = 64
-    max_tokens_tiebreaker: int = 256
+    max_tokens_facet: int = Field(default=2000, ge=1)
+    max_tokens_summarize: int = Field(default=1500, ge=1)
+    max_tokens_rerank: int = Field(default=4000, ge=1)
+    max_tokens_synthesize: int = Field(default=16000, ge=1)
+    max_tokens_consolidate: int = Field(default=2048, ge=1)
+    max_tokens_slop_judge: int = Field(default=64, ge=1)
+    max_tokens_tiebreaker: int = Field(default=256, ge=1)
 
-    embedding_provider: str = "fastembed"
+    embedding_provider: Literal["fastembed", "openai"] = "fastembed"
     embed_model_id: str = "nomic-ai/nomic-embed-text-v1.5"
     embed_cache_dir: Path | None = None
-    retry_max_attempts: int = 3
-    retry_initial_backoff: float = 1.0
+    retry_max_attempts: int = Field(default=3, ge=0)
+    retry_initial_backoff: float = Field(default=1.0, ge=0.0)
 
     taxonomy_version: str = "v1"
     reliability_rank_version: str = "v1"
@@ -71,7 +74,7 @@ class Config(BaseSettings):
     enable_tracing: bool = False
     strict_deaths: bool = False
 
-    tavily_calls_per_synthesis: int = 2
+    tavily_calls_per_synthesis: int = Field(default=2, ge=0)
 
     openrouter_api_key: SecretStr = SecretStr("")
     openai_api_key: SecretStr = SecretStr("")
@@ -89,7 +92,7 @@ class Config(BaseSettings):
     # 16333 (not 6333) so the project's docker-compose Qdrant doesn't collide
     # with any pre-existing 6333 instance on the dev box. The container still
     # serves 6333 internally; only the host-side publish port is bumped.
-    qdrant_port: int = 16333
+    qdrant_port: int = Field(default=16333, ge=1, le=65535)
     qdrant_collection: str = "slopmortem"
     post_mortems_root: str = "./post_mortems"
     merge_journal_path: str = ""
@@ -98,6 +101,27 @@ class Config(BaseSettings):
     def _check_k_ge_n(self) -> Config:
         if self.K_retrieve < self.N_synthesize:
             msg = f"K_retrieve ({self.K_retrieve}) must be >= N_synthesize ({self.N_synthesize})"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _check_tier3_band(self) -> Config:
+        lo, hi = self.tier3_calibration_band
+        if not (0.0 <= lo <= hi <= 1.0):
+            msg = (
+                f"tier3_calibration_band must satisfy 0.0 <= lo <= hi <= 1.0, "
+                f"got {self.tier3_calibration_band}"
+            )
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _check_required_api_keys(self) -> Config:
+        if self.enable_tavily_synthesis and not self.tavily_api_key.get_secret_value():
+            msg = "enable_tavily_synthesis=True requires tavily_api_key"
+            raise ValueError(msg)
+        if self.embedding_provider == "openai" and not self.openai_api_key.get_secret_value():
+            msg = 'embedding_provider="openai" requires openai_api_key'
             raise ValueError(msg)
         return self
 
