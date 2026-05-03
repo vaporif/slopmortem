@@ -1,6 +1,6 @@
-"""Unit tests for the three eval assertions in :mod:`slopmortem.evals.assertions`.
+"""Unit tests for the three eval assertions in `slopmortem.evals.assertions`.
 
-Each assertion is a pure function over a :class:`Synthesis`; these tests build
+Each assertion is a pure function over a `Synthesis`; these tests build
 the smallest valid Synthesis values and assert on the boolean output.
 """
 

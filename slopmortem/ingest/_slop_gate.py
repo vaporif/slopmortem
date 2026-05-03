@@ -1,7 +1,7 @@
 # pyright: reportAny=false
 """Slop-gate routing.
 
-Entries scoring above ``config.slop_threshold`` route to :func:`_quarantine`
+Entries scoring above ``config.slop_threshold`` route to `_quarantine`
 and get no Qdrant point and no merge-journal row. ``--reclassify`` is the only
 path back.
 """

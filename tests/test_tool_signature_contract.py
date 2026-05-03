@@ -8,7 +8,7 @@ Two invariants:
 2. The tool implementation module imports nothing from ``subprocess``,
    ``os.system``, ``shutil.rmtree``, or ``shutil.copy``. Corpus tools have
    no reason to shell out, and the synthesis path is sandboxed by
-   :func:`safe_get` / :func:`safe_path`.
+   `safe_get` / `safe_path`.
 """
 
 from __future__ import annotations

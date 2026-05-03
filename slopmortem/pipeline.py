@@ -1,7 +1,7 @@
 """Pipeline orchestration. All side-effecting deps injected; CLI wires them up.
 
 ``BudgetExceededError`` truncates the run and returns a partial
-:class:`Report` with ``budget_exceeded=True``. Per-candidate synthesis
+`Report` with ``budget_exceeded=True``. Per-candidate synthesis
 failures don't abort — ``synthesize_all`` returns them as exception entries
 which we drop before populating ``Report.candidates``.
 """
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 class QueryPhase(StrEnum):
-    """Phase keys used by :class:`QueryProgress`."""
+    """Phase keys used by `QueryProgress`."""
 
     FACET_EXTRACT = "facet_extract"
     RETRIEVE = "retrieve"
@@ -53,7 +53,7 @@ class QueryPhase(StrEnum):
 class QueryProgress(Protocol):
     """Phase-level progress hooks for ``slopmortem query``.
 
-    The default :class:`NullQueryProgress` keeps the orchestrator decoupled
+    The default `NullQueryProgress` keeps the orchestrator decoupled
     from any UI library; the CLI wires a Rich implementation.
     """
 
@@ -66,7 +66,7 @@ class QueryProgress(Protocol):
 
 
 class NullQueryProgress:
-    """No-op :class:`QueryProgress` for when no display surface is attached."""
+    """No-op `QueryProgress` for when no display surface is attached."""
 
     def start_phase(self, phase: QueryPhase, total: int) -> None: ...
     def advance_phase(self, phase: QueryPhase, n: int = 1) -> None: ...
@@ -182,7 +182,7 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
     progress: QueryProgress | None = None,
     sparse_encoder: SparseEncoder | None = None,
 ) -> Report:
-    """Run the query pipeline end-to-end and assemble the :class:`Report`.
+    """Run the query pipeline end-to-end and assemble the `Report`.
 
     Per-candidate synthesis exceptions are dropped silently; ``BudgetExceededError``
     truncates the run and surfaces as ``pipeline_meta.budget_exceeded=True``.

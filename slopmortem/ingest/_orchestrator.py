@@ -62,7 +62,7 @@ _RELIABILITY_RANK: Final[dict[str, int]] = {
 
 @runtime_checkable
 class Corpus(Protocol):
-    """Narrow corpus surface ingest depends on; prod impl is :class:`QdrantCorpus`."""
+    """Narrow corpus surface ingest depends on; prod impl is `QdrantCorpus`."""
 
     async def upsert_chunk(self, point: object) -> None: ...
 
@@ -94,7 +94,7 @@ INGEST_PHASE_LABELS: dict[IngestPhase, str] = {
 class IngestProgress(Protocol):
     """Phase-level progress hooks.
 
-    Default :class:`NullProgress` keeps the orchestrator decoupled from any
+    Default `NullProgress` keeps the orchestrator decoupled from any
     UI library; the CLI wires a Rich impl.
     """
 
@@ -111,7 +111,7 @@ class IngestProgress(Protocol):
 
 
 class NullProgress:
-    """No-op :class:`IngestProgress` for when no display surface is attached."""
+    """No-op `IngestProgress` for when no display surface is attached."""
 
     def start_phase(self, phase: IngestPhase, total: int | None) -> None: ...
 
@@ -142,7 +142,7 @@ class _Point:
 
 @dataclass
 class InMemoryCorpus:
-    """In-memory :class:`Corpus` for tests; not used in production."""
+    """In-memory `Corpus` for tests; not used in production."""
 
     points: list[_Point] = field(default_factory=list)
 
@@ -161,7 +161,7 @@ class InMemoryCorpus:
 
 @dataclass
 class FakeSlopClassifier:
-    """Deterministic test :class:`SlopClassifier`; ``scores`` overrides by text-key prefix."""
+    """Deterministic test `SlopClassifier`; ``scores`` overrides by text-key prefix."""
 
     default_score: float = 0.0
     scores: dict[str, float] = field(default_factory=dict)

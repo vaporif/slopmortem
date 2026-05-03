@@ -1,7 +1,7 @@
 """Synthesize stage: one candidate → one ``synthesize`` call.
 
 ``synthesize_all`` uses the cache-warm pattern (first call alone, then
-:func:`gather_resilient` on the rest) so one candidate's failure can't cancel
+`gather_resilient` on the rest) so one candidate's failure can't cancel
 the others. The tool-call loop, ``<untrusted_document>`` wrapping, and 5-turn
 bound live in ``slopmortem/llm/openrouter.py``.
 """
@@ -80,7 +80,7 @@ async def synthesize(  # noqa: PLR0913 — every dependency is required at the c
     produced empty or hallucinated lists.
 
     When ``where_diverged == "prompt_injection_attempted"`` (the
-    :data:`_INJECTION_MARKER`), fires :data:`SpanEvent.PROMPT_INJECTION_ATTEMPTED`
+    `_INJECTION_MARKER`), fires `SpanEvent.PROMPT_INJECTION_ATTEMPTED`
     on the active Laminar span.
     """
     prompt = render_prompt(
@@ -131,10 +131,10 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     max_tokens: int | None = None,
     on_candidate_done: Callable[[BaseException | None], None] | None = None,
 ) -> list[Synthesis | BaseException]:
-    """Fan out :func:`synthesize` across *candidates* with cache-warm + resilient gather.
+    """Fan out `synthesize` across *candidates* with cache-warm + resilient gather.
 
     First call runs alone so the prompt cache is populated before parallel
-    calls race to write it. The rest use :func:`gather_resilient` so a single
+    calls race to write it. The rest use `gather_resilient` so a single
     failure doesn't cancel siblings — exceptions are returned in-list.
     """
     if not candidates:

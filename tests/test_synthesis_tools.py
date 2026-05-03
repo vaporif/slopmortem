@@ -1,7 +1,7 @@
 """Synthesis tool unit tests (plan §9.1).
 
 The corpus tool functions ``_get_post_mortem`` / ``_search_corpus`` delegate
-through the :class:`slopmortem.corpus.store.Corpus` protocol. These tests
+through the `slopmortem.corpus.store.Corpus` protocol. These tests
 hit the delegation wiring with an in-memory fake corpus. Live Qdrant
 integration shape is covered separately by
 ``tests/stages/test_retrieve.py`` (gated on ``requires_qdrant``).
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class _FakeCorpus:
     """Minimal Corpus stand-in; Task 9 only reads ``get_post_mortem`` / ``search_corpus``.
 
-    A no-op ``query`` exists to satisfy the structural :class:`Corpus`
+    A no-op ``query`` exists to satisfy the structural `Corpus`
     protocol for ``_set_corpus``'s signature.
     """
 

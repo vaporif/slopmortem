@@ -1,5 +1,5 @@
 # pyright: reportAny=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownVariableType=false
-"""BM25 sparse embedder wrapping :mod:`fastembed`.
+"""BM25 sparse embedder wrapping `fastembed`.
 
 The Qdrant collection needs ``Modifier.IDF`` — without it sparse retrieval
 falls back to raw token-frequency. Model loads lazily so the ONNX download

@@ -6,7 +6,7 @@ Covers Task 10 plan steps:
 
 Tests use ``FakeLLMClient`` (canned ``(prompt_template_sha, model)`` responses)
 and ``FakeEmbeddingClient`` (sha256-derived vectors). The Corpus is an
-in-memory implementation of :class:`slopmortem.corpus.store.Corpus`; no
+in-memory implementation of `slopmortem.corpus.store.Corpus`; no
 Qdrant required.
 """
 
@@ -245,7 +245,7 @@ def _build_canned(
 
 @dataclass
 class _FakeCorpus:
-    """In-memory :class:`Corpus` for pipeline tests; no Qdrant, no fastembed."""
+    """In-memory `Corpus` for pipeline tests; no Qdrant, no fastembed."""
 
     candidates: list[Candidate]
     queries: list[dict[str, object]] = field(default_factory=list)
@@ -319,7 +319,7 @@ def _build_config(*, k_retrieve: int = 6, n_synthesize: int = 3) -> Config:
 
 
 class _RecordingQueryProgress:
-    """Test stub for :class:`slopmortem.pipeline.QueryProgress`.
+    """Test stub for `slopmortem.pipeline.QueryProgress`.
 
     Records every phase event into ``self.events`` as ``("start", phase, total)``,
     ``("advance", phase, n)``, ``("end", phase)``, ``("log", message)``, or

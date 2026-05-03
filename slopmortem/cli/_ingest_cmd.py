@@ -282,7 +282,7 @@ def _default_curated_yaml() -> Path:
 
 
 async def _build_journal(config: Config, post_mortems_root: Path) -> MergeJournal:
-    """Build the merge journal, calling :meth:`MergeJournal.init`.
+    """Build the merge journal, calling `MergeJournal.init`.
 
     ``init()`` is idempotent so calling it every CLI invocation is cheap and
     fresh dev databases work without an explicit setup step.
@@ -302,8 +302,8 @@ def _build_slop_classifier(
 ) -> SlopClassifier:
     """Pick a slop classifier based on *dry_run*.
 
-    Dry-run uses :class:`FakeSlopClassifier` — no API key, no LLM cost.
-    Live runs use :class:`HaikuSlopClassifier` (one Haiku call per entry).
+    Dry-run uses `FakeSlopClassifier` — no API key, no LLM cost.
+    Live runs use `HaikuSlopClassifier` (one Haiku call per entry).
     """
     if dry_run:
         from slopmortem.ingest import FakeSlopClassifier  # noqa: PLC0415
@@ -315,7 +315,7 @@ def _build_slop_classifier(
 
 
 async def _build_ingest_corpus(config: Config, post_mortems_root: Path) -> IngestCorpus:
-    """Build the ingest-side :class:`QdrantCorpus`, ensuring the collection exists.
+    """Build the ingest-side `QdrantCorpus`, ensuring the collection exists.
 
     Without ``ensure_collection`` (idempotent), ``upsert_chunk`` fails with
     ``Collection 'slopmortem' doesn't exist`` on a fresh dev box's first write.
@@ -349,9 +349,9 @@ async def _build_ingest_deps(
 ) -> tuple[LLMClient, EmbeddingClient, IngestCorpus, Budget, MergeJournal, SlopClassifier]:
     """Build the ingest-side dependency tuple.
 
-    Mirrors :func:`_build_deps` but caps the budget at
+    Mirrors `slopmortem.deps.build_deps` but caps the budget at
     ``max_cost_usd_per_ingest`` and additionally builds a journal plus the
-    slop classifier. ``dry_run=True`` swaps in :class:`FakeSlopClassifier` so
+    slop classifier. ``dry_run=True`` swaps in `FakeSlopClassifier` so
     the run needs no real API key.
     """
     budget = Budget(cap_usd=config.max_cost_usd_per_ingest)

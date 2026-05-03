@@ -18,7 +18,7 @@ Atomicity contracts:
   ``resolver_flipped`` in its terminal state — no transient ``pending`` row,
   no ingest of the new canonical (``--reconcile`` owns repair).
 - Alias precheck runs before any ingest write. With an alias hint,
-  :meth:`MergeJournal.upsert_alias_blocked` writes the alias edge and the
+  `MergeJournal.upsert_alias_blocked` writes the alias edge and the
   journal row in one SQLite transaction; on failure both roll back.
 
 Tier-3 decisions cache in a module-private ``tier3_decisions`` SQLite table

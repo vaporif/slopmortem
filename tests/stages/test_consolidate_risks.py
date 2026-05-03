@@ -1,6 +1,6 @@
 """Unit tests for ``slopmortem.stages.consolidate_risks``.
 
-LLM I/O is mocked via :class:`FakeLLMClient`; the tests cover empty-input
+LLM I/O is mocked via `FakeLLMClient`; the tests cover empty-input
 short-circuit, happy path, severity cap demotion, fabricated-id pruning,
 injection-flag handling, and per-candidate lesson dedup at the prompt
 boundary.

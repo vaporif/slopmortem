@@ -87,7 +87,7 @@ async def _facet_summarize_fanout(
     """Run facet+summarize across entries with bounded concurrency.
 
     Facet and summarize for the same entry run sequentially so two LLM calls
-    never share one limiter slot. Returns one :class:`_FanoutResult` per entry
+    never share one limiter slot. Returns one `_FanoutResult` per entry
     in order, or the exception that aborted it.
     """
     limiter = anyio.CapacityLimiter(config.ingest_concurrency)

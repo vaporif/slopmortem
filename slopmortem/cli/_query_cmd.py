@@ -23,12 +23,12 @@ from rich.console import Console
 from slopmortem.cli import app
 from slopmortem.cli._common import (
     RichQueryProgress,
-    _build_deps,
     _maybe_init_tracing,
     _render_query_footer,
 )
 from slopmortem.config import load_config
 from slopmortem.corpus import set_query_corpus
+from slopmortem.deps import build_deps
 from slopmortem.models import InputContext
 from slopmortem.pipeline import cutoff_iso, run_query
 from slopmortem.render import render
@@ -128,7 +128,7 @@ async def _query(
 ) -> None:
     config = load_config()
     _maybe_init_tracing(config)
-    llm, embedder, corpus, budget = _build_deps(config)
+    llm, embedder, corpus, budget = build_deps(config)
     set_query_corpus(corpus)
     ctx = InputContext(name=name or "(unnamed)", description=description, years_filter=years)
     if debug_retrieve:

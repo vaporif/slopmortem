@@ -1,4 +1,4 @@
-"""LLM rerank stage: one strict-mode JSON call → :class:`LlmRerankResult`."""
+"""LLM rerank stage: one strict-mode JSON call → `LlmRerankResult`."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ async def llm_rerank(  # noqa: PLR0913 — every dependency is required at the c
 
     Strict-mode schema constrains shape but not length, so the parsed array
     is re-validated against ``min(N_synthesize, len(candidates))`` — mismatch
-    raises :class:`RerankLengthError`.
+    raises `RerankLengthError`.
     """
     Laminar.set_span_attributes(
         {

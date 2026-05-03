@@ -2,7 +2,7 @@
 
 The tools wrap Tavily's POST-only ``/search`` and ``/extract`` endpoints
 behind ``safe_post``. They read ``TAVILY_API_KEY`` from the environment at
-call time (not from :class:`Config`), because the tool callables are
+call time (not from `Config`), because the tool callables are
 passed bare to OpenRouter's function-calling surface and the existing
 ``_set_corpus`` indirection would not extend cleanly to a second
 binding.

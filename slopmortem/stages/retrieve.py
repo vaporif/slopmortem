@@ -1,8 +1,8 @@
-"""Retrieve stage: embed and delegate to :meth:`Corpus.query`.
+"""Retrieve stage: embed and delegate to `Corpus.query`.
 
 The hybrid-retrieval contract (FormulaQuery + RRF + recency-branch filter +
 collapse-to-parents + alias-graph dedup) lives in
-:meth:`slopmortem.corpus._qdrant_store.QdrantCorpus.query`.
+`slopmortem.corpus._qdrant_store.QdrantCorpus.query`.
 """
 
 from __future__ import annotations
