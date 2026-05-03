@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from openai import AsyncOpenAI
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
-    """Build the embedding client; unknown provider raises ``ValueError`` at startup."""
+    """Build the embedding client; basedpyright proves exhaustiveness over the Literal."""
     provider = config.embedding_provider
     if provider == "fastembed":
         return FastEmbedEmbeddingClient(
@@ -33,6 +33,4 @@ def make_embedder(config: Config, budget: Budget) -> EmbeddingClient:
             budget=budget,
             model=config.embed_model_id,
         )
-    valid = ("fastembed", "openai")
-    msg = f"unknown embedding_provider {provider!r}; valid choices: {valid}"
-    raise ValueError(msg)
+    assert_never(provider)
