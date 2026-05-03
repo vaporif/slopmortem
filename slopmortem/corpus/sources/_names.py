@@ -1,4 +1,4 @@
-"""Source-id strings shared by `RawEntry.source`, the reliability rank table, and the pre-vetted set."""
+"""Source-id strings shared by `RawEntry.source`, the reliability table, and the pre-vetted set."""
 
 from __future__ import annotations
 
