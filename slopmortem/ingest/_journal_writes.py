@@ -1,4 +1,3 @@
-# pyright: reportAny=false
 """Per-entry journal write ordering.
 
 Load-bearing invariant (CLAUDE.md): mark_complete fires only after both Qdrant
@@ -31,12 +30,11 @@ from slopmortem.corpus import (
     write_raw_atomic,
 )
 from slopmortem.ingest._fan_out import _embed_and_upsert
-from slopmortem.ingest._orchestrator import (
-    SparseEncoder,
-    _build_payload,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
-    _reliability_for,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
-    _skip_key,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
-    _text_id_for,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
+from slopmortem.ingest._helpers import (
+    _build_payload,
+    _reliability_for,
+    _skip_key,
+    _text_id_for,
 )
 from slopmortem.llm import prompt_template_sha
 from slopmortem.tracing import SpanEvent
@@ -47,7 +45,7 @@ if TYPE_CHECKING:
     from slopmortem.config import Config
     from slopmortem.corpus import MergeJournal
     from slopmortem.ingest._fan_out import _FanoutResult
-    from slopmortem.ingest._orchestrator import Corpus
+    from slopmortem.ingest._ports import Corpus, SparseEncoder
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import RawEntry
 
@@ -114,10 +112,11 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
     )
     merged = combined_text([section])
     content_hash = combined_hash([section])
+    facet_sha = prompt_template_sha("facet_extract")
 
     skip_key = _skip_key(
         content_hash=content_hash,
-        facet_sha=prompt_template_sha("facet_extract"),
+        facet_sha=facet_sha,
         summarize_sha=prompt_template_sha("summarize"),
         haiku_model_id=config.model_facet,
         embed_model_id=config.embed_model_id,
@@ -147,7 +146,7 @@ async def _process_entry(  # noqa: PLR0913 - orchestration density is the contra
             "source": entry.source,
             "source_id": entry.source_id,
             "content_hash": content_hash,
-            "facet_prompt_hash": prompt_template_sha("facet_extract"),
+            "facet_prompt_hash": facet_sha,
             "embed_model_id": config.embed_model_id,
             "chunk_strategy_version": CHUNK_STRATEGY_VERSION,
             "taxonomy_version": config.taxonomy_version,

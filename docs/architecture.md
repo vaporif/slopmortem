@@ -126,7 +126,9 @@ slopmortem/
   ingest/
     __init__.py            # public surface: `ingest()`, IngestPhase, IngestResult, …
     _ingest.py             # top-level `ingest()` orchestration
-    _orchestrator.py       # shared types, protocols, fakes, pure helpers (leaf of import graph)
+    _ports.py              # Corpus / SlopClassifier protocols + IngestPhase / IngestResult / IngestProgress (leaf of import graph)
+    _helpers.py            # pure helpers shared across ingest internals
+    _impls.py              # InMemoryCorpus, FakeSlopClassifier, HaikuSlopClassifier (production stand-ins)
     _slop_gate.py          # slop classifier routing → quarantine/ or fan-out
     _warm_cache.py         # first-entry-alone prompt-cache warm pattern
     _fan_out.py            # per-entry facet → summarize → embed → upsert

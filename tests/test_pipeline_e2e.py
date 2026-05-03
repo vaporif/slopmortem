@@ -883,7 +883,7 @@ def test_render_banner_mentions_filter_drops() -> None:
 async def test_pipeline_logs_drops_at_info(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """min_similarity drops emit an INFO log on slopmortem.pipeline."""
+    """min_similarity drops emit an INFO log on the rerank stage."""
     import logging  # noqa: PLC0415
 
     candidates = [_candidate(f"cand-{i}") for i in range(3)]
@@ -903,7 +903,7 @@ async def test_pipeline_logs_drops_at_info(
 
     monkeypatch.setattr("slopmortem.corpus._embed_sparse.encode", _no_op_sparse_encoder)
 
-    with caplog.at_level(logging.INFO, logger="slopmortem.pipeline"):
+    with caplog.at_level(logging.INFO, logger="slopmortem.stages.llm_rerank"):
         _ = await run_query(
             ctx,
             llm=fake_llm,

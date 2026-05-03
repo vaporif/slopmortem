@@ -8,7 +8,6 @@ which we drop before populating ``Report.candidates``.
 
 from __future__ import annotations
 
-import logging
 import time
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -21,9 +20,11 @@ from slopmortem.budget import BudgetExceededError
 from slopmortem.models import PipelineMeta, Report, Synthesis, TopRisks
 from slopmortem.stages import (
     consolidate_risks,
+    drop_below_min_similarity,
     extract_facets,
     llm_rerank,
     retrieve,
+    select_top_n_by_similarity,
     synthesize_all,
 )
 from slopmortem.tracing import SpanEvent, git_sha, mint_run_id
@@ -33,11 +34,8 @@ if TYPE_CHECKING:
     from slopmortem.config import Config
     from slopmortem.corpus import Corpus
     from slopmortem.llm import EmbeddingClient, LLMClient
-    from slopmortem.models import Candidate, InputContext, ScoredCandidate, SimilarityScores
+    from slopmortem.models import InputContext
     from slopmortem.stages import SparseEncoder
-
-
-logger = logging.getLogger(__name__)
 
 
 class QueryPhase(StrEnum):
@@ -85,76 +83,6 @@ def cutoff_iso(years_filter: int | None) -> str | None:
     if years_filter is None:
         return None
     return (datetime.now(UTC) - relativedelta(years=years_filter)).date().isoformat()
-
-
-def _mean_similarity_score(scores: SimilarityScores) -> float:
-    perspectives = [
-        scores.business_model.score,
-        scores.market.score,
-        scores.gtm.score,
-        scores.stage_scale.score,
-    ]
-    return sum(perspectives) / len(perspectives)
-
-
-def _filter_by_min_similarity(
-    ranked: list[ScoredCandidate], threshold: float
-) -> list[ScoredCandidate]:
-    return [s for s in ranked if _mean_similarity_score(s.perspective_scores) >= threshold]
-
-
-def _filter_synth_by_min_similarity(
-    syntheses: list[Synthesis], threshold: float
-) -> list[Synthesis]:
-    # Synthesis sometimes re-scores a candidate lower than rerank did, so a row
-    # that cleared the rerank-side filter can come back below the bar.
-    return [s for s in syntheses if _mean_similarity_score(s.similarity) >= threshold]
-
-
-def _log_min_similarity_drop(*, dropped: int, total: int, stage: str, threshold: float) -> None:
-    if dropped <= 0:
-        return
-    logger.info(
-        "min_similarity dropped %d/%d candidates %s (threshold=%.2f)",
-        dropped,
-        total,
-        stage,
-        threshold,
-    )
-
-
-def _select_top_n(
-    *,
-    retrieved: list[Candidate],
-    ranked: list[ScoredCandidate],
-    threshold: float,
-    n_synthesize: int,
-) -> tuple[list[Candidate], int]:
-    # ``dropped_count`` conflates min-sim drops with retrieve under-fill (the
-    # reranker returns up to n_synthesize rows, fewer when retrieve under-fills).
-    survivors = _filter_by_min_similarity(ranked, threshold)
-    _log_min_similarity_drop(
-        dropped=len(ranked) - len(survivors),
-        total=len(ranked),
-        stage="post-rerank",
-        threshold=threshold,
-    )
-    top_n = _join_to_candidates(retrieved, survivors)[:n_synthesize]
-    return top_n, max(0, n_synthesize - len(top_n))
-
-
-def _join_to_candidates(
-    retrieved: list[Candidate], ranked: list[ScoredCandidate]
-) -> list[Candidate]:
-    # Drops any ranked id missing from retrieved — defensive, since the
-    # reranker only ever sees retrieved ids.
-    id_to_candidate = {c.canonical_id: c for c in retrieved}
-    out: list[Candidate] = []
-    for s in ranked:
-        cand = id_to_candidate.get(s.candidate_id)
-        if cand is not None:
-            out.append(cand)
-    return out
 
 
 def _current_trace_id(*, enable_tracing: bool) -> str | None:
@@ -251,10 +179,10 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
         progress.advance_phase(QueryPhase.RERANK)
         progress.end_phase(QueryPhase.RERANK)
 
-        top_n, filtered_pre_synth = _select_top_n(
+        top_n, filtered_pre_synth = select_top_n_by_similarity(
             retrieved=retrieved,
             ranked=reranked.ranked,
-            threshold=config.min_similarity_score,
+            min_similarity=config.min_similarity_score,
             n_synthesize=config.N_synthesize,
         )
 
@@ -284,14 +212,8 @@ async def run_query(  # noqa: PLR0913 - every dep is required wiring at the call
             on_candidate_done=_on_candidate_done,
         )
         successes = [s for s in synth_results if isinstance(s, Synthesis)]
-        synth_in = len(successes)
-        successes = _filter_synth_by_min_similarity(successes, config.min_similarity_score)
-        filtered_post_synth = synth_in - len(successes)
-        _log_min_similarity_drop(
-            dropped=filtered_post_synth,
-            total=synth_in,
-            stage="post-synth",
-            threshold=config.min_similarity_score,
+        successes, filtered_post_synth = drop_below_min_similarity(
+            successes, min_similarity=config.min_similarity_score
         )
         # Inside the try so a budget-exceeded run falls through to the default
         # empty TopRisks instead of consolidating a partial set.

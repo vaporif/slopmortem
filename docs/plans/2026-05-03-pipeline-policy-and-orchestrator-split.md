@@ -394,7 +394,7 @@ Expected: all green. New tests pass; pipeline.py still works because it still ca
 
 **Anti-scope:** Do NOT modify `pipeline.py` or `stages/__init__.py` yet. Do NOT touch the existing `synthesize()` / `synthesize_all()`. Do NOT add tracing decorators. Do NOT commit.
 
-- [ ] **Step 1: Add `logger` + new helper to `stages/synthesize.py`**
+- [x] **Step 1: Add `logger` + new helper to `stages/synthesize.py`**
 
 Edit `slopmortem/stages/synthesize.py`:
 
@@ -433,7 +433,7 @@ def drop_below_min_similarity(
     return kept, dropped
 ```
 
-- [ ] **Step 2: Append migrated test to `tests/stages/test_synthesize.py`**
+- [x] **Step 2: Append migrated test to `tests/stages/test_synthesize.py`**
 
 Append to `tests/stages/test_synthesize.py`:
 
@@ -488,7 +488,7 @@ def test_drop_below_min_similarity_zero_dropped_when_all_pass() -> None:
     assert dropped == 0
 ```
 
-- [ ] **Step 3: Delete the migrated test from `tests/test_pipeline_e2e.py`**
+- [x] **Step 3: Delete the migrated test from `tests/test_pipeline_e2e.py`**
 
 Edit `tests/test_pipeline_e2e.py`:
 - Remove `_filter_synth_by_min_similarity` from the `from slopmortem.pipeline import (...)` block.
@@ -504,7 +504,7 @@ from slopmortem.pipeline import (
 )
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. `pipeline.py` still calls its own `_filter_synth_by_min_similarity` (unchanged in this task).
@@ -521,7 +521,7 @@ Expected: all green. `pipeline.py` still calls its own `_filter_synth_by_min_sim
 
 **Anti-scope:** Do NOT touch `_current_trace_id` or `cutoff_iso`. Do NOT touch the `QueryProgress` / `NullQueryProgress` / `QueryPhase` definitions. Do NOT change `Report` / `PipelineMeta` field names. Do NOT modify any stage internals beyond exports. Do NOT commit.
 
-- [ ] **Step 1: Export the new stage functions from `slopmortem/stages/__init__.py`**
+- [x] **Step 1: Export the new stage functions from `slopmortem/stages/__init__.py`**
 
 Edit `slopmortem/stages/__init__.py`. Add the two re-exports and update `__all__`:
 
@@ -566,7 +566,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 2: Update `pipeline.py` imports**
+- [x] **Step 2: Update `pipeline.py` imports**
 
 Edit `slopmortem/pipeline.py`:
 
@@ -598,7 +598,7 @@ if TYPE_CHECKING:
 
 (Removed: `Candidate`, `ScoredCandidate`, `SimilarityScores` — they're only referenced by the deleted helpers.)
 
-- [ ] **Step 3: Delete the policy helpers from `pipeline.py`**
+- [x] **Step 3: Delete the policy helpers from `pipeline.py`**
 
 Delete the following blocks from `slopmortem/pipeline.py`:
 - `_mean_similarity_score` (lines 90-97)
@@ -610,7 +610,7 @@ Delete the following blocks from `slopmortem/pipeline.py`:
 
 Leave `cutoff_iso` (lines 79-87) and `_current_trace_id` (lines 160-167) in place — they are pipeline-only.
 
-- [ ] **Step 4: Update the `run_query` body to call the new stage functions**
+- [x] **Step 4: Update the `run_query` body to call the new stage functions**
 
 In `slopmortem/pipeline.py`, replace the `_select_top_n` call (currently around lines 254-259) with:
 
@@ -634,12 +634,12 @@ Replace the post-synth filter block (currently around lines 286-295) with:
 
 (The `synth_in` local goes away; `drop_below_min_similarity` returns the dropped count directly. The log line moves into the stage function — `pipeline.py` no longer logs about min-similarity drops.)
 
-- [ ] **Step 5: Verify pipeline imports are still consistent**
+- [x] **Step 5: Verify pipeline imports are still consistent**
 
 Run: `uv run ruff check slopmortem/pipeline.py`
 Expected: no unused-import warnings. If `Synthesis` (used in `[s for s in synth_results if isinstance(s, Synthesis)]`) is flagged, leave it — it's used. If anything else is flagged, the previous edits left a stale reference; remove it.
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. End-to-end pipeline tests in `test_pipeline_e2e.py` (e.g. `test_run_query_zero_passes_threshold`, `test_post_synth_filter_records_drop_on_pipeline_meta`) verify the swap end-to-end — they exercise `run_query`, which now goes through the stage functions.
@@ -663,7 +663,7 @@ Expected: all green. End-to-end pipeline tests in `test_pipeline_e2e.py` (e.g. `
 
 **Anti-scope:** Do NOT move helpers (`_text_id_for`, `_skip_key`, `_truncate_to_tokens`, `_entry_summary_text`, `_enrich_pipeline`, `_gather_entries`, `_build_payload`, `_date_from_year`, `_RELIABILITY_RANK`). Do NOT move classes (`InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier`). Do NOT delete `_orchestrator.py` yet — Task 8 owns that and the corresponding `_orchestrator` removal from `.importlinter`. Do NOT commit.
 
-- [ ] **Step 1: Create `slopmortem/ingest/_ports.py`**
+- [x] **Step 1: Create `slopmortem/ingest/_ports.py`**
 
 Write the following to `slopmortem/ingest/_ports.py`:
 
@@ -800,7 +800,7 @@ class IngestResult:
     span_events: list[str] = field(default_factory=list)
 ```
 
-- [ ] **Step 2: Remove the migrated symbols from `_orchestrator.py`**
+- [x] **Step 2: Remove the migrated symbols from `_orchestrator.py`**
 
 Edit `slopmortem/ingest/_orchestrator.py`:
 
@@ -832,7 +832,7 @@ if TYPE_CHECKING:
     from slopmortem.ingest._ports import IngestProgress
 ```
 
-- [ ] **Step 3: Update `slopmortem/ingest/__init__.py`**
+- [x] **Step 3: Update `slopmortem/ingest/__init__.py`**
 
 Edit `slopmortem/ingest/__init__.py`. Replace the per-symbol re-export block with:
 
@@ -888,7 +888,7 @@ __all__ = [
 
 (`InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier` keep their `_orchestrator` source for now — Task 7 moves them.)
 
-- [ ] **Step 4: Update `slopmortem/ingest/_ingest.py` imports**
+- [x] **Step 4: Update `slopmortem/ingest/_ingest.py` imports**
 
 Edit `slopmortem/ingest/_ingest.py`:
 
@@ -931,7 +931,7 @@ if TYPE_CHECKING:
     from slopmortem.models import RawEntry
 ```
 
-- [ ] **Step 5: Update `slopmortem/ingest/_fan_out.py` imports**
+- [x] **Step 5: Update `slopmortem/ingest/_fan_out.py` imports**
 
 Edit `slopmortem/ingest/_fan_out.py`. Replace the `from slopmortem.ingest._orchestrator import (...)` block (lines 17-24) with:
 
@@ -960,7 +960,7 @@ if TYPE_CHECKING:
     from slopmortem.models import CandidatePayload, Facets, RawEntry
 ```
 
-- [ ] **Step 6: Update `slopmortem/ingest/_journal_writes.py` imports**
+- [x] **Step 6: Update `slopmortem/ingest/_journal_writes.py` imports**
 
 Edit `slopmortem/ingest/_journal_writes.py`. The current block at lines 34-40:
 
@@ -1000,7 +1000,7 @@ if TYPE_CHECKING:
     from slopmortem.models import RawEntry
 ```
 
-- [ ] **Step 7: Update `slopmortem/ingest/_slop_gate.py` imports**
+- [x] **Step 7: Update `slopmortem/ingest/_slop_gate.py` imports**
 
 Edit `slopmortem/ingest/_slop_gate.py`. The TYPE_CHECKING block at lines 20-26 has:
 
@@ -1014,7 +1014,7 @@ Change to:
     from slopmortem.ingest._ports import SlopClassifier
 ```
 
-- [ ] **Step 8: Update `tests/ingest/test_orchestrator_helpers.py` imports**
+- [x] **Step 8: Update `tests/ingest/test_orchestrator_helpers.py` imports**
 
 Edit `tests/ingest/test_orchestrator_helpers.py`. The current block at lines 19-24:
 
@@ -1040,7 +1040,7 @@ from slopmortem.ingest._ports import NullProgress
 
 (Tasks 6 and 7 will pull `_entry_summary_text` / `_gather_entries` / `_truncate_to_tokens` to `_helpers.py` — left alone here.)
 
-- [ ] **Step 9: Register `_ports` in `.importlinter`**
+- [x] **Step 9: Register `_ports` in `.importlinter`**
 
 Edit `.importlinter`. Locate the `[importlinter:contract:ingest-private]` block. Add `slopmortem.ingest._ports` to `forbidden_modules` so the encapsulation contract starts enforcing it now rather than waiting for Task 8. The block becomes:
 
@@ -1057,7 +1057,7 @@ forbidden_modules =
 
 (`_orchestrator` stays on the list until Task 8 deletes the file. `_helpers` and `_impls` are added by Tasks 6 and 7.)
 
-- [ ] **Step 10: Run the full suite**
+- [x] **Step 10: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. `just lint` invokes `lint-imports` (per `justfile:74-77`), so the contract update is verified end-of-task. The package facade still exports the same surface; private intra-package imports now route through `_ports.py`.
@@ -1079,7 +1079,7 @@ Expected: all green. `just lint` invokes `lint-imports` (per `justfile:74-77`), 
 
 **Anti-scope:** Do NOT move classifiers or `InMemoryCorpus` — Task 7 owns them. Do NOT delete `_orchestrator.py` — Task 8 owns the deletion. Do NOT change helper signatures or behaviour. Do NOT inline `_MAX_RECORDED_ERRORS`; it stays in `_ports.py` as already migrated. Do NOT commit.
 
-- [ ] **Step 1: Create `slopmortem/ingest/_helpers.py`**
+- [x] **Step 1: Create `slopmortem/ingest/_helpers.py`**
 
 Write to `slopmortem/ingest/_helpers.py`:
 
@@ -1272,7 +1272,7 @@ def _date_from_year(year: int):  # noqa: ANN202 - narrow internal helper
 
 The helpers move byte-for-byte. No signature, annotation, or import-style change in this task — incidental cleanups belong in a separate post-move pass if anyone wants them.
 
-- [ ] **Step 2: Remove the migrated helpers from `_orchestrator.py`**
+- [x] **Step 2: Remove the migrated helpers from `_orchestrator.py`**
 
 Edit `slopmortem/ingest/_orchestrator.py`. Delete:
 - `_RELIABILITY_RANK` constant
@@ -1290,7 +1290,7 @@ Drop now-unused imports from `_orchestrator.py`: `hashlib`, `logging`, `dataclas
 
 The remaining `_orchestrator.py` should hold only `InMemoryCorpus`, `FakeSlopClassifier`, `HaikuSlopClassifier`, plus their imports (`json`, `dataclass`/`field`, `cast`, `LLMClient` (TYPE_CHECKING), `prompt_template_sha`, `render_prompt`, `_Point` (from `_ports`)). Update its docstring to: `"""Slop classifier impls and the in-memory corpus stand-in. Task 7 will move these to ``_impls.py``."""`. Update `__all__`: `["FakeSlopClassifier", "HaikuSlopClassifier", "InMemoryCorpus"]`.
 
-- [ ] **Step 3: Re-route `_ingest.py` helper imports**
+- [x] **Step 3: Re-route `_ingest.py` helper imports**
 
 Edit `slopmortem/ingest/_ingest.py`. Replace:
 
@@ -1312,7 +1312,7 @@ from slopmortem.ingest._helpers import (
 )
 ```
 
-- [ ] **Step 4: Re-route `_fan_out.py` helper import**
+- [x] **Step 4: Re-route `_fan_out.py` helper import**
 
 Edit `slopmortem/ingest/_fan_out.py`. Replace:
 
@@ -1330,7 +1330,7 @@ from slopmortem.ingest._helpers import (
 )
 ```
 
-- [ ] **Step 5: Re-route `_journal_writes.py` helper imports**
+- [x] **Step 5: Re-route `_journal_writes.py` helper imports**
 
 Edit `slopmortem/ingest/_journal_writes.py`. Replace:
 
@@ -1354,7 +1354,7 @@ from slopmortem.ingest._helpers import (
 )
 ```
 
-- [ ] **Step 6: Re-route `tests/ingest/test_orchestrator_helpers.py` imports**
+- [x] **Step 6: Re-route `tests/ingest/test_orchestrator_helpers.py` imports**
 
 Edit `tests/ingest/test_orchestrator_helpers.py`. Replace:
 
@@ -1376,7 +1376,7 @@ from slopmortem.ingest._helpers import (
 )
 ```
 
-- [ ] **Step 7: Register `_helpers` in `.importlinter`**
+- [x] **Step 7: Register `_helpers` in `.importlinter`**
 
 Edit `.importlinter`. Add `slopmortem.ingest._helpers` to the `[importlinter:contract:ingest-private]` `forbidden_modules` list:
 
@@ -1392,7 +1392,7 @@ forbidden_modules =
     slopmortem.ingest._warm_cache
 ```
 
-- [ ] **Step 8: Run the full suite**
+- [x] **Step 8: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. `_orchestrator.py` now holds only the three impl classes.
@@ -1411,7 +1411,7 @@ Expected: all green. `_orchestrator.py` now holds only the three impl classes.
 
 **Anti-scope:** Do NOT delete `_orchestrator.py` yet — Task 8 owns that and the corresponding `_orchestrator` removal from `.importlinter`. Do NOT touch the test files; their imports go via the package facade. Do NOT commit.
 
-- [ ] **Step 1: Create `slopmortem/ingest/_impls.py`**
+- [x] **Step 1: Create `slopmortem/ingest/_impls.py`**
 
 Write to `slopmortem/ingest/_impls.py`:
 
@@ -1526,7 +1526,7 @@ class HaikuSlopClassifier:
         return 0.0 if is_dead is True else 1.0
 ```
 
-- [ ] **Step 2: Empty `_orchestrator.py`**
+- [x] **Step 2: Empty `_orchestrator.py`**
 
 Edit `slopmortem/ingest/_orchestrator.py` so the file is reduced to a deprecation note (Task 8 deletes it):
 
@@ -1537,7 +1537,7 @@ See ``_ports.py``, ``_helpers.py``, ``_impls.py`` for the new homes.
 """
 ```
 
-- [ ] **Step 3: Update `slopmortem/ingest/__init__.py` to re-export from `_impls.py`**
+- [x] **Step 3: Update `slopmortem/ingest/__init__.py` to re-export from `_impls.py`**
 
 Edit `slopmortem/ingest/__init__.py`. Change the three impl re-exports' source to `_impls`:
 
@@ -1605,7 +1605,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 4: Register `_impls` in `.importlinter`**
+- [x] **Step 4: Register `_impls` in `.importlinter`**
 
 Edit `.importlinter`. Add `slopmortem.ingest._impls` to the `[importlinter:contract:ingest-private]` `forbidden_modules` list:
 
@@ -1622,7 +1622,7 @@ forbidden_modules =
     slopmortem.ingest._warm_cache
 ```
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. `_orchestrator.py` is now a stub; every consumer goes through `_ports`, `_helpers`, or `_impls` (or the package facade).
@@ -1641,18 +1641,18 @@ Expected: all green. `_orchestrator.py` is now a stub; every consumer goes throu
 
 **Anti-scope:** Do NOT add new tests, type stubs, or `__init__.py` reorganisation. Do NOT touch the rest of `.importlinter` (only the ingest-private contract change). Do NOT rewrite `docs/architecture.md` beyond a literal find-and-replace. Do NOT commit.
 
-- [ ] **Step 1: Verify `_orchestrator.py` has no remaining importers**
+- [x] **Step 1: Verify `_orchestrator.py` has no remaining importers**
 
 Run: `rg "from slopmortem\.ingest\._orchestrator" --no-heading`
 Expected: zero matches across `slopmortem/` and `tests/`.
 
 If the grep returns hits, stop and re-route them to `_ports.py`, `_helpers.py`, or `_impls.py` per the symbol's new home before deleting.
 
-- [ ] **Step 2: Delete `slopmortem/ingest/_orchestrator.py`**
+- [x] **Step 2: Delete `slopmortem/ingest/_orchestrator.py`**
 
 Run: `rm slopmortem/ingest/_orchestrator.py`
 
-- [ ] **Step 3: Remove `_orchestrator` from `.importlinter`**
+- [x] **Step 3: Remove `_orchestrator` from `.importlinter`**
 
 Edit `.importlinter`. In the `[importlinter:contract:ingest-private]` block, delete the `slopmortem.ingest._orchestrator` line from `forbidden_modules`. After the edit, the list should read:
 
@@ -1670,7 +1670,7 @@ forbidden_modules =
 
 (`_ports`, `_helpers`, `_impls` were added in Tasks 5–7 as each module was created. This task only removes the now-obsolete `_orchestrator` entry.)
 
-- [ ] **Step 4: Rename the test file**
+- [x] **Step 4: Rename the test file**
 
 Run: `mv tests/ingest/test_orchestrator_helpers.py tests/ingest/test_ingest_internals.py`
 
@@ -1682,24 +1682,24 @@ Update the test file's module docstring (top of file, line 1):
 """Edge-case branches for ingest port stand-ins, helpers, and classifier impls."""
 ```
 
-- [ ] **Step 5: Search `docs/architecture.md` for direct mentions**
+- [x] **Step 5: Search `docs/architecture.md` for direct mentions**
 
 Run: `rg -n "_orchestrator" docs/`
 Expected: zero matches, or only matches that are clearly unrelated.
 
 If a literal `_orchestrator.py` reference appears in `docs/architecture.md`, update it to name the new module(s) (`_ports.py`, `_helpers.py`, `_impls.py` — pick the one(s) the docs section was talking about). If the docs reference is generic (e.g. "the orchestrator module"), update prose to reflect the new structure.
 
-- [ ] **Step 6: Run the import linter explicitly**
+- [x] **Step 6: Run the import linter explicitly**
 
 Run: `uv run lint-imports`
 Expected: all contracts pass. (`just lint` invokes `lint-imports` — see `justfile:74-77` — so this is also covered by the next step. Running it standalone here surfaces import-contract failures before mixing them with ruff/format output.)
 
-- [ ] **Step 7: Run the full suite**
+- [x] **Step 7: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green.
 
-- [ ] **Step 8: Final sanity: verify file sizes**
+- [x] **Step 8: Final sanity: verify file sizes**
 
 Run: `wc -l slopmortem/pipeline.py slopmortem/ingest/_ports.py slopmortem/ingest/_helpers.py slopmortem/ingest/_impls.py`
 Expected:
@@ -1718,16 +1718,16 @@ This is a sanity check, not an acceptance gate; if anything looks oddly bloated,
 
 **Anti-scope:** Do NOT introduce behaviour changes, new dependencies, new tests, or refactors outside the existing diff. Do NOT touch `.importlinter`, `pyproject.toml`, `justfile`, or `slopmortem.toml`. Do NOT widen scope beyond the files Tasks 1–8 already touched. Do NOT commit.
 
-- [ ] **Step 1: Verify Tasks 1–8 are all green**
+- [x] **Step 1: Verify Tasks 1–8 are all green**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green. If anything fails here, stop and fix the underlying task before invoking polish.
 
-- [ ] **Step 2: Invoke the polish skill**
+- [x] **Step 2: Invoke the polish skill**
 
 Run the `post-implementation-polish` skill. Let it execute its built-in sequence (3 review rounds → idiomatic pass → `/cleanup` → AI-comment strip → humanize). Apply only fixes the skill itself proposes and that fall inside the Task 1–8 diff scope.
 
-- [ ] **Step 3: Run the full suite**
+- [x] **Step 3: Run the full suite**
 
 Run: `just lint && just typecheck && just test`
 Expected: all green.

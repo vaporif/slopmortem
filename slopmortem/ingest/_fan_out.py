@@ -1,4 +1,3 @@
-# pyright: reportAny=false
 """Per-entry fan-out: facet -> summarize -> embed -> upsert.
 
 Slop classification gates entries upstream of fan-out (see _slop_gate.py).
@@ -14,13 +13,10 @@ import anyio
 
 from slopmortem.concurrency import gather_resilient
 from slopmortem.corpus import chunk_markdown
-from slopmortem.ingest._orchestrator import (
+from slopmortem.ingest._ports import (
     IngestPhase,
-    IngestProgress,
     NullProgress,
-    SparseEncoder,
     _Point,
-    _text_id_for,  # pyright: ignore[reportPrivateUsage]  -- intra-package private boundary
 )
 from slopmortem.llm import prompt_template_sha, render_prompt
 
@@ -28,7 +24,11 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from slopmortem.config import Config
-    from slopmortem.ingest._orchestrator import Corpus
+    from slopmortem.ingest._ports import (
+        Corpus,
+        IngestProgress,
+        SparseEncoder,
+    )
     from slopmortem.llm import EmbeddingClient, LLMClient
     from slopmortem.models import CandidatePayload, Facets, RawEntry
 
@@ -129,18 +129,14 @@ async def _embed_and_upsert(  # noqa: PLR0913 - every dependency is required at 
         return 0
     texts = [c.text for c in chunks]
     embed_result = await embed_client.embed(texts, model=embed_model_id)
-    text_id = _text_id_for(canonical_id)
+    base_payload = payload.model_dump(mode="json") | {"canonical_id": canonical_id}
     for c, vec in zip(chunks, embed_result.vectors, strict=True):
         sparse = sparse_encoder(c.text)
         point_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{canonical_id}:{c.chunk_idx}").hex
-        payload_dict = payload.model_dump(mode="json")
-        payload_dict["canonical_id"] = canonical_id
-        payload_dict["chunk_idx"] = c.chunk_idx
-        payload_dict["text_id"] = text_id
         point = _Point(
             id=point_id,
             vector={"dense": vec, "sparse": sparse},
-            payload=payload_dict,
+            payload={**base_payload, "chunk_idx": c.chunk_idx},
         )
         await corpus.upsert_chunk(point)
     return len(chunks)
