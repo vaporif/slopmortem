@@ -115,6 +115,7 @@ slopmortem/
   http.py                  # shared httpx client + SSRF guard
   errors.py                # typed error hierarchy
   cli_progress.py          # Rich progress display shared by ingest/query/eval recorders
+  deps.py                  # build_deps() — production (LLM, embedder, corpus, budget) tuple; shared by cli/ and evals.runner --live
   _time.py                 # monotonic / wall-clock helpers (tests patch one symbol)
   cli/
     __init__.py            # Typer entrypoint; subcommands registered by side-effect import
@@ -182,5 +183,6 @@ tests/
   fixtures/cassettes/      # pytest-recording (vcrpy under the hood, no respx)
   fixtures/                # corpus_fixture_inputs.yml, curated_test.yml, prompts/, injection/
   evals/                   # baseline.json, datasets/, eval-side tests
-  {corpus,llm,sources,stages}/  # mirrors slopmortem/ subtree layout
+  {corpus,ingest,llm,sources,stages}/  # mirrors slopmortem/ subtree layout
+  {evals,fakes}/                # eval harness tests + shared test fakes
 ```
