@@ -8,6 +8,7 @@ bound live in ``slopmortem/llm/openrouter.py``.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from lmnr import Laminar
@@ -28,6 +29,9 @@ if TYPE_CHECKING:
     from slopmortem.config import Config
     from slopmortem.llm import LLMClient
     from slopmortem.models import Candidate, InputContext
+
+
+logger = logging.getLogger(__name__)
 
 
 def synthesize_prompt_kwargs(candidate: Candidate, *, pitch: str) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
@@ -154,3 +158,25 @@ async def synthesize_all(  # noqa: PLR0913 — mirrors ``synthesize`` for the fa
     first = await _run_one(candidates[0])
     rest_results = await gather_resilient(*(_run_one(c) for c in candidates[1:]))
     return [first, *rest_results]
+
+
+def drop_below_min_similarity(
+    syntheses: list[Synthesis], *, min_similarity: float
+) -> tuple[list[Synthesis], int]:
+    """Drop syntheses whose own similarity mean falls below *min_similarity*.
+
+    Synthesis sometimes re-scores a candidate lower than rerank did, so a
+    row that cleared the rerank-side filter can come back below the bar.
+    Returns ``(kept, dropped_count)`` so the caller can record
+    ``PipelineMeta.filtered_post_synth`` without recomputing.
+    """
+    kept = [s for s in syntheses if s.similarity.mean() >= min_similarity]
+    dropped = len(syntheses) - len(kept)
+    if dropped > 0:
+        logger.info(
+            "min_similarity dropped %d/%d candidates post-synth (threshold=%.2f)",
+            dropped,
+            len(syntheses),
+            min_similarity,
+        )
+    return kept, dropped

@@ -218,3 +218,51 @@ async def test_synthesize_all_warms_cache_before_gather() -> None:
     # First call must have observed cache-creation tokens (warm path).
     assert fake_llm.calls[0].cache is True
     assert all(not isinstance(r, Exception) for r in results)
+
+
+def _synth_with(cid: str, *, bm: float, mk: float, gtm: float, ss: float):
+    from slopmortem.models import (  # noqa: PLC0415
+        PerspectiveScore,
+        SimilarityScores,
+        Synthesis,
+    )
+
+    return Synthesis(
+        candidate_id=cid,
+        name=cid,
+        one_liner="x",
+        failure_date=None,
+        lifespan_months=None,
+        similarity=SimilarityScores(
+            business_model=PerspectiveScore(score=bm, rationale="x"),
+            market=PerspectiveScore(score=mk, rationale="x"),
+            gtm=PerspectiveScore(score=gtm, rationale="x"),
+            stage_scale=PerspectiveScore(score=ss, rationale="x"),
+        ),
+        why_similar="x",
+        where_diverged="x",
+        failure_causes=["x"],
+        lessons_for_input=["x"],
+        sources=[],
+    )
+
+
+def test_drop_below_min_similarity_drops_below_threshold() -> None:
+    from slopmortem.stages.synthesize import drop_below_min_similarity  # noqa: PLC0415
+
+    syntheses = [
+        _synth_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0),  # mean = 5.5
+        _synth_with("synth_disagreed", bm=2.0, mk=2.0, gtm=1.0, ss=3.0),  # mean = 2.0
+    ]
+    kept, dropped = drop_below_min_similarity(syntheses, min_similarity=4.0)
+    assert [s.candidate_id for s in kept] == ["strong"]
+    assert dropped == 1
+
+
+def test_drop_below_min_similarity_zero_dropped_when_all_pass() -> None:
+    from slopmortem.stages.synthesize import drop_below_min_similarity  # noqa: PLC0415
+
+    syntheses = [_synth_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0)]
+    kept, dropped = drop_below_min_similarity(syntheses, min_similarity=4.0)
+    assert kept == syntheses
+    assert dropped == 0

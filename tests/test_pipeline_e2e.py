@@ -29,14 +29,11 @@ from slopmortem.models import (
     CandidatePayload,
     Facets,
     InputContext,
-    PerspectiveScore,
-    SimilarityScores,
     Synthesis,
     TopRisks,
 )
 from slopmortem.pipeline import (
     QueryPhase,
-    _filter_synth_by_min_similarity,
     cutoff_iso,
     run_query,
 )
@@ -720,37 +717,6 @@ async def test_run_query_zero_passes_threshold(monkeypatch: pytest.MonkeyPatch) 
     assert report.top_risks.risks == []
     assert report.pipeline_meta.budget_exceeded is False
     assert report.pipeline_meta.min_similarity_score == 9.5
-
-
-def _synth_with(cid: str, *, bm: float, mk: float, gtm: float, ss: float) -> Synthesis:
-    return Synthesis(
-        candidate_id=cid,
-        name=cid,
-        one_liner="x",
-        failure_date=None,
-        lifespan_months=None,
-        similarity=SimilarityScores(
-            business_model=PerspectiveScore(score=bm, rationale="x"),
-            market=PerspectiveScore(score=mk, rationale="x"),
-            gtm=PerspectiveScore(score=gtm, rationale="x"),
-            stage_scale=PerspectiveScore(score=ss, rationale="x"),
-        ),
-        why_similar="x",
-        where_diverged="x",
-        failure_causes=["x"],
-        lessons_for_input=["x"],
-        sources=[],
-    )
-
-
-def test_filter_synth_by_min_similarity_drops_below_threshold() -> None:
-    """Synth filter drops when synth's own mean falls below the bar."""
-    syntheses = [
-        _synth_with("strong", bm=7.0, mk=6.0, gtm=5.0, ss=4.0),  # mean = 5.5
-        _synth_with("synth_disagreed", bm=2.0, mk=2.0, gtm=1.0, ss=3.0),  # mean = 2.0
-    ]
-    kept = _filter_synth_by_min_similarity(syntheses, threshold=4.0)
-    assert [s.candidate_id for s in kept] == ["strong"]
 
 
 def _synth_payload_with_scores(
