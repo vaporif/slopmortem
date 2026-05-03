@@ -143,3 +143,12 @@ def test_summarize_fixture_renders():
     fx = json.loads((FIXTURES / "summarize.json").read_text())
     out = render_prompt("summarize", **fx["vars"])
     assert fx["vars"]["body"].split(".")[0] in out
+
+
+def test_prompt_template_sha_is_cached():
+    prompt_template_sha.cache_clear()
+    _ = prompt_template_sha("facet_extract")
+    _ = prompt_template_sha("facet_extract")
+    info = prompt_template_sha.cache_info()
+    assert info.hits == 1
+    assert info.misses == 1
