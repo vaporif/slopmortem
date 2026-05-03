@@ -37,6 +37,11 @@ max_doc_tokens = 8000
 # See corpus/entity_resolution.py.
 tier3_calibration_band = [0.65, 0.85]
 
+# Cache-read ratio probe over the first probe_n fan-out responses; emits
+# CACHE_READ_RATIO_LOW if read/(read+creation) falls below threshold.
+cache_read_ratio_threshold = 0.80
+cache_read_ratio_probe_n = 5
+
 # Hard USD cap per query. Budget reserves+settles enforce it; going over
 # raises BudgetExceededError before the next LLM call fires.
 max_cost_usd_per_query = 2.00

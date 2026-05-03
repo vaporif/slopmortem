@@ -355,7 +355,11 @@ async def ingest(  # noqa: PLR0913 - orchestration takes every dependency.
     fanout = await _facet_summarize_fanout(keepers, llm=llm, config=config, progress=progress)
     progress.end_phase(IngestPhase.FAN_OUT)
 
-    ratio_event = cache_read_ratio_event([r for r in fanout if isinstance(r, _FanoutResult)])
+    ratio_event = cache_read_ratio_event(
+        [r for r in fanout if isinstance(r, _FanoutResult)],
+        threshold=config.cache_read_ratio_threshold,
+        probe_n=config.cache_read_ratio_probe_n,
+    )
     if ratio_event:
         result.span_events.append(ratio_event)
 

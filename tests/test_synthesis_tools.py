@@ -105,8 +105,12 @@ from slopmortem.config import Config  # noqa: E402
 from slopmortem.llm import synthesis_tools  # noqa: E402
 
 
-async def test_tavily_calls_under_cap_pass_through(monkeypatch):
-    """First two Tavily calls in one synthesis flow through to the real tool fn."""
+@pytest.fixture
+def tavily_key(monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+
+async def test_tavily_calls_under_cap_pass_through(monkeypatch, tavily_key):
     cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=2)
 
     calls: list[tuple[str, int]] = []
@@ -127,8 +131,8 @@ async def test_tavily_calls_under_cap_pass_through(monkeypatch):
     assert len(calls) == 2
 
 
-async def test_third_tavily_call_returns_budget_message(monkeypatch):
-    """The third Tavily call in one synthesis returns a budget-exceeded string, not an exception."""
+async def test_third_tavily_call_returns_budget_message(monkeypatch, tavily_key):
+    """The third call returns a budget-exceeded string, not an exception."""
     cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=2)
     real_calls: list[str] = []
 
@@ -147,7 +151,7 @@ async def test_third_tavily_call_returns_budget_message(monkeypatch):
     assert real_calls == ["a", "b"]  # third call did not reach the real fn
 
 
-async def test_tavily_search_and_extract_share_budget(monkeypatch):
+async def test_tavily_search_and_extract_share_budget(monkeypatch, tavily_key):
     """The cap covers tavily_search and tavily_extract combined, not each independently."""
     cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=2)
 
@@ -169,8 +173,7 @@ async def test_tavily_search_and_extract_share_budget(monkeypatch):
     assert "budget exceeded" in out3
 
 
-async def test_each_synthesis_gets_a_fresh_budget(monkeypatch):
-    """Two separate calls to synthesis_tools(config) yield two independent counters."""
+async def test_each_synthesis_gets_a_fresh_budget(monkeypatch, tavily_key):
     cfg = Config(enable_tavily_synthesis=True, tavily_calls_per_synthesis=1)
 
     async def fake_search(q: str, limit: int = 5) -> str:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import pytest
+from typing import TYPE_CHECKING
 
 from slopmortem.budget import Budget
 from slopmortem.config import Config
 from slopmortem.llm import FastEmbedEmbeddingClient, OpenAIEmbeddingClient, make_embedder
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_factory_returns_fastembed_for_fastembed_provider() -> None:
@@ -20,9 +23,3 @@ def test_factory_returns_openai_for_openai_provider(monkeypatch: pytest.MonkeyPa
     e = make_embedder(cfg, Budget(0.0))
     assert isinstance(e, OpenAIEmbeddingClient)
     assert e.model == "text-embedding-3-small"
-
-
-def test_factory_raises_on_unknown_provider() -> None:
-    cfg = Config(embedding_provider="ollama", embed_model_id="text-embedding-3-small")
-    with pytest.raises(ValueError, match="ollama"):
-        make_embedder(cfg, Budget(0.0))

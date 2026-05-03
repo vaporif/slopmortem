@@ -8,15 +8,14 @@ against the slop-gate module.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from pathlib import Path
+
+import pytest
 
 from slopmortem.corpus import MergeJournal
 from slopmortem.ingest import FakeSlopClassifier, InMemoryCorpus
 from slopmortem.ingest._slop_gate import _PRE_VETTED_SOURCES, _quarantine, classify_one
 from slopmortem.models import RawEntry
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _entry(*, source: str = "hn", source_id: str = "story-42") -> RawEntry:
@@ -112,3 +111,56 @@ async def test_pre_vetted_source_bypasses_classifier_even_at_high_score(
     # Sanity: nothing was quarantined and no Qdrant point exists.
     assert await journal.fetch_quarantined() == []
     assert corpus.points == []
+
+
+async def test_classifier_exception_returns_zero_and_invokes_on_error() -> None:
+    """A flaky classifier must not take ingest down — it's a soft gate, not a hard one."""
+
+    class _BoomClassifier:
+        async def score(self, text: str) -> float:
+            del text
+            msg = "simulated classifier crash"
+            raise RuntimeError(msg)
+
+    captured: list[Exception] = []
+    score = await classify_one(
+        entry=_entry(source="hn"),
+        body="any body",
+        slop_classifier=_BoomClassifier(),
+        pre_vetted_sources=_PRE_VETTED_SOURCES,
+        on_error=captured.append,
+    )
+
+    assert score == 0.0
+    assert len(captured) == 1
+    assert isinstance(captured[0], RuntimeError)
+    assert "simulated classifier crash" in str(captured[0])
+
+
+async def test_quarantine_cleans_up_temp_file_on_write_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A flaky disk must not leak ``*.tmp`` sidecars across runs — pin the finally block."""
+    journal = MergeJournal(tmp_path / "journal.sqlite")
+    await journal.init()
+    post_mortems_root = tmp_path / "post_mortems"
+
+    def boom_replace(self, target):
+        del target
+        msg = f"simulated replace failure on {self}"
+        raise OSError(msg)
+
+    monkeypatch.setattr(Path, "replace", boom_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        await _quarantine(
+            journal=journal,
+            entry=_entry(),
+            body="body",
+            slop_score=0.99,
+            post_mortems_root=post_mortems_root,
+        )
+
+    leftover = list((post_mortems_root / "quarantine").iterdir())
+    assert leftover == [], f"tmp file must be unlinked on failure, found: {leftover}"

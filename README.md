@@ -96,6 +96,14 @@ Every LLM and HTTP call made during tests or evals replays from `tests/fixtures/
 - Chunk-to-parent over-fetch assumes ~4 chunks/doc — long post-mortems can under-fill the parent set ([#25](https://github.com/vaporif/premortem/issues/25)).
 - LLM rerank cost is linear in `K_retrieve` — fine at K=30, revisit if K grows ([#27](https://github.com/vaporif/premortem/issues/27)).
 
+## Possible enhancements
+
+**Failure-mode-first retrieval.** The pipeline is similarity-first all the way down. Facets narrow retrieval, hybrid RRF picks neighbors, and `consolidate_risks` is the only stage that generalizes across candidates. It only runs after we've already committed to whichever startups happened to land near the pitch in vector space. That works when the corpus has a close neighbor and fails quietly when it doesn't: a pitch in a domain the corpus barely covers gets cited against generic neighbors that miss the actual risk surface, and the top-risks section ends up reflecting what's retrievable, not what's predictive.
+
+Reframe worth spiking behind a feature flag: predict failure modes from the pitch first (closed taxonomy seeded from current `consolidate_risks` outputs, plus an `other` bucket so novel modes don't get dropped), retrieve 2–3 evidence-strong candidates per predicted mode, then synthesize per mode; the candidate becomes a supporting citation, not the unit of analysis. Cost stays roughly flat — one added Sonnet call for the prediction, balanced by a lighter per-mode rerank rubric. The obvious risk is one more place to hallucinate, so don't swap; layer. Run both paths and let the synthesizer pick whichever evidence is stronger per mode. An A/B on the eval seed dataset will tell you whether it helps on novel pitches without regressing the cases where the corpus already has a near-perfect analog.
+
+**More shapes in the rerank rubric.** The rubric scores each candidate on four perspectives today — `business_model`, `market`, `gtm`, `stage_scale`. They capture what a startup *looks like* well but miss the structural shapes that predict how things die. The one I'd add first is `platform_dependency`: built on someone else's rails — Foursquare's API, the Twitter dev platform, an App Store policy shift, one SaaS vendor's pricing whim. It's a recurring cause of death and it's orthogonal to the four existing perspectives. The other candidate is `moat_shape` (network effects, brand, data, nothing); two startups dying because incumbents copied them in 18 months share a shape `business_model` doesn't see. The case for `moat_shape` is weaker, though, so cap the additions at one for now: Sonnet scoring seven perspectives at 0–10 in one JSON loses calibration well before it gains signal. Ship `platform_dependency`, watch the eval baseline, decide whether `moat_shape` earns its tokens after that.
+
 ## Examples
 
 Sample runs with pitch, rendered report, and Laminar trace live under [`docs/examples/`](docs/examples/).

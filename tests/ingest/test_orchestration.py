@@ -584,3 +584,188 @@ async def test_delete_failure_aborts_entry_marked_failed(tmp_path, cfg):
     rows = await journal.fetch_by_key(canonical_id, entry.source, entry.source_id)
     assert rows, "the journal row must still exist"
     assert all(r["merge_state"] != "complete" for r in rows)
+
+
+async def test_ingest_dry_run_does_no_journal_or_corpus_writes(tmp_path, cfg):
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned={}, default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+    sources = [_ListSource(entries=[_entry(), _entry(source_id="2", url="https://e2.com")])]
+
+    result = await ingest(
+        sources=sources,
+        enrichers=[],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+        dry_run=True,
+    )
+
+    assert result.dry_run is True
+    assert result.would_process == 2
+    assert result.processed == 0
+    assert corpus.points == []
+    assert await journal.fetch_pending() == []
+
+
+async def test_ingest_skips_entry_with_empty_body(tmp_path, cfg):
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned={}, default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+
+    empty_entry = RawEntry(
+        source="curated",
+        source_id="empty-1",
+        url="https://example.com/empty",
+        raw_html=None,
+        markdown_text=None,
+        fetched_at=datetime(2026, 4, 28, tzinfo=UTC),
+    )
+    sources = [_ListSource(entries=[empty_entry])]
+
+    result = await ingest(
+        sources=sources,
+        enrichers=[],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+    assert result.seen == 1
+    assert result.skipped == 1
+    assert result.processed == 0
+    assert corpus.points == []
+
+
+async def test_ingest_all_quarantined_short_circuits_before_fanout(tmp_path, cfg):
+    """If every entry quarantines, the fan-out / write phases never run — no token spend."""
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned={}, default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.95)
+    sources = [
+        _ListSource(
+            entries=[
+                _entry(source="hn", source_id="1", url="https://hn.com/1"),
+                _entry(source="hn", source_id="2", url="https://hn.com/2"),
+            ]
+        )
+    ]
+
+    result = await ingest(
+        sources=sources,
+        enrichers=[],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+    assert result.seen == 2
+    assert result.quarantined == 2
+    assert result.processed == 0
+    assert corpus.points == []
+    # Skipped, not failed: warming was never attempted.
+    assert SpanEvent.CACHE_WARM_FAILED.value not in result.span_events
+
+
+async def test_ingest_records_at_most_max_recorded_errors_attributes(tmp_path, cfg):
+    """The IngestResult counter must stay accurate past the Laminar attribute cap of 50."""
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned={}, default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+
+    n = 52
+    entries = [_entry(source_id=str(i), url=f"https://e{i}.com") for i in range(n)]
+
+    class _AlwaysFailEnricher:
+        async def enrich(self, entry: RawEntry) -> RawEntry:
+            del entry
+            msg = "enricher always raises"
+            raise RuntimeError(msg)
+
+    sources = [_ListSource(entries=entries)]
+    result = await ingest(
+        sources=sources,
+        enrichers=[_AlwaysFailEnricher()],
+        journal=journal,
+        corpus=corpus,
+        llm=llm,
+        embed_client=embed,
+        budget=budget,
+        slop_classifier=classifier,
+        config=cfg,
+        post_mortems_root=tmp_path / "post_mortems",
+        sparse_encoder=_stub_sparse,
+    )
+    assert result.seen == n
+    assert result.errors == n
+    assert result.processed == 0
+    failed_events = [e for e in result.span_events if e == SpanEvent.INGEST_ENTRY_FAILED.value]
+    assert len(failed_events) == n
+
+
+async def test_ingest_write_phase_reraises_cancelled_error(tmp_path, cfg, monkeypatch):
+    """The per-entry isolator catches ``Exception`` but lets ``BaseException`` bubble out."""
+    journal = MergeJournal(tmp_path / "j.sqlite")
+    await journal.init()
+    corpus = InMemoryCorpus()
+    llm = FakeLLMClient(canned=_canned_for_run(), default_model=_HAIKU)
+    embed = FakeEmbeddingClient(model=cfg.embed_model_id)
+    budget = Budget(cap_usd=cfg.max_cost_usd_per_ingest)
+    classifier = FakeSlopClassifier(default_score=0.0)
+
+    sources = [_ListSource(entries=[_entry()])]
+
+    # Patch the binding in _ingest, not _journal_writes — façade re-export shadow.
+    ingest_inner = importlib.import_module("slopmortem.ingest._ingest")
+
+    async def _cancel_in_process(*_args, **_kwargs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ingest_inner, "_process_entry", _cancel_in_process)
+
+    with pytest.raises(asyncio.CancelledError):
+        await ingest(
+            sources=sources,
+            enrichers=[],
+            journal=journal,
+            corpus=corpus,
+            llm=llm,
+            embed_client=embed,
+            budget=budget,
+            slop_classifier=classifier,
+            config=cfg,
+            post_mortems_root=tmp_path / "post_mortems",
+            sparse_encoder=_stub_sparse,
+        )
