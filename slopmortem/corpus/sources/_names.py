@@ -12,9 +12,3 @@ from typing import Final
 SOURCE_CURATED: Final = "curated"
 SOURCE_HN_ALGOLIA: Final = "hn_algolia"
 SOURCE_CRUNCHBASE_CSV: Final = "crunchbase_csv"
-
-__all__ = [
-    "SOURCE_CRUNCHBASE_CSV",
-    "SOURCE_CURATED",
-    "SOURCE_HN_ALGOLIA",
-]
